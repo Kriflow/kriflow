@@ -8,6 +8,7 @@ import { libraryRoute } from "../router";
 import { Sheet } from "../Sheet";
 import { Empty } from "../Empty";
 import { Icon, type IconName } from "../Icon";
+import { Media } from "../Media";
 import { Loading, Skeleton } from "../Skeleton";
 import { piedPiper, the } from "../skin";
 import { FileLink, IMAGE, Markdown, rawUrl, TypedText, VIDEO } from "./Artifacts";
@@ -408,8 +409,8 @@ function Detail({
 function Preview({ item, worldId }: { item: Item; worldId: string }) {
   const url = rawUrl(worldId, item);
   if (item.fields.deleted) return <p className="faint">{item.name} was deleted by retention; its record stays.</p>;
-  if (item.type === "video" || VIDEO.test(item.name)) return <video data-pinch controls preload="metadata" src={url} />;
-  if (IMAGE.test(item.name)) return <img data-pinch src={url} alt={item.title} />;
+  if (item.type === "video" || VIDEO.test(item.name)) return <Media video src={url} alt={item.title} />;
+  if (IMAGE.test(item.name)) return <Media src={url} alt={item.title} />;
   if (item.name.endsWith(".md") && item.body.trim()) {
     return (
       <div className="lib-body">

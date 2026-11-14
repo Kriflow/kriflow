@@ -7,6 +7,7 @@ import { type Connector, type Connectors, labelOf } from "../api/connectors";
 import { RECORD, underReview } from "../api/answer";
 import { type Call, clock, decisionLine, plainError, type Run } from "../api/runs";
 import { Icon } from "../Icon";
+import { Media } from "../Media";
 import type { components } from "../api/schema";
 import type { Task } from "../api/tasks";
 import { AgentCards, describe, LiveLog, usd } from "./AgentLog";
@@ -100,10 +101,10 @@ function firstLines(text: string, blocks = 5): string {
 export function Made({ a, worldId }: { a: ArtifactFile; worldId: string }) {
   const url = rawUrl(worldId, a);
   if (a.type === "video" || VIDEO.test(a.name)) {
-    return <video data-pinch className="player" controls preload="metadata" src={url} data-testid="player" />;
+    return <Media video src={url} alt={a.title} testId="player" />;
   }
   if (AUDIO.test(a.name)) return <audio controls preload="metadata" src={url} data-testid="audio" />;
-  if (IMAGE.test(a.name)) return <img data-pinch className="player" src={url} alt={a.title} />;
+  if (IMAGE.test(a.name)) return <Media src={url} alt={a.title} />;
   if (a.name === "timings.json") return <Takes timings={a} worldId={worldId} />;
   if (/\.(md|txt)$/i.test(a.name)) {
     return (

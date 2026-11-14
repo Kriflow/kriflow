@@ -3,6 +3,7 @@ import { Fragment, type ReactNode } from "react";
 
 import type { ArtifactFile } from "../api/events";
 import { Icon } from "../Icon";
+import { Media } from "../Media";
 import { standalone } from "../pwa";
 import { cap, the } from "../skin";
 
@@ -104,12 +105,17 @@ export function ArtifactCards({ cards, worldId }: { cards: ArtifactFile[]; world
   );
 }
 
-/** The artifacts under review, in place (story 54): a player for a video, the image itself,
- * rendered markdown for a document, a link for anything else. */
+/** Whether an artifact is a video. */
+export const isVideo = (a: Pick<ArtifactFile, "type" | "name">) => a.type === "video" || VIDEO.test(a.name);
+
+/** The artifacts under review, in place (story 54): a player for a video, first, then the image
+ * itself (a tap opens it full screen), rendered markdown for a document, a link for anything
+ * else. */
 export function ArtifactView({ artifacts, worldId }: { artifacts: ArtifactFile[]; worldId: string }) {
+  const shown = [...artifacts].sort((a, b) => Number(isVideo(b)) - Number(isVideo(a)));
   return (
     <section className="artifact-view" aria-label="Under review" data-testid="under-review">
-      {artifacts.map((a) => {
+      {shown.map((a) => {
         const url = rawUrl(worldId, a);
         return (
           <figure key={a.path}>
@@ -118,10 +124,10 @@ export function ArtifactView({ artifacts, worldId }: { artifacts: ArtifactFile[]
             </figcaption>
             {a.fields.deleted ? (
               <p className="faint">{a.name} was deleted by retention; its record stays.</p>
-            ) : a.type === "video" || VIDEO.test(a.name) ? (
-              <video data-pinch controls preload="metadata" src={url} data-testid="player" />
+            ) : isVideo(a) ? (
+              <Media video src={url} alt={a.title} testId="player" />
             ) : IMAGE.test(a.name) ? (
-              <img data-pinch src={url} alt={a.title} />
+              <Media src={url} alt={a.title} />
             ) : a.name.endsWith(".md") ? (
               <>
                 <TypedText body={a.body} />
