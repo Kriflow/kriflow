@@ -6,6 +6,7 @@ import type { components } from "../api/schema";
 import { assetsRoute } from "../router";
 import { Icon } from "../Icon";
 import { Intro } from "../Intro";
+import { Viewer } from "../Media";
 import { Sheet } from "../Sheet";
 import { Loading, Skeleton } from "../Skeleton";
 import { notify } from "../Toast";
@@ -660,6 +661,7 @@ function Files({ worldId, files, onChanged, onError }: { worldId: string; files:
   const [confirm, dialog] = useConfirm();
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<Asset | null>(null);
 
   async function upload(e: ChangeEvent<HTMLInputElement>) {
     const picked = [...(e.target.files ?? [])];
@@ -705,6 +707,7 @@ function Files({ worldId, files, onChanged, onError }: { worldId: string; files:
   return (
     <section className="panel" aria-labelledby="files-head">
       {dialog}
+      {viewing && <Viewer src={fileUrl(worldId, viewing.path)} alt={viewing.path.replace(/^assets\//, "")} video={VIDEO.test(viewing.name)} onClose={() => setViewing(null)} />}
       <div className="panel-head">
         <h2 id="files-head">Files</h2>
         {button}
@@ -723,17 +726,17 @@ function Files({ worldId, files, onChanged, onError }: { worldId: string; files:
             const shown = a.path.replace(/^assets\//, "");
             return (
               <li key={a.path} aria-label={shown}>
-                <span className="file-preview" aria-hidden="true">
-                  {IMAGE.test(a.name) ? (
-                    <img src={url} alt="" loading="lazy" />
-                  ) : VIDEO.test(a.name) ? (
-                    <video src={`${url}#t=0.5`} preload="metadata" muted />
-                  ) : (
+                {IMAGE.test(a.name) || VIDEO.test(a.name) ? (
+                  <button type="button" className="file-preview" aria-label={`View ${shown}`} onClick={() => setViewing(a)}>
+                    {IMAGE.test(a.name) ? <img src={url} alt="" loading="lazy" /> : <video src={`${url}#t=0.5`} preload="metadata" muted />}
+                  </button>
+                ) : (
+                  <span className="file-preview" aria-hidden="true">
                     <svg viewBox="0 0 24 24">
                       <path d={AUDIO.test(a.name) ? "M9 17V5l11-2v12M4 17a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M15 15a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0" : "M6 3h8l4 4v14H6zM14 3v4h4"} />
                     </svg>
-                  )}
-                </span>
+                  </span>
+                )}
                 {renaming === a.path ? (
                   <form
                     className="file-rename"

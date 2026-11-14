@@ -1,6 +1,7 @@
 /** No pinch zoom: Android honours the viewport's user-scalable=no, iOS ignores it, so stop the
  * gesture here. Double-tap zoom is off in CSS (touch-action: manipulation). An element marked
- * `data-pinch` (a full-size image or video) keeps the gesture. */
+ * `data-pinch` zooms itself and keeps the gesture: the full-screen media Viewer's stage, which has
+ * `touch-action: none`, so the page stays at scale 1 while the picture zooms. */
 const keeps = (e: Event) => e.target instanceof Element && e.target.closest("[data-pinch]") !== null;
 
 export function stopPinch(doc: Document = document) {

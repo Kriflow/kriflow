@@ -21,6 +21,7 @@ const PATHS = {
   edit: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4",
   copy: "M8 8h11v11H8zM5 15V5h10",
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",
+  expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
   upload: "M12 15V4M7 9l5-5 5 5M5 20h14",
   search: "M5 11a6 6 0 1 0 12 0a6 6 0 1 0-12 0M15.5 15.5L20 20",
   filter: "M4 6h16M7 12h10M10 18h4",
