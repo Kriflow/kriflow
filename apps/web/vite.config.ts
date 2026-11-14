@@ -25,6 +25,9 @@ const serviceWorker = (): Plugin => ({
 export default defineConfig({
   plugins: [react(), serviceWorker()],
   server: { proxy: { "/api": "http://localhost:8000" } },
+  // Found late, react-dom/client reloads the browser tests mid-run and a test file's frame never
+  // comes up (CI); optimised up front it does not.
+  optimizeDeps: { include: ["react-dom/client"] },
   test: {
     include: ["src/**/*.test.tsx"],
     browser: {
