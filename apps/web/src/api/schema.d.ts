@@ -859,6 +859,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/packages/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Package Versions
+         * @description Every installed version of one package, each with the worlds that pin it and how
+         *     many saved workflow versions record it. 404 when none is installed.
+         */
+        get: operations["package_versions_api_packages__name__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/packages/{name}/{version}": {
         parameters: {
             query?: never;
@@ -3384,6 +3405,45 @@ export interface components {
             needs: string[];
         };
         /**
+         * PackageVersion
+         * @description One installed version of a package with who uses it (issue 471).
+         */
+        PackageVersion: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: string;
+            /** Label */
+            label: string;
+            /** Kind */
+            kind: string;
+            /** About */
+            about: string;
+            /** State */
+            state: string;
+            /** Source */
+            source: string;
+            /** Installed At */
+            installed_at: string;
+            /** Problem */
+            problem?: string | null;
+            /** Ref */
+            ref?: string | null;
+            /** Commit */
+            commit?: string | null;
+            /** Subfolder */
+            subfolder?: string | null;
+            /** Icon */
+            icon?: string | null;
+            /** Pinned By */
+            pinned_by?: components["schemas"]["WorldRef"][];
+            /**
+             * Workflow Versions
+             * @default 0
+             */
+            workflow_versions: number;
+        };
+        /**
          * Pair
          * @description One task's trial `index` on each arm, for the blind judge.
          */
@@ -4614,6 +4674,13 @@ export interface components {
             /** Retro Model */
             retro_model?: string | null;
             skin?: components["schemas"]["Skin"];
+        };
+        /** WorldRef */
+        WorldRef: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * WorldSettings
@@ -6362,6 +6429,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PackageReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    package_versions_api_packages__name__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageVersion"][];
                 };
             };
             /** @description Validation Error */

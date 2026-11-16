@@ -199,8 +199,16 @@ def test_a_pin_switch_shows_the_manifest_diff_and_uninstall_names_the_users(
     try:
         httpx.put(f"{base_url}/api/worlds/{world['id']}/packages/echo", json={"version": "1.0.0"})
         page.goto(f"{base_url}/worlds/{world['id']}/connectors")
-        newer = page.locator("[data-package=echo]", has_text="echo 2.0.0")
-        newer.get_by_role("button", name="Enable echo 2.0.0").click()
+        # One row per package (#471): the pinned version, with the rest on its versions page.
+        row = page.locator("[data-package=echo]")
+        expect(row).to_have_count(1)
+        expect(row).to_contain_text("echo 1.0.0")
+        # Earlier tests may leave other echo versions behind, so the count is not fixed.
+        row.get_by_role("link", name=re.compile(r"\d+ other version")).click()
+        expect(page.get_by_role("heading", level=1)).to_have_text("Echo versions")
+        older = page.locator("[data-version='1.0.0']")
+        expect(older).to_contain_text("Pinned by Upgrades")
+        page.get_by_role("button", name="Switch to echo 2.0.0").click()
         shown = page.get_by_role("region", name="Switch echo to 2.0.0")
         expect(shown).to_contain_text("Switch Echo from 1.0.0 to 2.0.0")
         expect(shown).to_contain_text("Added speed")
@@ -211,10 +219,9 @@ def test_a_pin_switch_shows_the_manifest_diff_and_uninstall_names_the_users(
         )
         expect(shown.get_by_role("button", name="Switch to 2.0.0")).to_be_disabled()
 
-        older = page.locator("[data-package=echo]", has_text="echo 1.0.0")
         older.get_by_role("button", name="Uninstall echo 1.0.0").click()
         page.get_by_role("dialog").get_by_role("button", name="Uninstall").click()
-        expect(page.get_by_role("alert")).to_contain_text(
+        expect(older.get_by_role("alert")).to_contain_text(
             "echo 1.0.0 is in use: world Upgrades pins it"
         )
     finally:

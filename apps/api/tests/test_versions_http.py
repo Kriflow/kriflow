@@ -156,6 +156,28 @@ def test_uninstalling_a_version_in_use_is_refused_naming_its_users(client: TestC
     assert saved["packages"]["echo"] == "1.0.0"
 
 
+def test_a_packages_versions_list_who_pins_and_records_each(client: TestClient) -> None:
+    for source in (V1, V2):
+        assert install(client, source).status_code == 201
+    studio, other = world(client, "Studio"), world(client, "Other")
+    pin(client, studio, "1.0.0")
+    pin(client, other, "1.0.0")
+    client.post(f"/api/worlds/{studio}/workflows", json={"yaml": SAY})
+
+    versions = client.get("/api/packages/echo/versions").json()
+    assert [(v["version"], v["state"], v["workflow_versions"]) for v in versions] == [
+        ("1.0.0", "installed", 1),
+        ("2.0.0", "installed", 0),
+    ]
+    assert versions[0]["pinned_by"] == [
+        {"id": studio, "name": "Studio"},
+        {"id": other, "name": "Other"},
+    ]
+    assert versions[1]["pinned_by"] == []
+    assert versions[0]["kind"] == "stage" and versions[0]["label"] == "Echo"
+    assert client.get("/api/packages/nobody/versions").status_code == 404
+
+
 def test_versions_saved_before_versions_were_recorded_are_stamped_on_upgrade(
     tmp_path: Path, client: TestClient
 ) -> None:

@@ -3,7 +3,7 @@ Connector Packages installed for the whole install."""
 
 import hashlib
 import os
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
@@ -177,6 +177,22 @@ class PackageIndex(BaseModel):
 class EnabledPackage(BaseModel):
     name: str
     version: str
+
+
+@dataclass(frozen=True)
+class WorldRef:
+    id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class PackageVersion(Package):
+    """One installed version of a package with who uses it (issue 471)."""
+
+    pinned_by: list[WorldRef] = field(default_factory=list)
+    """The worlds that pin it."""
+    workflow_versions: int = 0
+    """How many saved workflow versions record it; those keep running it."""
 
 
 class PinnedVersion(BaseModel):
@@ -424,12 +440,33 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         except InstallError as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    def pins(name: str, version: str, names: dict[str, str]) -> list[WorldRef]:
+        return [WorldRef(id=w, name=names.get(w, w)) for w in connectors.pinned_by(name, version)]
+
+    @api.get("/packages/{name}/versions")
+    def package_versions(name: str) -> list[PackageVersion]:
+        """Every installed version of one package, each with the worlds that pin it and how
+        many saved workflow versions record it. 404 when none is installed."""
+        names = {w.id: w.name for w in worlds.list_all()}
+        found = [
+            PackageVersion(
+                **asdict(p),
+                pinned_by=pins(p.name, p.version, names),
+                workflow_versions=len(workflows.using(p.name, p.version)),
+            )
+            for p in packages.list()
+            if p.name == name
+        ]
+        if not found:
+            raise HTTPException(404, f"{name} is not installed")
+        return found
+
     @api.delete("/packages/{name}/{version}", status_code=204)
     def uninstall_package(name: str, version: str) -> Response:
         """Remove an installed version. 409 naming every world that pins it and every saved
         workflow version that records it, while any does: those keep running it."""
         names = {w.id: w.name for w in worlds.list_all()}
-        users = [f"world {names.get(w, w)} pins it" for w in connectors.pinned_by(name, version)]
+        users = [f"world {w.name} pins it" for w in pins(name, version, names)]
         users += [
             f"{wf.name} v{n} in world {names.get(wf.world_id, wf.world_id)} was saved with it"
             for wf, n in workflows.using(name, version)
