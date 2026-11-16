@@ -17,6 +17,7 @@ import { Graph } from "./pages/Graph";
 import { Gates } from "./pages/Gates";
 import type { Gate } from "./api/runs";
 import { Library } from "./pages/Library";
+import { PackageVersions } from "./pages/PackageVersions";
 import { Reader } from "./pages/Reader";
 import { Runs } from "./pages/Runs";
 import { RunTimeline } from "./pages/RunTimeline";
@@ -160,6 +161,13 @@ export const connectorsRoute = createRoute({
   }),
 });
 
+// Every installed version of one package, with who uses each (issue 471).
+export const packageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/worlds/$worldId/connectors/$name",
+  component: PackageVersions,
+});
+
 export const graphRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/worlds/$worldId/graph",
@@ -218,6 +226,7 @@ const routeTree = rootRoute.addChildren([
   runsRoute,
   runRoute,
   connectorsRoute,
+  packageRoute,
   graphRoute,
   libraryRoute,
   assetsRoute,

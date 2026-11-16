@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { FakeEventSource, fakeFetch } from "../test/fakes";
 import { answerConfirm, mountAt } from "../test/mount";
-import { browser, parseKeys } from "./Connectors";
+import { browser, parseKeys, shownVersions } from "./Connectors";
 
 const video = { id: "world_1", name: "Video", purpose: "", created_at: "2026-10-26T10:00:00+00:00" };
 const base = {
@@ -185,6 +185,17 @@ test("shows whether each Service a package declares is up, as each speech engine
   await expect.element(engines).toMatchTextContent(/localhost:8880\s*down\s*connection refused/);
 });
 
+test("shownVersions keeps one row per package: the pinned version, else the newest, counting the rest", () => {
+  const v = (name: string, version: string, state = "installed") => ({ name, version, state, label: name, kind: "stage", about: "", source: "", installed_at: "", problem: null });
+  const packages = [v("echo", "1.0.10"), v("echo", "1.0.9"), v("meta", "1.0.1"), v("meta", "1.0.2"), v("odd", "1.0.0", "invalid")];
+  expect(shownVersions(packages, { meta: "1.0.1" }).map(({ p, others }) => [p.name, p.version, others])).toEqual([
+    ["echo", "1.0.10", 1],
+    ["meta", "1.0.1", 1],
+    ["odd", "1.0.0", 0],
+  ]);
+  expect(shownVersions(packages, {}).map(({ p }) => p.version)).toEqual(["1.0.10", "1.0.2", "1.0.0"]);
+});
+
 test("lists installed packages with version, kind, about and install state", async () => {
   const pkg = { name: "echo", version: "1.0.0", label: "Echo", kind: "stage", source: "connectors/echo", installed_at: "2026-10-30T10:00:00+00:00" };
   fakeFetch({
@@ -196,12 +207,15 @@ test("lists installed packages with version, kind, about and install state", asy
         { ...pkg, version: "0.9.0", label: "echo", kind: "", about: "", state: "invalid", problem: "kind: 'robot' is not one of [...]" },
       ]),
   });
-  const { screen } = await mountAt("/worlds/world_1/connectors");
+  const { screen, router } = await mountAt("/worlds/world_1/connectors");
   const list = screen.getByRole("list", { name: "Installed packages" });
-  await expect.element(list.getByRole("listitem").first()).toMatchTextContent(/Echo\s*Says it back\.\s*echo 1\.0\.0\s*stage\s*Installed/);
-  await expect.element(list.getByRole("listitem").last()).toMatchTextContent(/kind: 'robot'.*echo 0\.9\.0\s*Invalid Manifest/);
+  // One row per package (#471): the newest version, with a link to the rest.
+  await expect.element(list.getByRole("listitem").first()).toMatchTextContent(/Echo\s*Says it back\.\s*echo 1\.0\.0\s*stage\s*Installed\s*1 other version/);
+  expect(list.getByRole("listitem").elements()).toHaveLength(1);
   // Web search and the graph are Agent Tools now (#210), named in the intro's note rather than listed.
   await expect.element(screen.getByText(/Web search and the world's graph are not connectors/)).toBeInTheDocument();
+  await list.getByRole("link", { name: "1 other version" }).click();
+  expect(router.state.location.pathname).toBe("/worlds/world_1/connectors/echo");
 });
 
 test("a row starts with its package's logo, else a letter tile tinted by its kind", async () => {
@@ -209,7 +223,7 @@ test("a row starts with its package's logo, else a letter tile tinted by its kin
   fakeFetch({
     "GET /api/worlds/world_1": () => Response.json(video),
     "GET /api/worlds/world_1/connectors": () => Response.json([{ ...defaults[0], icon: "icon.svg" }, { ...fal, icon: null }]),
-    "GET /api/packages": () => Response.json([{ ...pkg, icon: "logo.png" }, { ...pkg, version: "0.9.0", icon: null }]),
+    "GET /api/packages": () => Response.json([{ ...pkg, icon: "logo.png" }, { ...pkg, name: "other", label: "Else", icon: null }]),
   });
   const { screen } = await mountAt("/worlds/world_1/connectors");
   const img = (row?: Element) => row?.querySelector("img.con-logo");
@@ -236,49 +250,21 @@ const unchanged = {
   needs: [],
 };
 
-test("a switch shows the Manifest diff and waits for a new required Setup field; an uninstall in use says who uses it", async () => {
-  const asked: string[] = [];
-  const region = { key: "region", label: "Region", type: "string", secret: false, required: true, scope: "world", env: "REGION", help: null, options: null, default: null, min: null, max: null, pattern: null, shared: null, world: null, shared_set: false, world_set: false };
+test("an uninstall in use says who uses it", async () => {
   const pkg = { name: "echo", label: "Echo", kind: "stage", about: "Says it back.", source: "connectors/echo", installed_at: "2026-10-30T10:00:00+00:00", state: "installed", problem: null };
-  const calls = fakeFetch({
+  fakeFetch({
     "GET /api/worlds/world_1": () => Response.json(video),
     "GET /api/worlds/world_1/connectors": () => Response.json(defaults),
     "GET /api/packages": () => Response.json([{ ...pkg, version: "1.0.0" }, { ...pkg, version: "2.0.0" }]),
     "GET /api/worlds/world_1/packages": () => Response.json([{ name: "echo", version: "1.0.0" }]),
-    "GET /api/worlds/world_1/packages/echo/switch": () =>
-      Response.json({
-        ...unchanged,
-        to: "2.0.0",
-        params: { added: ["speed"], removed: [], changed: ["loud"] },
-        setup: { added: ["region"], removed: [], changed: [] },
-        required: ["region"],
-        permissions: { added: ["network: eu.example.org"], removed: [], changed: [] },
-        needs: ["Region"],
-      }),
-    "GET /api/worlds/world_1/packages/echo/setup": (req) => {
-      asked.push(new URL(req.url).search);
-      return Response.json({ package: "echo", version: "2.0.0", help_url: null, test: null, fields: [region], missing: ["region"] });
-    },
     "DELETE /api/packages/echo/1.0.0": () =>
       Response.json({ detail: "echo 1.0.0 is in use: world Video pins it; Say it v1 in world Video was saved with it" }, { status: 409 }),
   });
   const { screen } = await mountAt("/worlds/world_1/connectors");
-  await screen.getByRole("button", { name: "Enable echo 2.0.0" }).click();
-  const shown = screen.getByRole("region", { name: "Switch echo to 2.0.0" });
-  await expect.element(shown).toMatchTextContent(/Switch Echo from 1\.0\.0 to 2\.0\.0/);
-  await expect.element(shown).toMatchTextContent(/Workflow versions saved on 1\.0\.0 keep running it/);
-  await expect.element(shown).toMatchTextContent(/Params\s*Added speed\. Changed loud/);
-  await expect.element(shown).toMatchTextContent(/Setup fields\s*Added region/);
-  await expect.element(shown).toMatchTextContent(/Permissions\s*Added network: eu\.example\.org/);
-  await expect.element(shown.getByRole("status")).toHaveTextContent("Fill in Region in Echo 2.0.0's Setup first; the switch waits for it.");
-  await expect.element(shown.getByRole("button", { name: "Switch to 2.0.0" })).toBeDisabled();
-  await shown.getByRole("button", { name: "Set up echo" }).click();
-  await expect.element(shown.getByRole("form", { name: "Setup of Echo 2.0.0" })).toMatchTextContent(/Region · this world/);
-  expect(asked).toEqual(["?version=2.0.0"]);
-  await shown.getByRole("button", { name: "Keep 1.0.0" }).click();
-  expect(screen.getByRole("region", { name: "Switch echo to 2.0.0" }).elements()).toHaveLength(0);
-  expect(calls).not.toContain("PUT /api/worlds/world_1/packages/echo");
-
+  // The row is the pinned version, not the newest; 2.0.0 lives on the versions page.
+  const rows = screen.getByRole("list", { name: "Installed packages" }).getByRole("listitem");
+  await expect.element(rows.first()).toMatchTextContent(/echo 1\.0\.0.*Installed\s*1 other version\s*Enabled here\s*Disable\s*Uninstall$/);
+  expect(screen.getByRole("button", { name: "Uninstall echo 2.0.0" }).elements()).toHaveLength(0);
   await screen.getByRole("button", { name: "Uninstall echo 1.0.0" }).click();
   expect(await answerConfirm(screen, "Uninstall")).toContain("Its folder is removed for every world.");
   await expect.element(screen.getByRole("alert")).toHaveTextContent(
@@ -310,27 +296,23 @@ test("shows which packages this world enables at which version, and enables, swi
   });
   const { screen } = await mountAt("/worlds/world_1/connectors");
   const rows = screen.getByRole("list", { name: "Installed packages" }).getByRole("listitem");
-  await expect.element(rows.first()).toMatchTextContent(/echo 1\.0\.0.*Installed\s*Enabled here\s*Disable/);
-  await expect.element(rows.last()).toMatchTextContent(/echo 1\.1\.0.*Installed\s*Switch from 1\.0\.0/);
+  await expect.element(rows.first()).toMatchTextContent(/echo 1\.0\.0.*Installed\s*1 other version\s*Enabled here\s*Disable/);
+  expect(rows.elements()).toHaveLength(1);
   const steps = screen.getByRole("list", { name: "Steps of their own" });
   await expect.element(steps).toMatchTextContent(/Echo\s*Says it back\. · package echo 1\.0\.0/);
   expect(screen.getByRole("button", { name: "Remove echo" }).elements()).toHaveLength(0);
 
-  await screen.getByRole("button", { name: "Enable echo 1.1.0" }).click();
-  const shown = screen.getByRole("region", { name: "Switch echo to 1.1.0" });
-  await expect.element(shown).toMatchTextContent(/params, Setup fields and permissions are unchanged/);
-  expect(bodies).toEqual([]);
-  await shown.getByRole("button", { name: "Switch to 1.1.0" }).click();
-  await expect.element(rows.last()).toMatchTextContent(/Enabled here/);
-  await expect.element(rows.first()).toMatchTextContent(/Switch from 1\.1\.0/);
-  expect(bodies).toEqual([{ version: "1.1.0" }]);
-
-  await screen.getByRole("button", { name: "Disable echo 1.1.0" }).click();
-  expect(await answerConfirm(screen, "Disable")).toContain("Other worlds keep it.");
-  await expect.element(rows.first()).toMatchTextContent(/Installed\s*Enable\s*Uninstall$/);
-  await expect.element(rows.last()).toMatchTextContent(/Installed\s*Enable\s*Uninstall$/);
+  await screen.getByRole("button", { name: "Disable echo 1.0.0" }).click();
+  expect(await answerConfirm(screen, "Disable")).toContain("Its workflows that call echo stop passing their checks.");
+  // Nothing pinned: the row is the newest version, ready to enable.
+  await expect.element(rows.first()).toMatchTextContent(/echo 1\.1\.0.*Installed\s*1 other version\s*Enable\s*Uninstall$/);
   expect(calls).toContain("DELETE /api/worlds/world_1/packages/echo");
   expect(screen.getByRole("list", { name: "Steps of their own" }).elements()).toHaveLength(0);
+
+  await screen.getByRole("button", { name: "Enable echo 1.1.0" }).click();
+  await expect.element(rows.first()).toMatchTextContent(/echo 1\.1\.0.*Enabled here/);
+  expect(bodies).toEqual([{ version: "1.1.0" }]);
+  expect(calls).not.toContain("GET /api/worlds/world_1/packages/echo/switch");
 });
 
 test("draws a package's Setup form from its fields, tests before saving and shows what the test said", async () => {

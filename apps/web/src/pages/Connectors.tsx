@@ -101,6 +101,17 @@ export function status(c: Connector): { text: string; tone: "ok" | "warn" } {
 
 const where = (c: Connector) => `${c.about} · package ${c.name} ${c.version}`;
 
+/** One row per package name (issue 471): the version this world pins, else the newest installed,
+ * with how many other versions are installed. Packages keep the API's order, by name. */
+export function shownVersions(packages: Package[], enabled: Record<string, string>): { p: Package; others: number }[] {
+  const byName = new Map<string, Package[]>();
+  for (const p of packages) byName.set(p.name, [...(byName.get(p.name) ?? []), p]);
+  return [...byName.values()].map((versions) => {
+    const newest = versions.reduce((a, b) => (b.version.localeCompare(a.version, undefined, { numeric: true }) > 0 ? b : a));
+    return { p: versions.find((v) => v.version === enabled[v.name]) ?? newest, others: versions.length - 1 };
+  });
+}
+
 export function Connectors() {
   const [confirm, dialog] = useConfirm();
   const { worldId } = connectorsRoute.useParams();
@@ -502,13 +513,14 @@ export function Connectors() {
             <div className="panel-head">
               <h2 id="group-packages">Installed packages</h2>
               <span className="faint">
-                Installed once for every world; this world uses the ones it enables, at the version it pins.{" "}
-                <span className="num">{packages.length}</span>
+                Installed once for every world; this world uses the ones it enables, at the version it pins. A row shows
+                that version, else the newest.{" "}
+                <span className="num">{new Set(packages.map((p) => p.name)).size}</span>
               </span>
             </div>
             <ul className="con-list" aria-label="Installed packages">
-              {packages.map((p) => (
-                <li key={`${p.name}@${p.version}`} data-package={p.name} className="con-row">
+              {shownVersions(packages, enabled).map(({ p, others }) => (
+                <li key={p.name} data-package={p.name} className="con-row">
                   <span className={p.state === "installed" ? "dot live" : "dot warn"} />
                   <Logo name={p.name} version={p.version} icon={p.icon} label={p.label} kind={p.kind} />
                   <span className="con-main">
@@ -522,6 +534,11 @@ export function Connectors() {
                   <span className={p.state === "installed" ? "pill" : "pill warning"}>
                     {p.state === "installed" ? "Installed" : "Invalid Manifest"}
                   </span>
+                  {others > 0 && (
+                    <Link to="/worlds/$worldId/connectors/$name" params={{ worldId, name: p.name }} className="faint">
+                      {others} other {others === 1 ? "version" : "versions"}
+                    </Link>
+                  )}
                   {enabled[p.name] === p.version ? (
                     <>
                       <span className="pill">Enabled here</span>
@@ -814,7 +831,7 @@ function BrowseIndex({ installed, onPick }: { installed: Package[]; onPick: (e: 
 
 /** What moving the world's pin changes in the package's Manifest, held back while a newly
  * required Setup field has no value; the new version's Setup form fills it in. */
-function SwitchDiff({
+export function SwitchDiff({
   p,
   diff,
   worldId,
@@ -893,7 +910,7 @@ function SwitchDiff({
   );
 }
 
-function detail(error: unknown): string | null {
+export function detail(error: unknown): string | null {
   const d = (error as { detail?: unknown } | undefined)?.detail;
   return typeof d === "string" ? d : null;
 }
