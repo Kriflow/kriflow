@@ -122,27 +122,27 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
     )
     assert body["missing"] == [] and "s3cret" not in added.text
     assert [(p["name"], p["version"], p["source"]) for p in client.get("/api/packages").json()] == [
-        ("blender_build", "1.1.0", "connectors/blender_build"),
-        ("blender_render", "1.0.4", "connectors/blender_render"),
+        ("blender_build", "1.1.1", "connectors/blender_build"),
+        ("blender_render", "1.0.5", "connectors/blender_render"),
         ("fal_video", "0.0.1", "local"),
-        ("hyperframes_build", "1.0.1", "connectors/hyperframes_build"),
-        ("hyperframes_render", "1.0.1", "connectors/hyperframes_render"),
-        ("meta", "1.0.2", "connectors/meta"),
-        ("remotion_build", "1.0.2", "connectors/remotion_build"),
-        ("remotion_render", "1.0.6", "connectors/remotion_render"),
-        ("slack", "1.1.0", "connectors/slack"),
-        ("speech", "1.1.0", "connectors/speech"),
-        ("upload_post", "1.0.0", "connectors/upload_post"),
-        ("youtube", "1.3.0", "connectors/youtube"),
+        ("hyperframes_build", "1.0.2", "connectors/hyperframes_build"),
+        ("hyperframes_render", "1.0.2", "connectors/hyperframes_render"),
+        ("meta", "1.0.3", "connectors/meta"),
+        ("remotion_build", "1.0.3", "connectors/remotion_build"),
+        ("remotion_render", "1.0.7", "connectors/remotion_render"),
+        ("slack", "1.1.1", "connectors/slack"),
+        ("speech", "1.1.1", "connectors/speech"),
+        ("upload_post", "1.0.1", "connectors/upload_post"),
+        ("youtube", "1.3.1", "connectors/youtube"),
     ]
     assert client.get(f"/api/worlds/{w}/packages").json() == [
         {"name": "fal_video", "version": "0.0.1"},
-        {"name": "meta", "version": "1.0.2"},
-        {"name": "remotion_build", "version": "1.0.2"},
-        {"name": "remotion_render", "version": "1.0.6"},
-        {"name": "speech", "version": "1.1.0"},
-        {"name": "upload_post", "version": "1.0.0"},
-        {"name": "youtube", "version": "1.3.0"},
+        {"name": "meta", "version": "1.0.3"},
+        {"name": "remotion_build", "version": "1.0.3"},
+        {"name": "remotion_render", "version": "1.0.7"},
+        {"name": "speech", "version": "1.1.1"},
+        {"name": "upload_post", "version": "1.0.1"},
+        {"name": "youtube", "version": "1.3.1"},
     ]
     form = client.get(f"/api/worlds/{w}/packages/fal_video/setup")
     (field,) = form.json()["fields"]
@@ -334,7 +334,7 @@ def test_progress_streams_on_the_world_events(live_url: str, transport: FakeTran
 def test_the_speech_package_shows_whether_each_engine_answers(client: TestClient) -> None:
     w = world(client)
     listed = {c["name"]: c for c in client.get(f"/api/worlds/{w}/connectors").json()}
-    assert listed["speech"]["services"] == ["engines"] and listed["speech"]["version"] == "1.1.0"
+    assert listed["speech"]["services"] == ["engines"] and listed["speech"]["version"] == "1.1.1"
     assert listed["youtube"]["services"] == [] and listed["youtube"]["health"] is None
     down = "http://127.0.0.1:9"  # nothing listens on discard
     setup = {"shared": {"speech_endpoints": down}, "world": {}}
@@ -382,6 +382,27 @@ def test_install_a_package_from_this_repo_and_list_it(client: TestClient, tmp_pa
     world_id = world(client)
     names = [c["name"] for c in client.get(f"/api/worlds/{world_id}/connectors").json()]
     assert "echo" not in names and "speech" in names
+
+
+def test_a_package_serves_the_icon_its_manifest_names_as_an_image_only(
+    client: TestClient,
+) -> None:
+    w = world(client)
+    listed = {c["name"]: c for c in client.get(f"/api/worlds/{w}/connectors").json()}
+    assert listed["youtube"]["icon"] == "icon.svg" and listed["upload_post"]["icon"] == "icon.png"
+    assert {p["name"]: p["icon"] for p in client.get("/api/packages").json()}["meta"] == "icon.svg"
+    svg = client.get("/api/packages/youtube/1.3.1/icon")
+    assert svg.status_code == 200 and svg.headers["content-type"] == "image/svg+xml"
+    assert svg.content == (Path(__file__).parents[3] / "connectors/youtube/icon.svg").read_bytes()
+    assert svg.headers["x-content-type-options"] == "nosniff"
+    csp = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    assert svg.headers["content-security-policy"] == csp
+    png = client.get("/api/packages/upload_post/1.0.1/icon")
+    assert png.headers["content-type"] == "image/png" and png.content.startswith(b"\x89PNG")
+    assert install(client, "packages/connectors/tests/fixtures/packages/echo").is_success
+    assert client.get("/api/packages/echo/1.0.0/icon").status_code == 404  # it names none
+    assert client.get("/api/packages/youtube/9.9.9/icon").status_code == 404
+    assert client.get("/api/packages/nope/1.0.0/icon").status_code == 404
 
 
 def test_an_invalid_manifest_is_refused_naming_the_field(
@@ -530,12 +551,12 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
         assert put.status_code == 200 and put.json() == {"name": "echo", "version": "1.0.0"}
     assert client.get(f"/api/worlds/{one}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
-        {"name": "meta", "version": "1.0.2"},
-        {"name": "remotion_build", "version": "1.0.2"},  # the default packages
-        {"name": "remotion_render", "version": "1.0.6"},
-        {"name": "speech", "version": "1.1.0"},
-        {"name": "upload_post", "version": "1.0.0"},
-        {"name": "youtube", "version": "1.3.0"},
+        {"name": "meta", "version": "1.0.3"},
+        {"name": "remotion_build", "version": "1.0.3"},  # the default packages
+        {"name": "remotion_render", "version": "1.0.7"},
+        {"name": "speech", "version": "1.1.1"},
+        {"name": "upload_post", "version": "1.0.1"},
+        {"name": "youtube", "version": "1.3.1"},
     ]
     echo = next(
         c for c in client.get(f"/api/worlds/{one}/connectors").json() if c["name"] == "echo"
@@ -547,21 +568,21 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
 
     assert client.delete(f"/api/worlds/{one}/packages/echo").status_code == 204
     assert client.get(f"/api/worlds/{one}/packages").json() == [
-        {"name": "meta", "version": "1.0.2"},
-        {"name": "remotion_build", "version": "1.0.2"},
-        {"name": "remotion_render", "version": "1.0.6"},
-        {"name": "speech", "version": "1.1.0"},
-        {"name": "upload_post", "version": "1.0.0"},
-        {"name": "youtube", "version": "1.3.0"},
+        {"name": "meta", "version": "1.0.3"},
+        {"name": "remotion_build", "version": "1.0.3"},
+        {"name": "remotion_render", "version": "1.0.7"},
+        {"name": "speech", "version": "1.1.1"},
+        {"name": "upload_post", "version": "1.0.1"},
+        {"name": "youtube", "version": "1.3.1"},
     ]
     assert client.get(f"/api/worlds/{two}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
-        {"name": "meta", "version": "1.0.2"},
-        {"name": "remotion_build", "version": "1.0.2"},
-        {"name": "remotion_render", "version": "1.0.6"},
-        {"name": "speech", "version": "1.1.0"},
-        {"name": "upload_post", "version": "1.0.0"},
-        {"name": "youtube", "version": "1.3.0"},
+        {"name": "meta", "version": "1.0.3"},
+        {"name": "remotion_build", "version": "1.0.3"},
+        {"name": "remotion_render", "version": "1.0.7"},
+        {"name": "speech", "version": "1.1.1"},
+        {"name": "upload_post", "version": "1.0.1"},
+        {"name": "youtube", "version": "1.3.1"},
     ]
     assert client.post(f"/api/worlds/{one}/workflows", json={"yaml": ECHO}).status_code == 422
     assert client.post(f"/api/worlds/{two}/workflows", json={"yaml": ECHO}).status_code == 201

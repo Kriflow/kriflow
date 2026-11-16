@@ -112,16 +112,16 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
     app = main.create_app(tmp_path, poll_seconds=0.05, retro=False)  # the upgrade
     with TestClient(app) as client:
         assert client.get(f"/api/worlds/{world}/packages").json() == [
-            {"name": "meta", "version": "1.0.2"},
-            {"name": "remotion_build", "version": "1.0.2"},
-            {"name": "remotion_render", "version": "1.0.6"},
+            {"name": "meta", "version": "1.0.3"},
+            {"name": "remotion_build", "version": "1.0.3"},
+            {"name": "remotion_render", "version": "1.0.7"},
             {"name": "script_writer", "version": "0.0.1"},  # the world's own, moved (#211)
-            {"name": "speech", "version": "1.1.0"},
-            {"name": "upload_post", "version": "1.0.0"},
-            {"name": "youtube", "version": "1.3.0"},
+            {"name": "speech", "version": "1.1.1"},
+            {"name": "upload_post", "version": "1.0.1"},
+            {"name": "youtube", "version": "1.3.1"},
         ]
         version = client.get(f"/api/workflows/{flow}/versions/1").json()
-        assert version["packages"] == {"script_writer": "0.0.1", "speech": "1.1.0"}  # stamped
+        assert version["packages"] == {"script_writer": "0.0.1", "speech": "1.1.1"}  # stamped
         (key,) = client.get(f"/api/worlds/{world}/packages/upload_post/setup").json()["fields"]
         assert (key["env"], key["shared_set"], key["shared"]) == ("UPLOAD_POST_API_KEY", True, None)
         posts = next(
@@ -162,12 +162,12 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
     ]
     new = again.post("/api/worlds", json={"name": "New"}).json()["id"]
     assert again.get(f"/api/worlds/{new}/packages").json() == [
-        {"name": "meta", "version": "1.0.2"},
-        {"name": "remotion_build", "version": "1.0.2"},
-        {"name": "remotion_render", "version": "1.0.6"},
-        {"name": "speech", "version": "1.1.0"},
-        {"name": "upload_post", "version": "1.0.0"},
-        {"name": "youtube", "version": "1.3.0"},
+        {"name": "meta", "version": "1.0.3"},
+        {"name": "remotion_build", "version": "1.0.3"},
+        {"name": "remotion_render", "version": "1.0.7"},
+        {"name": "speech", "version": "1.1.1"},
+        {"name": "upload_post", "version": "1.0.1"},
+        {"name": "youtube", "version": "1.3.1"},
     ]
 
 

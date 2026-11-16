@@ -204,6 +204,28 @@ test("lists installed packages with version, kind, about and install state", asy
   await expect.element(screen.getByText(/Web search and the world's graph are not connectors/)).toBeInTheDocument();
 });
 
+test("a row starts with its package's logo, else a letter tile tinted by its kind", async () => {
+  const pkg = { name: "echo", version: "1.0.0", label: "Echo", kind: "stage", about: "", source: "connectors/echo", installed_at: "2026-10-30T10:00:00+00:00", state: "installed", problem: null };
+  fakeFetch({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "GET /api/worlds/world_1/connectors": () => Response.json([{ ...defaults[0], icon: "icon.svg" }, { ...fal, icon: null }]),
+    "GET /api/packages": () => Response.json([{ ...pkg, icon: "logo.png" }, { ...pkg, version: "0.9.0", icon: null }]),
+  });
+  const { screen } = await mountAt("/worlds/world_1/connectors");
+  const img = (row?: Element) => row?.querySelector("img.con-logo");
+  const tile = (row?: Element) => row?.querySelector(".con-logo.tile");
+  const poster = screen.getByRole("list", { name: "Publishing" }).getByRole("listitem");
+  await expect.element(poster).toBeVisible();
+  expect(img(poster.element())?.getAttribute("src")).toBe("/api/packages/poster/1.0.0/icon");
+  expect(img(poster.element())?.getAttribute("alt")).toBe("");
+  const added = screen.getByRole("list", { name: "Steps of their own" }).getByRole("listitem").element();
+  expect(img(added)).toBeNull();
+  expect([tile(added)?.textContent, tile(added)?.getAttribute("data-kind")]).toEqual(["F", "stage"]);
+  const [withLogo, without] = screen.getByRole("list", { name: "Installed packages" }).getByRole("listitem").elements();
+  expect(img(withLogo)?.getAttribute("src")).toBe("/api/packages/echo/1.0.0/icon");
+  expect(tile(without)?.textContent).toBe("E");
+});
+
 const unchanged = {
   from: "1.0.0",
   to: "1.1.0",

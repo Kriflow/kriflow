@@ -33,6 +33,12 @@ button.icon.play svg { margin-left: 2px; }
 .con-row + .con-row { border-top: 1px solid var(--rule); }
 .con-main { display: grid; gap: 2px; flex: 1 1 16rem; min-width: 0; }
 .con-main b { font-weight: 500; }
+/* A package's logo, else its first letter on a tile tinted by its kind (Connectors.tsx Logo). */
+.con-logo { flex: none; width: 24px; height: 24px; border-radius: 5px; object-fit: contain; }
+.con-logo.tile { display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; line-height: 1; background: var(--pill-neutral-bg); color: var(--pill-neutral-ink); }
+.con-logo.tile[data-kind="stage"] { background: var(--pill-positive-bg); color: var(--pill-positive-ink); }
+.con-logo.tile[data-kind="publish"] { background: var(--pill-warning-bg); color: var(--pill-warning-ink); }
+.con-logo.tile[data-kind="notify"] { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
 .con-switch { flex-basis: 100%; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--rule); border-radius: var(--radius-card); }
 .con-switch h3 { margin: 0; font-size: 1em; font-weight: 500; }
 .con-switch p, .con-switch dl { margin: 0; }

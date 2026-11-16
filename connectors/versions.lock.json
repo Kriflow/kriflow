@@ -1,46 +1,46 @@
 {
   "blender_build": {
-    "version": "1.1.0",
-    "files": "7a2f359aa73f7f0c95bcf5f8325b3203c525a168b78a2ad14363266e2b46a032"
+    "version": "1.1.1",
+    "files": "dea6775adbd9bc98b78c080f333ff89dd2d7dfe83790cbe624cd8ab82120b25c"
   },
   "blender_render": {
-    "version": "1.0.4",
-    "files": "fa647a208b87aac85624ae32abdbbc9d98421a91d0dd089f39d94e14098c74c9"
+    "version": "1.0.5",
+    "files": "c5f8eee18910a82e1abba9d2af02a2647407465defd010ff7b3a972467b9e144"
   },
   "hyperframes_build": {
-    "version": "1.0.1",
-    "files": "fb659517593d6bb961059d954e04c594feed734c88a0e36c23c3be46d3547b22"
+    "version": "1.0.2",
+    "files": "7e19a45de9ac612c6470be4960af8b546040b34738c4a948975d8c30dd29e64b"
   },
   "hyperframes_render": {
-    "version": "1.0.1",
-    "files": "44e3b13d3539d3b9ed9ac9eca4e538fed0cc15aeb0f5c265d65b5dcc5cb7a641"
+    "version": "1.0.2",
+    "files": "bd3a3a5cd4ee81de25a34ff7cb1bebde224bc8e0c64a4f0bbdcdd69c6b90e28c"
   },
   "meta": {
-    "version": "1.0.2",
-    "files": "7aa8e11e4c139b4e97b6f0a6b79e2c48d955354c3eb26ab2151fb916da0383ff"
+    "version": "1.0.3",
+    "files": "627732c9de8338dfb4ec93d3bb270ff880f49d7947a23976ba472a96a0433232"
   },
   "remotion_build": {
-    "version": "1.0.2",
-    "files": "f9e93a443cadba7fa9f706a406dad73d57d8cdac9ae7699f3185efcc80acdac4"
+    "version": "1.0.3",
+    "files": "b9434f1ab322f22450066a84e2730a823540638beb47aadc741880d9195a03c1"
   },
   "remotion_render": {
-    "version": "1.0.6",
-    "files": "cc833e6eaf279741de9194f1780932f26049d7572afd3d711f3c288feb486896"
+    "version": "1.0.7",
+    "files": "69d427719369b7999e44f7b10e536a1e56126ad2cb09d700f1bee235d0ec4d5c"
   },
   "slack": {
-    "version": "1.1.0",
-    "files": "faa20203fd8290696bdae4c4c0f39c4eacf0c0497351bf40c3b6b79beb5b6336"
+    "version": "1.1.1",
+    "files": "bd9ddc2b701decbebe7c9d9a85c6fa58b85b13d4c068318f948122b09c3ffc4d"
   },
   "speech": {
-    "version": "1.1.0",
-    "files": "50d12b4a73b7a3e6eb10a7e0d63ce6d02dd3cb908e22df9cadd3fdc0ec1f6857"
+    "version": "1.1.1",
+    "files": "1a235b309cffb24f08c18f98ba21d377cf192cf74f87508bcec02611e1f2c39a"
   },
   "upload_post": {
-    "version": "1.0.0",
-    "files": "44f42fb6484130f98727b640083095a3d7b2b69db116a1036f02bc757a2d62e0"
+    "version": "1.0.1",
+    "files": "eaf577b5c8ab2ac0a961fa02517fe573c14cc84dcecd83e9cdf968e266934201"
   },
   "youtube": {
-    "version": "1.3.0",
-    "files": "5aa5c94545e72f3c008b8a48d8b629673ab80d9a5afde8ff2b7eb42f44af1c1d"
+    "version": "1.3.1",
+    "files": "5f51d8d21ca62f94ba547c7a0c77abcdcb32f0c9f087926d906d2e947af7653a"
   }
 }

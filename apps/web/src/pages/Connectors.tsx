@@ -66,6 +66,20 @@ const GROUPS: [Connector["kind"], string, string][] = [
   ["notify", "Notifications", "Answer gates from outside Swarmify."],
 ];
 
+/** A package's logo (its Manifest's `icon`), else a tile of its label's first letter tinted by
+ * its kind. Decorative: the label beside it is what is read. */
+function Logo({ name, version, icon, label, kind }: { name: string; version?: string | null; icon?: string | null; label: string; kind: string }) {
+  if (icon && version) {
+    const src = `/api/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}/icon`;
+    return <img className="con-logo" src={src} alt="" width={24} height={24} loading="lazy" />;
+  }
+  return (
+    <span className="con-logo tile" data-kind={kind} aria-hidden="true">
+      {label.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 /** `NAME=value` per line; a bare `NAME` means the keys file already holds it. */
 export function parseKeys(text: string): Record<string, string> {
   const keys: Record<string, string> = {};
@@ -467,6 +481,7 @@ export function Connectors() {
                   return (
                     <li key={c.id} data-name={c.name} className="con-row">
                       <span className={s.tone === "ok" ? "dot live" : s.tone === "warn" ? "dot warn" : "dot"} />
+                      <Logo name={c.name} version={c.version} icon={c.icon} label={c.label} kind={c.kind} />
                       <span className="con-main">
                         <b>{c.label}</b>
                         <span className="faint">{where(c)}</span>
@@ -495,6 +510,7 @@ export function Connectors() {
               {packages.map((p) => (
                 <li key={`${p.name}@${p.version}`} data-package={p.name} className="con-row">
                   <span className={p.state === "installed" ? "dot live" : "dot warn"} />
+                  <Logo name={p.name} version={p.version} icon={p.icon} label={p.label} kind={p.kind} />
                   <span className="con-main">
                     <b>{p.label}</b>
                     <span className="faint">{p.problem ?? p.about}</span>

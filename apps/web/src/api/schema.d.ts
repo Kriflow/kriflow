@@ -814,6 +814,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/packages/{name}/{version}/icon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Package Icon
+         * @description The logo an installed version's Manifest names, an SVG or PNG, served as an image
+         *     only: an SVG opened on its own runs no script and loads nothing. 404 when the version is
+         *     not installed or names none.
+         */
+        get: operations["package_icon_api_packages__name___version__icon_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/packages/review": {
         parameters: {
             query?: never;
@@ -2561,6 +2583,8 @@ export interface components {
             sign_in: string[];
             /** Version */
             version: string;
+            /** Icon */
+            icon: string | null;
         };
         /** Conversation */
         Conversation: {
@@ -3291,6 +3315,8 @@ export interface components {
             commit?: string | null;
             /** Subfolder */
             subfolder?: string | null;
+            /** Icon */
+            icon?: string | null;
         };
         /** PackageIndex */
         PackageIndex: {
@@ -6282,6 +6308,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PackageIndex"];
+                };
+            };
+        };
+    };
+    package_icon_api_packages__name___version__icon_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
