@@ -43,6 +43,7 @@ RECORD = ".swarmify-install.json"
 LOCAL = "local"
 """The install source recorded for a local package."""
 INSTALL_SECONDS = 900
+ICON_BYTES = 64 * 1024
 GIT_SECONDS = 300
 _REF = re.compile(r"^(?!-)[A-Za-z0-9._/-]{1,200}$")
 """A tag, branch or commit to check out: never an option, never git's revision syntax."""
@@ -256,6 +257,8 @@ SCHEMA: dict[str, Any] = {
             },
         },
         "primary_metric": {"type": "string", "pattern": _SNAKE},
+        # Its logo (issue 469): an SVG or PNG inside the package, at most ICON_BYTES.
+        "icon": {"type": "string", "pattern": "^(?![/~])(?!.*(^|/)\\.\\.(/|$)).+\\.(svg|png)$"},
         # What the sandbox lets it use (ADR 0021): the hosts it reaches (`localhost` alone: its
         # own loopback servers), the Services whose URLs it calls, the data directory's folders it
         # reads (`{world}` is the world it runs for), the hosts its install step reaches
@@ -308,6 +311,9 @@ class Package:
     """The commit that ref resolved to, for one installed from git."""
     subfolder: str | None = None
     """The folder of the repository the package is in, for one not at its root."""
+    icon: str | None = None
+    """The logo its Manifest names, relative to its folder; served at
+    `/api/packages/<name>/<version>/icon`."""
 
 
 def _where(path: Any) -> str:
@@ -463,6 +469,12 @@ def read_manifest(folder: Path) -> dict[str, Any]:
     for field, path in files.items():
         if not (folder / path).exists():
             raise ManifestError(f"build_session.{field}: {path} is not in the package")
+    if icon := manifest.get("icon"):
+        file = folder / icon
+        if not file.is_file() or not file.resolve().is_relative_to(folder.resolve()):
+            raise ManifestError(f"icon: {icon} is not a file in the package")
+        if file.stat().st_size > ICON_BYTES:
+            raise ManifestError(f"icon: {icon} is over {ICON_BYTES // 1024} KB")
     return manifest
 
 
@@ -664,7 +676,16 @@ class Packages:
             m = read_manifest(folder)
         except ManifestError as exc:
             return Package(name, version, name, "", "", "invalid", **record, problem=str(exc))
-        return Package(name, version, m["label"], m["kind"], m["about"], "installed", **record)
+        return Package(
+            name,
+            version,
+            m["label"],
+            m["kind"],
+            m["about"],
+            "installed",
+            **record,
+            icon=m.get("icon"),
+        )
 
     def _source(self, source: str) -> Path:
         path = Path(source).expanduser()

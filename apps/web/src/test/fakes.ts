@@ -33,6 +33,7 @@ const pkg = (name: string, label: string, kind: Connector["kind"], over: Partial
   missing: [],
   sign_in: [],
   version: "1.0.0",
+  icon: null,
   ...over,
 });
 const video = [{ description: "the video", media_type: "video/mp4" }];

@@ -31,8 +31,8 @@ FAKE_NPX = HERE.parents[2] / "connectors/remotion_render/fake_npx.py"
 FAKE_HYPERFRAMES = HERE.parents[2] / "connectors/hyperframes_render/fake_hyperframes.py"
 BLENDER_RENDER = HERE.parents[2] / "connectors/blender_render"
 OFF_BY_DEFAULT = {
-    "hyperframes_build": {"hyperframes_build": "1.0.1", "hyperframes_render": "1.0.1"},
-    "blender_build": {"blender_build": "1.1.0", "blender_render": "1.0.4"},
+    "hyperframes_build": {"hyperframes_build": "1.0.2", "hyperframes_render": "1.0.2"},
+    "blender_build": {"blender_build": "1.1.1", "blender_render": "1.0.5"},
 }
 """Installed with Swarmify but not defaults: a world enables the pair to build with it."""
 SANDBOX = shutil.which("sandbox-exec") or shutil.which("bwrap")

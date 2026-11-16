@@ -2,13 +2,14 @@
 fixture package from a folder into a packages folder."""
 
 import json
+import re
 import shutil
 from pathlib import Path
 
 import pytest
 
 from swarmify_connectors import InstallError, ManifestError, Packages, read_manifest
-from swarmify_connectors.packages import MANIFEST, RECORD, check_manifest
+from swarmify_connectors.packages import ICON_BYTES, MANIFEST, RECORD, check_manifest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INVALID = sorted((FIXTURES / "manifests").glob("*.toml"))
@@ -43,6 +44,31 @@ def test_a_templates_table_naming_an_owned_folder_passes_with_its_reserved_form(
         "form": {"fields": [{"key": "character", "type": "string"}]},
     }
     assert check_manifest(manifest)["templates"]["folder"] == "echoes"
+
+
+def test_an_icon_is_an_svg_or_png_file_inside_the_package_and_small(tmp_path: Path) -> None:
+    folder = tmp_path / "echo"
+    shutil.copytree(FIXTURES / "packages/echo", folder)
+    toml = folder / MANIFEST
+    plain = toml.read_text()
+    assert "icon" not in read_manifest(folder)  # optional
+    (folder / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    (tmp_path / "key.svg").write_text("secret")
+    (folder / "out.svg").symlink_to(tmp_path / "key.svg")
+    (folder / "big.png").write_bytes(b"\0" * (ICON_BYTES + 1))
+    toml.write_text(f'icon = "logo.svg"\n{plain}')
+    assert read_manifest(folder)["icon"] == "logo.svg"
+    for icon, why in [
+        ("missing.svg", "missing.svg is not a file in the package"),
+        ("out.svg", "out.svg is not a file in the package"),  # a symlink out of it
+        ("../key.svg", "'../key.svg' does not match"),
+        ("/etc/key.svg", "'/etc/key.svg' does not match"),
+        ("server.py", "'server.py' does not match"),
+        ("big.png", "big.png is over 64 KB"),
+    ]:
+        toml.write_text(f'icon = "{icon}"\n{plain}')
+        with pytest.raises(ManifestError, match=f"^icon: {re.escape(why)}"):
+            read_manifest(folder)
 
 
 def test_a_folder_without_a_manifest_is_refused(tmp_path: Path) -> None:

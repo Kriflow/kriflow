@@ -99,6 +99,9 @@ class ConnectorView(BaseModel):
     """Keys of a package's sign-in fields the provider refused, to sign in to again."""
     version: str
     """The Connector Package version the world pins, or a run's workflow version recorded."""
+    icon: str | None
+    """The logo its Manifest names, served at `/api/packages/{name}/{version}/icon`; null for
+    none."""
 
 
 class Tested(BaseModel):
@@ -287,6 +290,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
             outputs=m.get("outputs", []),
             missing=connectors.missing(connector),
             sign_in=connectors.sign_in_needed(connector),
+            icon=m.get("icon"),
         )
 
     def world_or_404(world_id: str) -> None:
@@ -365,6 +369,26 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         except IndexUnavailable as exc:
             raise HTTPException(502, f"Could not read the index at {url}: {exc}") from exc
         return PackageIndex(url=url, packages=[IndexEntry(**e) for e in entries])
+
+    @api.get("/packages/{name}/{version}/icon", response_class=Response)
+    def package_icon(name: str, version: str) -> Response:
+        """The logo an installed version's Manifest names, an SVG or PNG, served as an image
+        only: an SVG opened on its own runs no script and loads nothing. 404 when the version is
+        not installed or names none."""
+        try:
+            icon = packages.manifest(name, version).get("icon")
+        except (InstallError, ManifestError) as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if not icon:
+            raise HTTPException(404, f"{name} {version} has no icon")
+        return Response(
+            (packages.root / name / version / icon).read_bytes(),
+            media_type="image/svg+xml" if icon.endswith(".svg") else "image/png",
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            },
+        )
 
     @api.post("/packages/review")
     def review_package(body: PackageSource) -> PackageReview:
