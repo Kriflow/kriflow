@@ -25,7 +25,9 @@ class FakeTake:
     def __init__(self) -> None:
         self.taken: list[tuple[str, str, str, list[str]]] = []
 
-    def __call__(self, child: Run, parent: Run, stage_id: str, names: list[str]) -> None:
+    def __call__(
+        self, child: Run, parent: Run, stage_id: str, names: list[str], folder: str = ""
+    ) -> None:
         if "missing.md" in names:
             raise ValueError("the child run produced no artifact named missing.md")
         self.taken.append((child.id, parent.id, stage_id, names))

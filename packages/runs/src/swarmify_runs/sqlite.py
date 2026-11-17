@@ -16,10 +16,13 @@ from swarmify_runs.model import (
     AppliedChange,
     Decision,
     Gate,
+    Item,
+    ItemView,
     Run,
     RunLink,
     RunStageView,
     StageDef,
+    items_ask,
 )
 
 MIGRATIONS = Path(__file__).parent / "migrations"
@@ -379,6 +382,69 @@ class SqliteStorage:
                 append(conn, _updated(saved))
             conn.execute("COMMIT")
 
+    def add_items(
+        self, run_id: str, index: int, visit: int, items: list[tuple[Item, ItemView]]
+    ) -> None:
+        """Record the Items of a fan-out stage's visit, in order, each as it starts out: pending,
+        or as an earlier visit left it when a revisit keeps it (ADR 0031)."""
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            for position, (item, view) in enumerate(items):
+                source = {"file": item.file} if item.file else {"data": item.data}
+                conn.execute(
+                    "INSERT OR IGNORE INTO fanout_items (run_id, stage_index, visit, item_key,"
+                    " item_title, position, source, child_run_id, status, error)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        run_id, index, visit, item.key, item.title, position,
+                        json.dumps(source), view.child.id if view.child else None, view.status,
+                        view.error,
+                    ),
+                )  # fmt: skip
+            saved = self._read(conn, run_id)
+            if saved is not None:
+                append(conn, _updated(saved))
+            conn.execute("COMMIT")
+
+    def items(
+        self, run_id: str, index: int, visit: int | None = None
+    ) -> list[tuple[Item, ItemView]]:
+        """The Items of a fan-out stage's visit (its latest when `visit` is None), in order."""
+        with self._conn() as conn:
+            return _items(conn, run_id, index, visit)
+
+    def set_item(
+        self,
+        run_id: str,
+        index: int,
+        visit: int,
+        key: str,
+        status: str,
+        child_run_id: str | None,
+        error: str | None = None,
+    ) -> None:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "UPDATE fanout_items SET status = ?, child_run_id = ?, error = ?"
+                " WHERE run_id = ? AND stage_index = ? AND visit = ? AND item_key = ?",
+                (status, child_run_id, error, run_id, index, visit, key),
+            )
+            saved = self._read(conn, run_id)
+            if saved is not None:
+                append(conn, _updated(saved))
+            conn.execute("COMMIT")
+
+    def item_of(self, child_run_id: str) -> tuple[str, int, int, str] | None:
+        """(run, stage index, visit, item key) of the Item a child run works on, if any."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT run_id, stage_index, visit, item_key FROM fanout_items"
+                " WHERE child_run_id = ? ORDER BY visit DESC LIMIT 1",
+                (child_run_id,),
+            ).fetchone()
+            return tuple(row) if row else None  # type: ignore[return-value]
+
     def remove_change(self, change_id: str, reason: str) -> None:
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -415,13 +481,15 @@ class SqliteStorage:
     def open_gates(self) -> list[Gate]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT s.id, s.idx, s.name, s.config, s.started_at, s.run_id,"
+                "SELECT s.id, s.idx, s.name, s.type, s.config, s.started_at, s.run_id,"
                 " r.world_id, r.name AS run_name, r.parent_run_id, r.over_budget"
                 " FROM run_stages s JOIN runs r ON r.id = s.run_id"
-                " WHERE s.status = 'waiting' AND (s.type IN ('gate', 'retro') OR r.over_budget = 1)"
+                " WHERE s.status = 'waiting'"
+                " AND (s.type IN ('gate', 'retro', 'workflow') OR r.over_budget = 1)"
                 " ORDER BY s.started_at DESC, s.id DESC"
             ).fetchall()
-            gates = []
+            gates: list[Gate] = []
+            families: set[str] = set()
             for g in rows:
                 earlier = conn.execute(
                     "SELECT name FROM run_stages WHERE run_id = ? AND idx < ? ORDER BY idx",
@@ -429,6 +497,11 @@ class SqliteStorage:
                 ).fetchall()
                 config = json.loads(g["config"])
                 limit = int(config.get("max_send_backs") or MAX_SEND_BACKS)
+                kind = config.get("kind") or "approve"
+                ask = config.get("ask") or ""
+                if g["type"] == "workflow":  # a fan-out stage raised its gate: items failed
+                    kind = "items"
+                    ask = items_ask([v for _, v in _items(conn, g["run_id"], g["idx"], None)])
                 (sent,) = conn.execute(
                     "SELECT count(*) FROM gate_decisions WHERE run_id = ? AND stage_index = ?"
                     " AND send_back_to IS NOT NULL",
@@ -441,17 +514,26 @@ class SqliteStorage:
                     g["id"],
                     g["idx"],
                     g["name"],
-                    config.get("kind") or "approve",
-                    config.get("ask") or "",
+                    kind,
+                    ask,
                     g["started_at"] or "",
                     max(limit - sent, 0),
                     [e["name"] for e in earlier],
                     g["parent_run_id"],
                     _link(conn, g["parent_run_id"]),
                     max_send_backs=limit,
+                    item=_item_title(conn, g["run_id"]),
                 )
                 if g["over_budget"]:  # RunControl.gates adds the money from the top run
                     gate = replace(gate, kind="budget", send_backs_left=0, earlier_stages=[])
+                    if g["parent_run_id"] is not None:
+                        # A family waits at one budget gate, on its top run, which adding money
+                        # to releases every member (ADR 0013, 0031).
+                        top = _top(conn, g["run_id"])
+                        if top in families:
+                            continue
+                        gate = _on_top(conn, gate, top)
+                    families.add(gate.run_id)
                 gates.append(gate)
             return gates
 
@@ -562,6 +644,9 @@ class SqliteStorage:
                     json.loads(s["config"]).get("ask") if s["type"] == "gate" else None,
                     _inputs(json.loads(s["config"])) if s["type"] == "connector" else [],
                     json.loads(s["config"]),
+                    items=[v for _, v in _items(conn, run_id, s["idx"], None)]
+                    if s["type"] == "workflow"
+                    else [],
                 )
                 for s in stages
             ],
@@ -630,6 +715,62 @@ def _change(conn: sqlite3.Connection, c: sqlite3.Row) -> AppliedChange:
         c["revision"],
         _link(conn, c["fork_run_id"]),
     )
+
+
+def _items(
+    conn: sqlite3.Connection, run_id: str, index: int, visit: int | None
+) -> list[tuple[Item, ItemView]]:
+    if visit is None:
+        (visit,) = conn.execute(
+            "SELECT max(visit) FROM fanout_items WHERE run_id = ? AND stage_index = ?",
+            (run_id, index),
+        ).fetchone()
+    rows = conn.execute(
+        "SELECT * FROM fanout_items WHERE run_id = ? AND stage_index = ? AND visit = ?"
+        " ORDER BY position",
+        (run_id, index, visit),
+    ).fetchall()
+    out = []
+    for r in rows:
+        source = json.loads(r["source"])
+        item = Item(r["item_key"], r["item_title"], source.get("file"), source.get("data"))
+        view = ItemView(
+            r["item_key"], r["item_title"], r["status"], _link(conn, r["child_run_id"]), r["error"]
+        )
+        out.append((item, view))
+    return out
+
+
+def _item_title(conn: sqlite3.Connection, child_run_id: str) -> str | None:
+    row = conn.execute(
+        "SELECT item_title FROM fanout_items WHERE child_run_id = ? LIMIT 1", (child_run_id,)
+    ).fetchone()
+    return row[0] if row else None
+
+
+def _top(conn: sqlite3.Connection, run_id: str) -> str:
+    while (
+        row := conn.execute("SELECT parent_run_id FROM runs WHERE id = ?", (run_id,)).fetchone()
+    ) and row[0]:
+        run_id = row[0]
+    return run_id
+
+
+def _on_top(conn: sqlite3.Connection, gate: Gate, top: str) -> Gate:
+    """A child's budget gate shown as its family's one gate, on the top run's active stage."""
+    run = conn.execute("SELECT name, world_id FROM runs WHERE id = ?", (top,)).fetchone()
+    stage = conn.execute(
+        "SELECT id, idx, name FROM run_stages WHERE run_id = ? AND status IN ('running', 'waiting')"
+        " ORDER BY idx LIMIT 1",
+        (top,),
+    ).fetchone()
+    if run is None or stage is None:
+        return gate
+    return replace(
+        gate, run_id=top, world_id=run["world_id"], run_name=run["name"], stage_id=stage["id"],
+        stage_index=stage["idx"], stage_name=stage["name"], parent_run_id=None, parent=None,
+        item=None,
+    )  # fmt: skip
 
 
 def _link(conn: sqlite3.Connection, run_id: str | None) -> RunLink | None:

@@ -29,6 +29,7 @@ from swarmify_runs.machine import (
     Aborted,
     GateAnswered,
     Illegal,
+    ItemsRetried,
     MonthSpent,
     Paused,
     Rerun,
@@ -121,6 +122,10 @@ Runs cannot read the types; the composition root asks the Connectors registry.""
 def no_text_check(_run: Run, _name: str, _old: str, _text: str) -> list[str]:
     return []
 
+
+ITEMS_CHOICES = ("retry", "continue")
+"""The answers of a fan-out stage's `items` gate: start the failed Items again, or finish
+without them (ADR 0031). Abort ends the run as at any gate."""
 
 TEXT = (".md", ".markdown", ".json", ".yaml", ".yml", ".txt")
 """The files an Artifact Edit rewrites in place; a Rerun remakes the rest (ADR 0027)."""
@@ -394,7 +399,9 @@ class RunControl:
         if index is None:
             raise Illegal("the run is not waiting at a gate")
         _, stage = self.storage.stage_def(run_id, index)
-        kind = stage.config.get("kind") or "approve"
+        kind = "items" if stage.type == "workflow" else stage.config.get("kind") or "approve"
+        if kind == "items" and choice not in ITEMS_CHOICES:
+            raise ValueError("a fan-out stage's items gate takes choice retry or continue")
         if kind == "skill" and not proposal:
             raise Illegal("a skill gate is answered by deciding its proposal")
         note = note.strip()
@@ -414,6 +421,8 @@ class RunControl:
                 times = "once" if limit == 1 else f"{limit} times"
                 raise Illegal(f"already sent back {times}; approve or abort")
             event: RunEvent = SentBack(index, targets[0])
+        elif kind == "items" and choice == "retry":
+            event = ItemsRetried(index)
         else:
             event = GateAnswered(index)
         transition(kinds_of(run), state_of(run), event)  # raises Illegal before anything is written
@@ -454,6 +463,8 @@ class RunControl:
         message: dict[str, Any] = {"action": "decide", "index": index}
         if isinstance(event, SentBack):
             message["to"] = event.to
+        if isinstance(event, ItemsRetried):
+            message["retry"] = True
         try:
             self._send(run_id, message)
         except Exception:
@@ -801,6 +812,7 @@ class RunControl:
         step (`check_stop`); the stage runs again, its agents resuming, on resume."""
         run = self._control(run_id, Paused(), "pause")
         self.storage.set_stop(run_id, "pause")  # after the send: a stop with no pause would loop
+        self._cascade(run_id, self.pause)
         return run
 
     def resume(self, run_id: str) -> Run:
@@ -811,7 +823,17 @@ class RunControl:
         if self.storage.stop_of(run_id) == "pause":
             self.storage.set_stop(run_id, None)
         self._send(run_id, {"action": "resume"})
+        self._cascade(run_id, self.resume)
         return run
+
+    def _cascade(self, run_id: str, act: Callable[[str], Run]) -> None:
+        """Pause or resume every live child run too, as abort does: a pause means the same with
+        or without child runs (ADR 0031). A child that cannot take it (queued, ended) is left."""
+        for child in self.storage.child_run_ids(run_id):
+            try:
+                act(child)
+            except (Illegal, KeyError):
+                pass
 
     def abort(self, run_id: str) -> Run:
         """Abort the run and every child run it started (ADR 0013).
@@ -925,11 +947,37 @@ class RunControl:
         if usd <= top.spent_usd:
             raise ValueError(f"the run has spent ${top.spent_usd:.2f}; set a budget above that")
         self.storage.set_budget(top.id, usd)
+        released = []
         for member in self.family(top.id):
             waiting = self.storage.get_run(member)
             if waiting is not None and waiting.over_budget and waiting.status not in TERMINAL:
                 self._send(member, {"action": "budget"})
+                released.append(member)
+        if any(m != top.id for m in released):
+            self._family_gate_closed(top)
         return self._run(run_id)
+
+    def _family_gate_closed(self, top: Run) -> None:
+        """`gate.closed` for the one budget gate a family's children wait at, shown on its top
+        run, which the runs themselves never announce (ADR 0013, 0031)."""
+        active = next((s for s in top.stages if s.status in ("running", "waiting")), None)
+        if active is None:
+            return
+        self.notify(
+            Event.new(
+                "gate.closed",
+                world_id=top.world_id,
+                run_id=top.id,
+                payload={
+                    "run_id": top.id,
+                    "name": top.name,
+                    "stage_index": active.index,
+                    "visit": top.send_backs,
+                    "stage": active.name,
+                    "resolution": {"outcome": "budget_added"},
+                },
+            )
+        )
 
     def baseline(self, run_id: str) -> Run | None:
         """The newest finished baseline run of the run's workflow, to measure it against."""

@@ -17,6 +17,7 @@ def dump_workflow(
     schedule: str | None = None,
     budget_usd: float | None = None,
     agents: int | None = None,
+    given: Sequence[str] = (),
 ) -> str:
     """`stages` are (type, name, fields). Empty fields are left out, so the text stays as short
     as a person would write it; the parser fills the defaults back in."""
@@ -24,8 +25,10 @@ def dump_workflow(
     for key, value in (("schedule", schedule), ("budget_usd", budget_usd), ("agents", agents)):
         if value is not None:
             doc[key] = value
+    if given:
+        doc["given"] = list(given)
     doc["stages"] = [
-        {kind: stage_name, **{k: v for k, v in fields.items() if v not in (None, [], {}, "")}}
+        {kind: stage_name, **{_key(k): v for k, v in fields.items() if v not in (None, [], {}, "")}}
         for kind, stage_name, fields in stages
     ]
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)
@@ -55,6 +58,11 @@ def restage(
     return _dump(doc), _dump({**doc, "stages": [*kept[:at], *new, *kept[at:]]})
 
 
+def _key(field: str) -> str:
+    """A stage field as YAML spells it: `as` is a Python keyword, so the model says `as_`."""
+    return "as" if field == "as_" else field
+
+
 def _name(entry: Mapping[str, Any]) -> str:
     return next(entry[t] for t in STAGE_TYPES if t in entry)
 
@@ -66,7 +74,8 @@ def _entry(
     if not entry or entry.get(kind) != name:
         entry, old = {kind: name}, {}
     out = dict(entry)
-    fields = {k: v for k, v in new.items() if k not in ("name", "type")}
+    fields = {_key(k): v for k, v in new.items() if k not in ("name", "type")}
+    old = {_key(k): v for k, v in old.items()}
     for key in {*old, *fields} - {"name", "type"}:
         value = fields.get(key)
         if key in old and old[key] == value:
