@@ -97,6 +97,9 @@ def test_a_json_list_fans_out_each_child_reads_its_given_input_and_the_join_land
     assert [(i["key"], i["files"]) for i in index] == [
         ("intro", ["intro/out.md"]), ("1", ["1/out.md"]), ("2", ["2/out.md"]),
     ]  # fmt: skip
+    retry = running.post(f"/api/runs/{run['id']}/items/intro/retry")
+    assert retry.status_code == 409  # the run is done: nothing fans out
+    assert running.post("/api/runs/run_nope/items/intro/retry").status_code == 404
 
 
 def test_a_child_workflow_must_declare_its_given_input(client: TestClient) -> None:

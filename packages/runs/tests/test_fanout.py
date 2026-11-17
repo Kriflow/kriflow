@@ -362,3 +362,31 @@ def test_a_spent_budget_waits_at_one_gate_on_the_top_run_and_money_releases_ever
     assert [i.status for i in done.stages[STAGE].items] == ["done"] * 3
     closed = [e for e in notifier.events if e.type == "gate.closed"]
     assert [e.run_id for e in closed] == [parent.id]
+
+
+def test_a_failed_item_is_retried_now_from_where_its_child_failed_while_siblings_wait(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [TRANSLATE, REVIEW], paragraphs=cards(tmp_path, 3))
+    translate.failing["Paragraph 2"] = 1
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(most=3)])
+    wait_for(lambda: [i.status for i in fetch(runner, parent.id).stages[STAGE].items]
+             == ["running", "failed", "running"], 20)  # fmt: skip
+    with pytest.raises(Illegal, match="only a failed one"):
+        runner.retry_item(parent.id, "p1")
+    failed = next(i.child for i in fetch(runner, parent.id).stages[STAGE].items if i.key == "p2")
+    assert failed is not None
+
+    child = runner.retry_item(parent.id, "p2")
+    assert child.parent_run_id == parent.id and child.forked_from is not None
+    assert child.forked_from.id == failed.id and child.budget_usd is None
+    while fetch(runner, parent.id).status != "done":
+        approve(runner, parent.id)
+        wait_for(lambda: True, 0.05)
+    done = fetch(runner, parent.id)
+    assert [(i.key, i.status) for i in done.stages[STAGE].items] == [
+        ("p1", "done"), ("p2", "done"), ("p3", "done"),
+    ]  # fmt: skip
+    retried = next(i.child for i in done.stages[STAGE].items if i.key == "p2")
+    assert retried is not None and retried.id == child.id
+    assert len(translate.seen["Paragraph 2"]) == 2
