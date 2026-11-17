@@ -581,6 +581,13 @@ def router(
             raise HTTPException(404, "run not found")
         return run.changes
 
+    @api.post("/runs/{run_id}/items/{key}/retry", responses=ACTION_ERRORS)
+    def retry_item(run_id: str, key: str) -> Run:
+        """Retry a failed Item of the run's running fan-out stage now, while its siblings still
+        run: its child is forked from where it failed, in the same family. Answers the new child.
+        409 when no fan-out stage runs or the Item has not failed, 404 for an unknown Item."""
+        return act(lambda: runner.retry_item(run_id, key))
+
     @api.post("/runs/{run_id}/pause", responses=ACTION_ERRORS)
     def pause(run_id: str) -> Run:
         """At a gate the pause is immediate; mid-stage it lands when the stage finishes."""

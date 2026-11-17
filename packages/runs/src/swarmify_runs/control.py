@@ -306,6 +306,34 @@ class RunControl:
         self._enqueue(run)
         return run
 
+    def retry_item(self, run_id: str, key: str) -> Run:
+        """Retry one failed Item of a fan-out stage now, while its siblings still run: its
+        child is forked from the child's first unfinished stage (what it finished is kept),
+        stays in the family (same parent, so the same run root and Budget) and becomes the
+        Item's child. Returns the new child. Raises KeyError for an unknown run or Item and
+        Illegal when no fan-out stage of the run is running or the Item has not failed (once
+        every Item settled, the stage's items gate retries instead)."""
+        run = self._run(run_id)
+        index = next((s.index for s in run.stages if s.status == "running"), None)
+        if index is None or not self.storage.stage_def(run_id, index)[1].config.get("for_each"):
+            raise Illegal("no fan-out stage of this run is running")
+        visit = run.send_backs
+        view = {v.key: v for _, v in self.storage.items(run_id, index, visit)}.get(key)
+        if view is None:
+            raise KeyError(f"no Item {key!r} in stage {run.stages[index].name}")
+        if view.status not in ("failed", "aborted") or view.child is None:
+            raise Illegal(f"Item {key!r} is {view.status}; only a failed one is retried")
+        source = self.storage.get_run(view.child.id)
+        if source is None:
+            raise KeyError(f"run not found: {view.child.id}")
+        at = next((s.index for s in source.stages if s.status not in ("done", "skipped")), 0)
+        fork = replace(self._new_fork(source), parent_run_id=run_id, budget_usd=None)
+        child = self.storage.fork(fork, source, at)
+        copy_run_files(self.data_dir, source, child, at)
+        self.storage.set_item(run_id, index, visit, key, "running", child.id)
+        self._enqueue(child)
+        return child
+
     def _new_fork(self, source: Run) -> Run:
         """The Fork of `source` to insert, queued. A fork copies the run, its Budget included,
         as the workflow's default. A Run Change's Fork skips `pin`: the change was just checked

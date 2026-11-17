@@ -257,6 +257,12 @@ stage with a plain error.
   workflows were edited since also stops a third level with an error.
 - A send-back to a workflow stage starts a fresh child; a restart resumes the wait on the same
   one.
+- A fan-out stage (`for_each`, ADR 0031) runs one child per Item, `max_parallel` at once, and
+  raises an `items` gate (retry or continue) once every Item settled and some failed. A failed
+  Item can also be retried at once, while its siblings still run (one may wait at a human gate
+  for days): `POST /api/runs/<id>/items/<key>/retry` forks its child from the first stage it did
+  not finish, keeping what it finished, in the same family, and links the fork as the Item's
+  child.
 - The runs page shows `child of <parent>` on each child, the run timeline links a workflow stage
   to its child and a child to its parent, and the gates inbox labels a child's gate with its
   parent.
