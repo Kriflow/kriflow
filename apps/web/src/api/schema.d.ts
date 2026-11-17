@@ -699,6 +699,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Resources
+         * @description Every Resource with its Slots, their holders and its waiters (ADR 0030); install-wide.
+         *     Each note names its run, top run, stage, package and since (Unix seconds).
+         */
+        get: operations["list_resources_api_resources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/worlds/{world_id}/connectors": {
         parameters: {
             query?: never;
@@ -3880,6 +3901,8 @@ export interface components {
             network?: string | null;
             /** Items */
             items?: components["schemas"]["ItemView"][];
+            /** Waiting */
+            waiting?: string | null;
         };
         /** SaveAsWorkflow */
         SaveAsWorkflow: {
@@ -6199,6 +6222,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_resources_api_resources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };

@@ -4,8 +4,8 @@
     "files": "bc2f057c9894f93439abdb556ea900cf018ea7d82dface3a4f0f5b029a596c86"
   },
   "blender_render": {
-    "version": "1.0.5",
-    "files": "c5f8eee18910a82e1abba9d2af02a2647407465defd010ff7b3a972467b9e144"
+    "version": "1.0.6",
+    "files": "40548e6c9b59a2c3debf44b94a6307fcd391120e1d18579eeef59e58f20c067c"
   },
   "hyperframes_build": {
     "version": "1.0.2",
@@ -24,16 +24,16 @@
     "files": "b9434f1ab322f22450066a84e2730a823540638beb47aadc741880d9195a03c1"
   },
   "remotion_render": {
-    "version": "1.0.7",
-    "files": "69d427719369b7999e44f7b10e536a1e56126ad2cb09d700f1bee235d0ec4d5c"
+    "version": "1.0.8",
+    "files": "fdcb8d066ed5021eb77aaa4f9abd9f9438fb93062e1a202e821171081359ff5d"
   },
   "slack": {
     "version": "1.1.1",
     "files": "bd9ddc2b701decbebe7c9d9a85c6fa58b85b13d4c068318f948122b09c3ffc4d"
   },
   "speech": {
-    "version": "1.1.1",
-    "files": "1a235b309cffb24f08c18f98ba21d377cf192cf74f87508bcec02611e1f2c39a"
+    "version": "1.2.0",
+    "files": "d3667c3873e2d9905f3cf8dd73e471f119d7c3427862cd41f3393c139fd4fd88"
   },
   "upload_post": {
     "version": "1.0.1",

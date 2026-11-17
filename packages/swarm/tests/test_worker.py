@@ -394,11 +394,13 @@ def test_tools_outside_the_stage_allowlist_are_denied(board: SqliteStorage, tmp_
         PASS,
     )
     servers: list[list[str]] = []
+    runs: list[object] = []
 
     def connectors(
-        world_id: str, names: list[str], packages: dict[str, str]
+        world_id: str, names: list[str], packages: dict[str, str], run: object = None
     ) -> dict[str, dict[str, object]]:
         servers.append(names)
+        runs.append(run)  # the run and stage its tool servers learn (ADR 0030)
         return {n: {"type": "stdio", "command": n} for n in names}
 
     stage = {**STAGE, "tools": ["web_search", "graph", "fal"]}  # Agent Tools need no server
@@ -406,6 +408,7 @@ def test_tools_outside_the_stage_allowlist_are_denied(board: SqliteStorage, tmp_
     assert _tools(board, "denied") == ["Bash", "mcp__youtube__upload", "Read"]
     assert _tools(board)[:3] == ["WebSearch", "mcp__fal__run", "Read"]
     assert servers == [["fal"]] and set(STAGE_TOOLS) == set(AGENT_TOOLS)
+    assert runs == [(R, S)]
     options = script.sessions[0]
     assert options.mcp_servers["fal"] == {"type": "stdio", "command": "fal"}  # type: ignore[index]
     assert "WebSearch" in options.allowed_tools and "mcp__fal__*" in options.allowed_tools
@@ -427,7 +430,7 @@ def test_a_tool_server_that_fails_to_start_has_its_stderr_in_the_stage_log(
         (tmp_path / f"{name}.log").write_text(said + "\n")
 
     def connectors(
-        world_id: str, names: list[str], packages: dict[str, str]
+        world_id: str, names: list[str], packages: dict[str, str], run: object = None
     ) -> dict[str, dict[str, object]]:
         return {
             n: {"type": "stdio", "command": n, "stderr": str(tmp_path / f"{n}.log")} for n in names

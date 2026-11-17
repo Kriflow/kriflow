@@ -34,6 +34,7 @@ export function stepMeta(s: Stage, queued = false): string {
     case "done":
       return took === null ? "done" : clock(took);
     case "running":
+      if (s.waiting) return s.waiting.split(":", 1)[0] ?? s.waiting;
       return s.network ? "waiting for the network" : "running";
     case "waiting":
       return "waiting";
@@ -743,6 +744,11 @@ export function StagePanel(p: PanelProps) {
       {stage.network && (
         <p className="notice" role="status" data-testid="stage-network">
           {stage.network}
+        </p>
+      )}
+      {stage.waiting && (
+        <p className="notice" role="status" data-testid="stage-waiting">
+          {stage.waiting.charAt(0).toUpperCase() + stage.waiting.slice(1)}.
         </p>
       )}
       {stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}

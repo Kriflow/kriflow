@@ -18,6 +18,7 @@ from swarmify_api.assistant import Card, Message, RunAssistant, Unanswered, read
 from swarmify_api.auth import CALLER
 from swarmify_api.runs import checker, pinner, start_pinned
 from swarmify_connectors import Connectors
+from swarmify_connectors.resources import snapshot
 from swarmify_memory import Memory
 from swarmify_runs import TERMINAL, Illegal, Run, RunChange, RunControl
 from swarmify_swarm import OPERATOR, Refused, Storage
@@ -74,6 +75,25 @@ def server(
     def workflow_world(workflow_id: str) -> None:
         if (workflow := workflows.get(workflow_id)) is not None:
             reach(workflow.world_id)
+
+    @mcp.tool(
+        description="List every Resource (the GPU, a one-seat service) with its Slots, who holds"
+        " each (run, top run, stage, package, since in Unix seconds) and who waits for one."
+    )
+    def resources() -> list[dict[str, Any]]:
+        found = snapshot(root / "sandbox" / "resources")
+        if scope() is None:
+            return found
+
+        def mine(note: dict[str, Any] | None) -> bool:
+            run = control.get(str((note or {}).get("run")))
+            return run is not None and run.world_id == scope()
+
+        for r in found:  # a world's token sees only its own runs' notes
+            r["waiting"] = [w for w in r["waiting"] if mine(w)]
+            for slot in r["slots"]:
+                slot["holder"] = slot["holder"] if mine(slot["holder"]) else None
+        return found
 
     @mcp.tool(description="Create a world: one long-lived memory with its own folder and stream.")
     def create_world(name: str, purpose: str = "") -> dict[str, Any]:
