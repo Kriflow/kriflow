@@ -1377,7 +1377,8 @@ export interface paths {
         };
         /**
          * Library
-         * @description Every artifact of the world across its runs, newest first.
+         * @description Every artifact of the world across its runs, newest first; with `status`, only the
+         *     cards a pick gate left so (`parked`: offered, not picked, not yet promoted).
          */
         get: operations["library_api_worlds__world_id__library_get"];
         put?: never;
@@ -2646,9 +2647,9 @@ export interface components {
         };
         /**
          * Decide
-         * @description A gate answer. Pick gates need `choice` or `artifact`; approve gates may name
-         *     `send_back_to`, an earlier stage that then runs again with `note` in its context; confirm
-         *     gates take neither.
+         * @description A gate answer. Pick gates need `choice` or `artifact`, or `artifacts` at a gate that
+         *     takes several picks; approve gates may name `send_back_to`, an earlier stage that then runs
+         *     again with `note` in its context; confirm gates take neither.
          */
         Decide: {
             /** Choice */
@@ -2662,6 +2663,10 @@ export interface components {
             send_back_to?: string | null;
             /** Artifact */
             artifact?: string | null;
+            /** Artifacts */
+            artifacts?: string[] | null;
+            /** Rejects */
+            rejects?: components["schemas"]["Reject"][] | null;
             /** Edits */
             edits?: {
                 [key: string]: unknown;
@@ -2724,6 +2729,18 @@ export interface components {
             } | null;
             /** By */
             by?: string | null;
+            /** Artifacts */
+            artifacts?: string[];
+            /** Parked */
+            parked?: string[];
+            /** Rejected */
+            rejected?: {
+                [key: string]: string;
+            }[];
+            /** Titles */
+            titles?: {
+                [key: string]: string;
+            };
         };
         /**
          * Device
@@ -2843,6 +2860,11 @@ export interface components {
             spent_usd?: number | null;
             /** Item */
             item?: string | null;
+            /**
+             * Picks
+             * @default 1
+             */
+            picks: number;
         };
         /**
          * GateStage
@@ -2860,6 +2882,8 @@ export interface components {
             kind: string;
             /** Max Send Backs */
             max_send_backs?: number | null;
+            /** Picks */
+            picks?: number | null;
             /**
              * Type
              * @default gate
@@ -3029,6 +3053,16 @@ export interface components {
             stage_index: number | null;
             /** Stage Name */
             stage_name: string;
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /**
          * ListedWorkflow
@@ -3675,6 +3709,19 @@ export interface components {
              * @default 0
              */
             cost_usd: number;
+        };
+        /**
+         * Reject
+         * @description A card the operator rejects at a pick gate, and why (optional).
+         */
+        Reject: {
+            /** Artifact */
+            artifact: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /** RenameBody */
         RenameBody: {
@@ -7379,7 +7426,9 @@ export interface operations {
     };
     library_api_worlds__world_id__library_get: {
         parameters: {
-            query?: never;
+            query?: {
+                status?: ("picked" | "parked" | "rejected") | null;
+            };
             header?: never;
             path: {
                 world_id: string;

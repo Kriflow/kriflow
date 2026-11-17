@@ -148,3 +148,95 @@ def test_items_come_from_ranked_cards_picked_cards_or_a_json_list(tmp_path: Path
         of("list.json")
     with pytest.raises(ValueError, match="no earlier stage"):
         of("missing.json")
+
+
+CARDS = """name: Choose
+stages:
+  - connector: make
+    calls: para
+    output: cards.md
+  - gate: choose
+    kind: pick
+    picks: 3
+    ask: Choose three.
+  - workflow: each
+    runs: {child}
+    for_each: choose
+    max_parallel: 1
+    take: [out.md]
+"""
+TWO_STEPS = """name: Develop
+given: [item.md]
+stages:
+  - connector: draft
+    calls: para
+    input: item.md
+    output: mid.md
+  - connector: polish
+    calls: para
+    input: mid.md
+    output: out.md
+"""
+
+
+def test_a_fan_out_over_a_multi_pick_runs_the_picks_in_order_and_a_promote_unparks(
+    running: TestClient, transport: FakeTransport
+) -> None:
+    """Five cards, three picked out of rank order, one rejected with a reason, one parked: the
+    children run the picks in pick order; the Library lists the parked one until it is
+    promoted."""
+
+    def para(args: dict[str, Any]) -> dict[str, Any]:
+        out = Path(args["output_path"])
+        if out.name == "cards.md":
+            for i in range(1, 6):
+                (out.parent / f"card-{i}.md").write_text(
+                    f'---\ntype: "card"\ntitle: "Card {i}"\nrank: {i}\n---\n\nAbout card {i}.\n'
+                )
+        out.write_text(f"from {Path(args.get('input_path') or 'nothing').name}")
+        return {"ok": True}
+
+    transport.outputs["para"] = [para]
+    world = running.post("/api/worlds", json={"name": "Cards"}).json()["id"]
+    assert running.post(f"/api/worlds/{world}/connectors", json=PARA).status_code == 201
+    child = running.post(f"/api/worlds/{world}/workflows", json={"yaml": TWO_STEPS}).json()
+    made = running.post(
+        f"/api/worlds/{world}/workflows", json={"yaml": CARDS.format(child=child["workflow_id"])}
+    )
+    assert made.status_code == 201, made.json()
+    run = running.post(f"/api/workflows/{made.json()['workflow_id']}/runs", json={}).json()
+    until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] == "waiting_gate")
+    (gate,) = [g for g in running.get("/api/gates").json() if g["run_id"] == run["id"]]
+    assert gate["picks"] == 3
+
+    shown = running.get(f"/api/runs/{run['id']}/artifacts", params={"before": 1}).json()
+    path = {a["title"]: a["path"] for a in shown if a["type"] == "card"}
+    too_many = {"artifacts": [path[f"Card {i}"] for i in (1, 2, 3, 4)]}
+    assert running.post(f"/api/runs/{run['id']}/decision", json=too_many).status_code == 422
+    answer = {
+        "artifacts": [path["Card 4"], path["Card 1"], path["Card 3"]],
+        "rejects": [{"artifact": path["Card 2"], "reason": "too thin"}],
+    }
+    decided = running.post(f"/api/runs/{run['id']}/decision", json=answer)
+    assert decided.status_code == 200, decided.json()
+    until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] in ("done", "failed"))
+    done = running.get(f"/api/runs/{run['id']}").json()
+    assert done["status"] == "done"
+    (decision,) = done["decisions"]
+    assert decision["parked"] == [path["Card 5"]] and decision["choice"] == "Card 4"
+    items = done["stages"][2]["items"]
+    assert [i["title"] for i in items] == ["Card 4", "Card 1", "Card 3"]
+
+    def listed(status: str) -> list[tuple[str, str]]:
+        found = running.get(f"/api/worlds/{world}/library", params={"status": status}).json()
+        return [(a["title"], a["reason"]) for a in found]
+
+    assert listed("parked") == [("Card 5", "")]
+    assert listed("rejected") == [("Card 2", "too thin")]
+    assert sorted(listed("picked")) == [("Card 1", ""), ("Card 3", ""), ("Card 4", "")]
+    promoted = running.post(
+        f"/api/workflows/{child['workflow_id']}/promote",
+        json={"stage": 1, "artifact": path["Card 5"]},
+    )
+    assert promoted.status_code == 201, promoted.json()
+    assert listed("parked") == []

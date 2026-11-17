@@ -62,7 +62,9 @@ each stage is `- <type>: <stage name>` plus its fields:
 - gate: ask; optional kind: pick | approve | confirm (approve by default); an approve gate may set
   max_send_backs, how often it may send the run back (2 by default). A pick gate offers the
   items of the swarm stage before it, so give that stage a list output_type (list[idea]): a
-  single one (idea) keeps only its best item, leaving one card to pick.
+  single one (idea) keeps only its best item, leaving one card to pick. A pick gate may set
+  picks (1 to 10, 1 by default), how many cards it takes in one answer; a fan-out stage whose
+  for_each names it runs the picked cards in pick order.
 - connector: calls (connector name, defaults to the stage name); optional input, output, params;
   inputs (a list of artifact names, each produced by an earlier stage) instead of input when
   the connector takes several files.

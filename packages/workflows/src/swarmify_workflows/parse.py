@@ -7,6 +7,7 @@ import yaml
 from swarmify_workflows.model import (
     GATE_KINDS,
     MAX_PARALLEL,
+    PICKS_MAX,
     STAGE_TYPES,
     ConnectorStage,
     GateStage,
@@ -21,7 +22,7 @@ from swarmify_workflows.schedule import CRON_RULE, cron_problem
 TOP_FIELDS = {"name", "schedule", "budget_usd", "agents", "given", "stages"}
 STAGE_FIELDS: dict[str, set[str]] = {
     "swarm": {"goal", "done_when", "tools", "graphs", "output_type", "produces", "model", "agents"},
-    "gate": {"ask", "kind", "max_send_backs"},
+    "gate": {"ask", "kind", "max_send_backs", "picks"},
     "connector": {"calls", "input", "inputs", "output", "params"},
     "workflow": {"runs", "take", "for_each", "as", "max_parallel"},
 }
@@ -162,12 +163,23 @@ def _parse_stage(
         ask = f.text("ask", required=True)
         gate_kind = f.text("kind") or "approve"
         limit = f.number("max_send_backs", integer=True)
+        picks = f.number("picks", integer=True)
         if gate_kind not in GATE_KINDS:
             f.fail(f"kind must be one of {', '.join(GATE_KINDS)}")
         elif limit is not None and gate_kind != "approve":
             f.fail(f"max_send_backs needs an approve gate; a {gate_kind} gate cannot send back")
+        elif picks is not None and gate_kind != "pick":
+            f.fail("picks needs a pick gate")
+        elif picks is not None and picks > PICKS_MAX:
+            f.fail(f"picks must be 1 to {PICKS_MAX}")
         elif ask:
-            stage = GateStage(stage_name, ask, gate_kind, None if limit is None else int(limit))
+            stage = GateStage(
+                stage_name,
+                ask,
+                gate_kind,
+                None if limit is None else int(limit),
+                None if picks is None else int(picks),
+            )
     elif kind == "connector":
         calls = f.text("calls") or stage_name
         input_, output, inputs = f.text("input"), f.text("output"), f.names("inputs")

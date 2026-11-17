@@ -683,13 +683,17 @@ def test_what_the_world_already_made_is_in_every_prompt_of_an_idea_stage(
     plan = Answer({"tasks": [{"title": "Pull top shorts"}]})
     script = Script([GRAPH, plan], [GRAPH, CLAIM, FINISH], PASS)
     line = "- Contrafreeloading (published 2026-11-04): study: Delgado 2021"
-    stage = {**STAGE, "output_type": "list[idea]", "made": [line]}
+    parked = "- Parked: Card C (2026-11-07): the third one"
+    rejected = "- Rejected: Card D: seen it before"
+    stage = {**STAGE, "output_type": "list[idea]", "made": [line, parked, rejected]}
     _run(_swarm(board, tmp_path, script), tmp_path, stage)
 
     planner, _, judge = script.prompts
     for prompt in (planner, str(script.sessions[1].system_prompt), judge):
         assert "Already made in this world" in prompt and line in prompt
-    assert "repeats one of them" in judge
+        assert parked in prompt and rejected in prompt
+        assert "a Parked one may be offered again when it still fits" in prompt
+    assert "repeats one of them" in judge and "Never offer a Rejected idea" in judge
 
 
 DOLLAR = {"input_tokens": 250_000}

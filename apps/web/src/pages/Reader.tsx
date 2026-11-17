@@ -31,6 +31,8 @@ async function unlisted(worldId: string, path: string): Promise<Item | null> {
     workflow_version: null,
     stage_index: null,
     stage_name: "",
+    status: "",
+    reason: "",
   };
 }
 

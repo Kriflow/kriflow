@@ -121,7 +121,7 @@ export const editable = (f: PublishField) => f.editable && (typeof f.value === "
 export const topUpSuggestion = (gate: Gate) => Number((gate.budget_usd ?? 1).toFixed(2));
 
 export type Choice =
-  | { kind: "pick"; choice: string; artifact?: string }
+  | { kind: "pick"; choice: string; artifact?: string; artifacts?: string[]; rejects?: { artifact: string; reason: string }[] }
   | { kind: "approve" }
   | { kind: "send_back"; to: string }
   | { kind: "confirm" }
@@ -172,6 +172,8 @@ export function decision(gate: Gate, choice: Choice, { note = "", edits = {}, re
   if (choice.kind === "pick") {
     body.choice = choice.choice;
     if (choice.artifact) body.artifact = choice.artifact;
+    if (choice.artifacts) body.artifacts = choice.artifacts;
+    if (choice.rejects?.length) body.rejects = choice.rejects;
   }
   // An approval or send-back of one piece names it, so the record says which.
   if (gate.kind === "approve" && reviewed.length === 1) body.artifact = reviewed[0]!.path;
@@ -186,7 +188,9 @@ export function decision(gate: Gate, choice: Choice, { note = "", edits = {}, re
   const said =
     choice.kind === "send_back"
       ? `You sent it back to ${choice.to}`
-      : choice.kind === "pick"
+      : choice.kind === "pick" && (choice.artifacts?.length ?? 0) > 1
+        ? `You picked ${choice.artifacts!.length}, "${choice.choice}" first`
+        : choice.kind === "pick"
         ? `You picked "${choice.choice}"`
         : choice.kind === "confirm"
           ? "You confirmed it"

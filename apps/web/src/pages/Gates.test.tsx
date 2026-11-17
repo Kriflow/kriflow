@@ -540,6 +540,48 @@ test("a pick gate offers the earlier stage's cards and an approve gate plays the
   );
 });
 
+test("a multi-pick gate counts picks up to its cap, rejects with a reason and posts them in order", async () => {
+  let body: unknown = null;
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([gate("pick", { run_id: "run_1", stage_id: "s1", picks: 2, ask: "Choose two." })]),
+    "GET /api/runs/run_1/artifacts": () =>
+      Response.json([1, 2, 3, 4].map((i) => idea(`card-${i}`, `Card ${i}`, { rank: i }))),
+    "POST /api/runs/run_1/decision": async (req) => {
+      body = await req.json();
+      return Response.json(run("running", [], { id: "run_1" }));
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  const pick = screen.getByTestId("gate-run_1");
+  const count = pick.getByTestId("pick-count");
+  const go = pick.getByRole("button", { name: /^Continue with/ });
+  await expect.element(count).toHaveTextContent("0 of 2 picked");
+  await expect.element(go).toBeDisabled();
+  await pick.getByRole("checkbox", { name: /Card 3/ }).click();
+  await expect.element(count).toHaveTextContent("1 of 2 picked");
+  await expect.element(go).toBeEnabled();
+  await pick.getByRole("checkbox", { name: /Card 1/ }).click();
+  await expect.element(count).toHaveTextContent("2 of 2 picked");
+  await expect.element(pick.getByLabelText("pick 1")).toBeVisible();
+  // the cap: a third card cannot be picked until one is put back
+  await expect.element(pick.getByRole("checkbox", { name: /Card 2/ })).toBeDisabled();
+  await pick.getByRole("button", { name: "Reject Card 4" }).click();
+  await pick.getByLabelText("Why reject Card 4 (optional)").fill("Done before.");
+  await expect.element(pick.getByRole("checkbox", { name: /Card 4/ })).toBeDisabled();
+  await go.click();
+  await vi.waitFor(() =>
+    expect(body).toEqual({
+      note: "",
+      choice: "Card 3",
+      artifact: "runs/run_1/stage_0/artifacts/idea-card-3.md",
+      artifacts: ["runs/run_1/stage_0/artifacts/idea-card-3.md", "runs/run_1/stage_0/artifacts/idea-card-1.md"],
+      rejects: [{ artifact: "runs/run_1/stage_0/artifacts/idea-card-4.md", reason: "Done before." }],
+    }),
+  );
+  await expect.element(screen.getByText(/You picked 2, "Card 3" first/)).toBeVisible();
+});
+
 test("approve waits for the piece it reviews, so a quick click still names it", async () => {
   let loaded!: () => void;
   const ready = new Promise<void>((resolve) => (loaded = resolve));

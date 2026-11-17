@@ -45,11 +45,13 @@ function item(name: string, over: Partial<Item> = {}): Item {
     workflow_version: 2,
     stage_index: 0,
     stage_name: "research",
+    status: "",
+    reason: "",
     ...over,
   };
 }
 
-const hook = item("idea-hook-first.md", { type: "idea", title: "Hook first" });
+const hook = item("idea-hook-first.md", { type: "idea", title: "Hook first", status: "parked" });
 const ideas = item("ideas.md");
 const decision = item("decision.md", {
   path: "runs/run_1/02-pick/decision.md",
@@ -115,6 +117,11 @@ test("lists every artifact under type tabs with counts, the tab and search in th
 
   await filters.getByLabelText(/^Stage/).selectOptions("pick");
   await expect.element(screen.getByTestId("library")).toMatchTextContent(/^decision/);
+  await filters.getByRole("button", { name: "Clear filters" }).click();
+
+  await filters.getByLabelText(/^Status/).selectOptions("Parked");
+  await expect.element(screen.getByTestId("count")).toHaveTextContent("1 of 4");
+  await expect.element(screen.getByTestId("library")).toMatchTextContent(/^Hook first\s*idea · .* · Parked/);
   await filters.getByRole("button", { name: "Clear filters" }).click();
 
   await filters.getByLabelText(/^Run/).selectOptions("Long form run_2");

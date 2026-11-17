@@ -168,7 +168,16 @@ def evidence(events: list[Event], run_id: str) -> Evidence:
         if d.get("send_back_to"):
             what = f"sent back to {d['send_back_to']}"
         elif d.get("kind") == "pick":
-            what = f"picked {d.get('choice')}"
+            titles = d.get("titles") or {}
+            picked = [titles.get(a, a) for a in d.get("artifacts") or []]
+            what = f"picked {', '.join(picked) if len(picked) > 1 else d.get('choice')}"
+            what += "".join(
+                f"; rejected {titles.get(r['artifact'], r['artifact'])}"
+                + (f" because {r['reason']}" if r.get("reason") else "")
+                for r in d.get("rejected") or []
+            )
+            if d.get("parked"):
+                what += f"; parked {', '.join(titles.get(a, a) for a in d['parked'])}"
         else:
             what = d.get("choice") or ("confirmed" if d.get("kind") == "confirm" else "approved")
         note = f" with the note: {d['note'].strip()}" if (d.get("note") or "").strip() else ""

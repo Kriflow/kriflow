@@ -891,7 +891,8 @@ def create_app(
             # behind the graph is. Failed and aborted runs made nothing.
             others = runner.list_all(run.world_id)
             made = {r.id: r.status for r in others if r.id != run.id and r.status in UNSPOILED}
-            config["made"] = memory.made(run.world_id, made)
+            promoted = {r.promoted_from for r in others if r.promoted_from}  # unparks a card
+            config["made"] = memory.made(run.world_id, made, promoted)
         try:
             swarm.run_stage(
                 run.world_id,
@@ -993,6 +994,9 @@ def create_app(
     runner.check = runs.checker(workflow_svc)
     runner.check_text = text_check(registry, pins)
     runner.stage_spend = stage_spend
+    runner.offered = lambda run, index: [
+        c.path for c in remote.offered(agents.run_artifacts(memory, run, index))
+    ]
     # On upgrade: versions saved before they recorded package versions take the world's pins.
     workflow_svc.stamp(registry.enabled)
 

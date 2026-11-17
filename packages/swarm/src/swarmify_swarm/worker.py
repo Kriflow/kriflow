@@ -23,6 +23,7 @@ with the world it came from.
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -239,7 +240,9 @@ def _decisions(world_folder: Path, run_id: str) -> list[str]:
     for _, path, fields, body in sorted(newest.values(), key=lambda d: d[0]):
         if fields.get("send_back_to"):
             continue
-        outcome = " ".join(ln for ln in body.splitlines()[1:] if ln.strip())
+        # The cards a pick passed on are no work of this run: idea stages read them in `made`.
+        kept = re.split(r"\n\n(?:Parked|Rejected):\n", body)[0]
+        outcome = " ".join(ln for ln in kept.splitlines()[1:] if ln.strip())
         artifact = fields.get("artifact")
         picked = f" The artifact it names (Read it): {world_folder / artifact}." if artifact else ""
         out.append(
@@ -271,7 +274,10 @@ def _wants(config: dict[str, Any]) -> str:
     return out.strip()
 
 
-REPEATS = "\nLeave out any item that repeats one of them."
+REPEATS = (
+    "\nLeave out any item that repeats one of them. Never offer a Rejected idea or a close"
+    " variant of it. A Parked idea may be offered again when it still fits; say it was parked."
+)
 """What the judge of an idea stage is told after the world's made list."""
 
 
@@ -294,7 +300,10 @@ def _made(config: dict[str, Any]) -> str:
     return "\n".join(
         [
             "Already made in this world, newest first. Do not pitch any of these again, nor the"
-            " same core fact, study or premise under a new title or angle:",
+            " same core fact, study or premise under a new title or angle. Then the ideas a"
+            " pick passed on: a Rejected one (with why) is never offered again, nor a close"
+            " variant; a Parked one may be offered again when it still fits, saying it was"
+            " parked:",
             *lines,
         ]
     )

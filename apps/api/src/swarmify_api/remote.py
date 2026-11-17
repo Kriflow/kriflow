@@ -50,7 +50,9 @@ def said(resolution: dict[str, Any]) -> str:
     outcome = resolution["outcome"]
     if outcome == "aborted":
         return "The run was aborted."
-    if outcome == "picked":
+    if outcome == "picked" and len(several := resolution.get("picked") or []) > 1:
+        what = f"Picked {', '.join(several[:-1])} and {several[-1]}"
+    elif outcome == "picked":
         what = f"Picked {resolution.get('choice') or 'one'}"
     elif outcome == "sent_back":
         what = f"Sent back to {resolution.get('send_back_to')}"
@@ -73,6 +75,8 @@ def answers(gate: Gate, cards: list[ArtifactFile]) -> list[dict[str, Any]]:
             back = gate.earlier_stages[-1]
             out.append({"label": f"Send back to {back}", "decide": {"send_back_to": back}})
         return out
+    if gate.kind == "pick" and gate.picks > 1:
+        return []  # several picks and rejects are answered whole in the web UI, never half here
     if gate.kind == "pick":
         shown = offered(cards)[:CHOICES]
         return [{"label": c.title, "decide": {"artifact": c.path}} for c in shown]
@@ -149,7 +153,7 @@ class RemoteApprovals:
             "visit": p["visit"],
             "stage": p["stage"],
             "kind": p["kind"],
-            "ask": p["ask"],
+            "ask": p["ask"] + (f" Pick up to {gate.picks} at the link." if gate.picks > 1 else ""),
             "link": f"{self.base_url}/worlds/{event.world_id}/runs/{p['run_id']}",
             "publish": [
                 {"label": f["label"], "value": f["value"]} for f in shown.get("fields", [])

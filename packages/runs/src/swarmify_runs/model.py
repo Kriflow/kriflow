@@ -98,6 +98,25 @@ class Decision:
     by: str | None = None
     """Who answered from outside the web UI (a Remote Approval), as its connector names them,
     such as "anuj in chat"; None for an answer given in Swarmify."""
+    artifacts: list[str] = field(default_factory=list)
+    """At a pick gate: the cards picked, as paths in the world folder, in pick order; the first
+    is `artifact`. Empty for a pick by name alone."""
+    parked: list[str] = field(default_factory=list)
+    """The cards the pick gate offered that were neither picked nor rejected."""
+    rejected: list[dict[str, str]] = field(default_factory=list)
+    """The cards the operator rejected at the gate, each `{"artifact": path, "reason": why}`
+    (the reason may be "")."""
+    titles: dict[str, str] = field(default_factory=dict)
+    """The title of each card named above, by path, as the decision artifact lists them."""
+
+    def cards(self) -> dict[str, Any]:
+        """The pick's cards as the decision row stores them."""
+        return {
+            "artifacts": self.artifacts,
+            "parked": self.parked,
+            "rejected": self.rejected,
+            "titles": self.titles,
+        }
 
 
 @dataclass(frozen=True)
@@ -300,3 +319,5 @@ class Gate:
     spent_usd: float | None = None
     item: str | None = None
     """For a gate of a fan-out stage's child run: the title of the Item the child works on."""
+    picks: int = 1
+    """For a pick gate: how many cards it takes in one answer, its workflow's `picks`."""

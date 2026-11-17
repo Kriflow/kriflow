@@ -158,12 +158,14 @@ class SqliteStorage:
             old_stage = rows[d["stage_index"]]["id"]
             path = d["path"].replace(source.id, run.id).replace(old_stage, renamed[old_stage])
             artifact = d["artifact"] and d["artifact"].replace(source.id, run.id)
+            cards = d["cards"] and d["cards"].replace(source.id, run.id)
             for old, new in renamed.items():  # the artifact may be from any earlier stage
                 artifact = artifact and artifact.replace(old, new)
+                cards = cards and cards.replace(old, new)
             conn.execute(
                 "INSERT INTO gate_decisions (id, run_id, stage_index, stage_name, kind, choice,"
-                " note, send_back_to, path, decided_at, visit, artifact, publish, answered_by)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " note, send_back_to, path, decided_at, visit, artifact, publish, answered_by,"
+                " cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     new_id("dec"),
                     run.id,
@@ -179,6 +181,7 @@ class SqliteStorage:
                     artifact,
                     d["publish"],
                     d["answered_by"],
+                    cards,
                 ),
             )
 
@@ -316,8 +319,8 @@ class SqliteStorage:
             try:
                 conn.execute(
                     "INSERT INTO gate_decisions (id, run_id, stage_index, stage_name, kind, choice,"
-                    " note, send_back_to, path, decided_at, visit, artifact, publish, answered_by)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " note, send_back_to, path, decided_at, visit, artifact, publish, answered_by,"
+                    " cards) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         decision.id,
                         run_id,
@@ -333,6 +336,7 @@ class SqliteStorage:
                         decision.artifact,
                         json.dumps(decision.publish) if decision.publish else None,
                         decision.by,
+                        json.dumps(decision.cards()) if any(decision.cards().values()) else None,
                     ),
                 )
             except sqlite3.IntegrityError as exc:
@@ -523,6 +527,7 @@ class SqliteStorage:
                     _link(conn, g["parent_run_id"]),
                     max_send_backs=limit,
                     item=_item_title(conn, g["run_id"]),
+                    picks=int(config.get("picks") or 1),
                 )
                 if g["over_budget"]:  # RunControl.gates adds the money from the top run
                     gate = replace(gate, kind="budget", send_backs_left=0, earlier_stages=[])
@@ -599,6 +604,7 @@ class SqliteStorage:
                 d["artifact"],
                 json.loads(d["publish"]) if d["publish"] else None,
                 d["answered_by"],
+                **(json.loads(d["cards"]) if d["cards"] else {}),
             )
             for d in conn.execute(
                 "SELECT * FROM gate_decisions WHERE run_id = ? ORDER BY decided_at, id", (run_id,)
