@@ -74,7 +74,8 @@ each stage is `- <type>: <stage name>` plus its fields:
   source; the child workflow lists it under `given`). for_each names an earlier stage (its
   cards; a pick gate's picked cards) or a .json list file an earlier stage produces. Each
   child's take lands in <stage>/artifacts/<item key>/, and items.json indexes every item with
-  its status. Use it when the same work repeats per item (each picked idea, each needed asset).
+  its status (a later stage may name items.json as an input). Use it when the same work
+  repeats per item (each picked idea, each needed asset).
 Rules: a publish connector must come right after a gate, unless the stage posts privately (the
 check names the params); a connector's input must be produced
 by an earlier stage; connectors must exist in the world. Swarm agents write text only, so a swarm

@@ -97,3 +97,12 @@ def test_dump_writes_as_and_given_back_so_a_fan_out_round_trips() -> None:
     text = dump_workflow(model.name, stages, given=model.given)
     assert "as: p.md" in text and "as_" not in text and "given:\n- x.json" in text
     assert parse_workflow(text) == (model, [])
+
+
+def test_a_later_stage_may_read_the_items_json_a_fan_out_stage_writes() -> None:
+    made = SwarmStage("paragraphs", "g", "d", produces=["paragraphs.json"])
+    fan = WorkflowStage("each", "wf_t", for_each="paragraphs.json", as_="item.json")
+    read = ConnectorStage("read", "remotion_render", input="items.json")
+    assert rules(WorkflowModel("w", [made, fan, read])) == []
+    plain = WorkflowStage("each", "wf_t")
+    assert rules(WorkflowModel("w", [made, plain, read])) == [("input_not_produced", "read")]
