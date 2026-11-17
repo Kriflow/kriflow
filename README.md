@@ -1583,7 +1583,7 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   `DEST/swarmify-data-backup-LABEL-YYYYMMDD-HHMM.tar.zst` from the `swarmify_data` volume in a
   throwaway container of the api image: each SQLite file copied with SQLite's backup API, the
   rest as is, less what can be made again (`node_modules`, `npm-cache`, `sandbox/cache`, a run's
-  `build` and `frames` folders, `assets/motionlib/.store`). The tar streams through `zstd -T0 -1`
+  `build` and `frames` folders; a world's Owned Folders are kept whole). The tar streams through `zstd -T0 -1`
   on every core (a `.tgz` through `gzip -1` from an api image older than zstd); older `.tgz`
   backups still count toward keeping 3. The backups that keeping 3 deletes
   anyway (all but the newest 2) go first, once the 2 that stay read back whole. It refuses to
