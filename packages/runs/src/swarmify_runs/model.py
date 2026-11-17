@@ -26,6 +26,42 @@ class RunLink:
 
 
 @dataclass(frozen=True)
+class Item:
+    """One Item of a Fan-out Stage (ADR 0031), as its source gives it: a card's `file` (its
+    absolute path) or a JSON list's element `data`. `key` names its folder of gathered files."""
+
+    key: str
+    title: str
+    file: str | None = None
+    data: Any = None
+
+
+@dataclass(frozen=True)
+class ItemView:
+    """An Item of a fan-out stage's latest visit as the timeline shows it, with its child run."""
+
+    key: str
+    title: str
+    status: str
+    """pending, running, done, failed or aborted."""
+    child: RunLink | None = None
+    error: str | None = None
+
+
+def items_ask(items: list[ItemView]) -> str:
+    """What a fan-out stage's `items` gate asks once every Item settled and some failed."""
+    failed = [i for i in items if i.status in ("failed", "aborted")]
+    lines = [f"- {i.title} ({i.key}): {i.error or i.status}" for i in failed]
+    return "\n".join(
+        [
+            f"{len(failed)} of {len(items)} items did not finish:",
+            *lines,
+            "Retry the failed items, continue without them, or abort.",
+        ]
+    )
+
+
+@dataclass(frozen=True)
 class Pinned:
     """A workflow version as Runs needs it to start a run of it."""
 
@@ -93,6 +129,8 @@ class RunStageView:
     """The stage's definition as this run holds it, Stage Edits included."""
     network: str | None = None
     """Why the running stage is waiting for the network, while it is."""
+    items: list[ItemView] = field(default_factory=list)
+    """A fan-out stage's Items of its latest visit, each with its child run (ADR 0031)."""
 
 
 @dataclass(frozen=True)
@@ -258,3 +296,5 @@ class Gate:
     budget_usd: float | None = None
     """For a `budget` gate: the Budget that was spent, and the spend so far."""
     spent_usd: float | None = None
+    item: str | None = None
+    """For a gate of a fan-out stage's child run: the title of the Item the child works on."""

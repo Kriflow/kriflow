@@ -2820,6 +2820,8 @@ export interface components {
             budget_usd?: number | null;
             /** Spent Usd */
             spent_usd?: number | null;
+            /** Item */
+            item?: string | null;
         };
         /**
          * GateStage
@@ -2927,6 +2929,21 @@ export interface components {
             ref: string;
             /** Permissions */
             permissions: string[];
+        };
+        /**
+         * ItemView
+         * @description An Item of a fan-out stage's latest visit as the timeline shows it, with its child run.
+         */
+        ItemView: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            child?: components["schemas"]["RunLink"] | null;
+            /** Error */
+            error?: string | null;
         };
         /**
          * Judgement
@@ -3861,6 +3878,8 @@ export interface components {
             };
             /** Network */
             network?: string | null;
+            /** Items */
+            items?: components["schemas"]["ItemView"][];
         };
         /** SaveAsWorkflow */
         SaveAsWorkflow: {
@@ -4583,10 +4602,15 @@ export interface components {
             budget_usd?: number | null;
             /** Agents */
             agents?: number | null;
+            /** Given */
+            given?: string[];
         };
         /**
          * WorkflowStage
-         * @description Runs workflow `runs` as a child run and takes the named artifacts from it.
+         * @description Runs workflow `runs` as a child run and takes the named artifacts from it. With
+         *     `for_each` it is a Fan-out Stage (ADR 0031): one child run per Item of an earlier stage's
+         *     cards, the cards picked at a pick gate, or the elements of a JSON list file, each given its
+         *     Item as file `as_` (`as` in YAML), at most `max_parallel` at once.
          */
         WorkflowStage: {
             /** Name */
@@ -4595,6 +4619,12 @@ export interface components {
             runs: string;
             /** Take */
             take?: string[];
+            /** For Each */
+            for_each?: string | null;
+            /** As */
+            as_?: string | null;
+            /** Max Parallel */
+            max_parallel?: number | null;
             /**
              * Type
              * @default workflow

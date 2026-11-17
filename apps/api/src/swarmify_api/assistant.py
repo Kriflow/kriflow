@@ -592,6 +592,16 @@ def at_gate(runner: Runner, run: Run, cards: Cards = no_cards) -> tuple[str, Pub
     """What the session hears of the gate the run waits at: its ask; at a pick gate, the cards
     it offers; and what the publish stage after it sends, with the fields the gate's form
     edits, which a reply fills instead of proposing a change. Nothing when no gate waits."""
+    fan = next((s for s in run.stages if s.type == "workflow" and s.status == "waiting"), None)
+    if fan is not None and not run.over_budget:
+        items = json.dumps([jsonable_encoder(i) for i in fan.items])
+        return (
+            f"The fan-out stage {fan.name} ({fan.id}) ran one child run per item and waits at"
+            f" its items gate, as some failed. Its items: {items}. The operator answers retry"
+            " (the failed items run again), continue (finish without them) or abort; read a"
+            " failed child run's stages for why it failed.",
+            None,
+        )
     gate = next((s for s in run.stages if s.type == "gate" and s.status == "waiting"), None)
     if gate is None:
         return "", None

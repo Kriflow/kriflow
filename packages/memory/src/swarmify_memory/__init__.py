@@ -203,10 +203,13 @@ class Memory:
         return folder
 
     def artifacts(self, world_id: str, run_id: str) -> list[str]:
+        """The run's artifacts as paths in its folder, its `given/` input first: what a Fan-out
+        Stage gave a child run counts as made by a stage before its first (ADR 0031)."""
         run = self.world_folder(world_id) / "runs" / run_id
-        files = [p for p in run.glob("*/artifacts/[!.]*") if p.is_file()]
+        files = [p for p in run.glob("given/[!.]*") if p.is_file()]
+        files += [p for p in sorted(run.glob("*/artifacts/[!.]*")) if p.is_file()]
         sidecars = {p.with_name(f"{p.name}.md") for p in files}
-        return sorted(str(p.relative_to(run)) for p in files if p not in sidecars)
+        return [str(p.relative_to(run)) for p in files if p not in sidecars]
 
     def write_note(
         self,
@@ -276,13 +279,17 @@ class Memory:
         run_id: str,
         stage_id: str,
         author: str,
+        subfolder: str = "",
     ) -> list[str]:
         """Copy the named artifacts of run `source` (world id, run id, stage ids in run order)
         into a stage, sidecars included: how a workflow stage takes its child run's artifacts.
         Each file keeps its frontmatter, which names the run that made it. When several stages
-        of the source made one name, the latest stage wins. Raises ValueError, copying nothing,
-        when a name is missing.
+        of the source made one name, the latest stage wins. A fan-out stage takes each Item's
+        into `subfolder`, the Item's key. Raises ValueError, copying nothing, when a name is
+        missing or the subfolder is not a plain name.
         """
+        if subfolder and not _NAME.match(subfolder):
+            raise ValueError(f"{subfolder!r} is not a plain folder name")
         run = self.world_folder(source[0]) / "runs" / source[1]
         found: dict[str, Path] = {}
         for name in names:
@@ -291,8 +298,8 @@ class Memory:
             if path is None:
                 raise ValueError(f"the child run made no artifact named {name}")
             found[name] = path
-        folder = self.stage_folder(world_id, run_id, stage_id) / "artifacts"
-        folder.mkdir(exist_ok=True)
+        folder = self.stage_folder(world_id, run_id, stage_id) / "artifacts" / subfolder
+        folder.mkdir(parents=True, exist_ok=True)
         out = []
         for name, path in found.items():
             shutil.copyfile(path, folder / name)

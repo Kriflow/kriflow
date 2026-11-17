@@ -92,6 +92,14 @@ class GateRaised:
 
 
 @dataclass(frozen=True)
+class ItemsRetried:
+    """The `items` gate of the fan-out stage at `index` was answered with retry: the stage runs
+    again, starting a new child for each failed Item only (ADR 0031)."""
+
+    index: int
+
+
+@dataclass(frozen=True)
 class BudgetAdded:
     """Money was added at the budget gate; the stopped stage runs again."""
 
@@ -140,6 +148,7 @@ RunEvent = (
     | BudgetSpent
     | StageStopped
     | GateRaised
+    | ItemsRetried
     | BudgetAdded
     | Rerun
     | Skip
@@ -228,6 +237,12 @@ def transition(
             stages[i] = "waiting"
             status = "paused" if state.status == "paused" else "waiting_gate"
             return replace(state, status=status, stages=tuple(stages)), [OpenGate(i)]
+        case ItemsRetried(i):
+            _require(not state.over_budget, "the run waits for money, not a decision")
+            _require(_at(stages, i) == "waiting", f"stage {i} is not waiting")
+            _require(kinds[i] == "workflow", f"stage {i} is not a fan-out stage")
+            stages[i] = "pending"
+            return _settle(kinds, state, stages)
         case BudgetAdded():
             _require(state.over_budget, "the run is not over budget")
             stages[stages.index("waiting")] = "pending"  # runs again, from where it stopped

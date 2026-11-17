@@ -597,8 +597,11 @@ export function GateCard({
     const target = sendBack.current;
     sendBack.current = null;
     const picked = cards.find((c) => c.path === fields.get("artifact"));
+    const retry = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "retry";
     const choice: Choice =
-      gate.kind === "budget"
+      gate.kind === "items"
+        ? { kind: "items", retry }
+        : gate.kind === "budget"
         ? { kind: "budget", add: Number(fields.get("add")) }
         : target
           ? { kind: "send_back", to: target }
@@ -670,6 +673,7 @@ export function GateCard({
           </span>
           <span>waiting {took(Math.max(0, (Date.now() - Date.parse(gate.opened_at)) / 1000))}</span>
           {gate.parent && <RunRef label="child of" run={gate.parent} testId="child-of" />}
+          {gate.item && <span data-testid="gate-item">item {gate.item}</span>}
         </p>
       )}
       <p className="ask">{gate.ask}</p>
@@ -764,6 +768,19 @@ export function GateCard({
                     {pickLabel}
                   </button>
                   {cards.length > 0 && <span className="faint">The ones you pass on stay in the library.</span>}
+                </>
+              )}
+              {gate.kind === "items" && (
+                <>
+                  <button type="submit" form={formId} className="primary" value="retry" disabled={busy}>
+                    Retry the failed items
+                  </button>
+                  <button type="submit" form={formId} value="continue" disabled={busy}>
+                    Continue without them
+                  </button>
+                  <button type="button" className="danger" onClick={abort} disabled={busy}>
+                    Abort the run
+                  </button>
                 </>
               )}
               {gate.kind === "confirm" && (
