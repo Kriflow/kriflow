@@ -5,13 +5,15 @@ cheap probe reaches the API again, for at most `SWARMIFY_NETWORK_WAIT_HOURS` (6 
 
 import asyncio
 import os
+import re
 import socket
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 from swarmify_swarm.ports import AgentRuntime, SessionEnd, SessionHooks, SessionInit, SessionSpec
 
@@ -42,6 +44,53 @@ ASKED = 120.0
 """How long a session someone waits on (the Run Assistant's turn) waits for the network."""
 
 
+LIMITS = (
+    "hit your session limit",
+    "hit your usage limit",
+    "hit your weekly limit",
+    "usage limit reached",
+)
+"""What the CLI says when the subscription's usage limit is spent, matched without case: not a
+failed session either, it resumes once the limit resets."""
+RESET = re.compile(
+    r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap]m)?(?:\s*\(([^)]+)\))?", re.I
+)
+UNSTATED = 1800.0
+"""Seconds to wait for a usage limit whose message names no reset time."""
+SLACK = 60.0
+
+
+def _text(error: BaseException | str | None) -> str:
+    texts, seen = [], error
+    while isinstance(seen, BaseException):
+        texts.append(str(seen))
+        seen = seen.__cause__ or seen.__context__
+    return " ".join(texts) if texts else str(error or "")
+
+
+def reset_in(error: BaseException | str | None, now: datetime | None = None) -> float | None:
+    """Seconds until the usage limit `error` reports resets ("resets 10:50am (UTC)", the next such
+    time in its zone, plus a minute), `UNSTATED` when it names no time; None when it is not a
+    usage limit."""
+    text = _text(error)
+    if not any(m in text.lower() for m in LIMITS):
+        return None
+    found = RESET.search(text)
+    if not found:
+        return UNSTATED
+    hour, minute, half, zone = found.groups()
+    hour = int(hour) % 12 + (12 if (half or "").lower() == "pm" else 0) if half else int(hour)
+    try:
+        tz = ZoneInfo(zone) if zone else UTC
+    except (KeyError, ValueError):  # ZoneInfoNotFoundError is a KeyError
+        tz = UTC
+    here = (now or datetime.now(UTC)).astimezone(tz)
+    at = here.replace(hour=hour % 24, minute=int(minute or 0), second=0, microsecond=0)
+    if at <= here:
+        at += timedelta(days=1)
+    return (at - here).total_seconds() + SLACK
+
+
 def transient(error: BaseException | str | None) -> bool:
     """True when `error` (an exception, its causes, or a session's error result) says the model
     API could not be reached, as opposed to the agent or its task failing."""
@@ -52,7 +101,7 @@ def transient(error: BaseException | str | None) -> bool:
         texts.append(str(seen))
         seen = seen.__cause__ or seen.__context__
     text = " ".join(texts) if texts else str(error or "")
-    return any(m.lower() in text.lower() for m in MARKERS)
+    return any(m.lower() in text.lower() for m in (*MARKERS, *LIMITS))
 
 
 def reachable(timeout: float = 5.0) -> bool:
@@ -100,10 +149,29 @@ class NetworkWait:
     tick: float = 5.0
     """How often a sleep looks at `stop`, so a pause or an abort is not held up."""
 
-    def wait(self, spent: float = 0.0, stop: Callable[[], object] = lambda: None) -> float:
+    def wait(
+        self,
+        spent: float = 0.0,
+        stop: Callable[[], object] = lambda: None,
+        until: float | None = None,
+    ) -> float:
         """Sleep `first` seconds, doubling up to `most`, until the probe reaches the API; the
-        seconds slept. Returns early once `stop()` is truthy. Raises NetworkDown when `spent`
-        (what the session waited before) plus this wait passes `limit`."""
+        seconds slept. With `until`, sleep that long instead (a usage limit's reset) and probe
+        nothing. Returns early once `stop()` is truthy. Raises NetworkDown when `spent` (what the
+        session waited before) plus this wait passes `limit`."""
+        if until is not None:
+            if spent + until > self.limit:
+                raise NetworkDown(
+                    f"the usage limit resets in {_span(until)}, past the wait's limit"
+                )
+            slept = 0.0
+            while slept < until:
+                if stop():
+                    return slept
+                step = min(self.tick, until - slept)
+                self.sleep(step)
+                slept += step
+            return slept
         slept, delay = 0.0, self.first
         while True:
             end = slept + delay
@@ -153,8 +221,11 @@ class Patient:
                 end = await self.runtime.run(spec, seen)
                 if not (end.is_error and transient(end.result)):
                     return end
+                seen_error: BaseException | str | None = end.result
             except Exception as exc:
                 if not transient(exc):
                     raise
-            spent += await asyncio.to_thread(self.network.wait, spent)
+                seen_error = exc
+            until = reset_in(seen_error)
+            spent += await asyncio.to_thread(self.network.wait, spent, lambda: None, until)
             spec = replace(spec, resume=seen.session_id or spec.resume)

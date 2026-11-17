@@ -34,7 +34,7 @@ from typing import Any, Protocol, TypeVar
 
 from swarmify_swarm import build as builds
 from swarmify_swarm.model import AgentRole, Refused, Task, Verdict
-from swarmify_swarm.network import NetworkDown, NetworkWait, Waiting, transient
+from swarmify_swarm.network import NetworkDown, NetworkWait, Waiting, reset_in, transient
 from swarmify_swarm.ports import (
     AgentRuntime,
     AgentTool,
@@ -971,8 +971,12 @@ class Swarm:
         The agent keeps its claims meanwhile. Raises StageError once the agent has waited the
         whole limit, Stopped when the run is paused, aborted or out of Budget meanwhile."""
         hours = self.network.limit / 3600
+        until = reset_in(error)
         said = (
-            f"Waiting for the network: the session lost the model API ({error.strip()[:300]})."
+            f"Waiting for the usage limit to reset ({error.strip()[:300]}): the session resumes"
+            f" in {until / 60:.0f} min; this is not a failed session."
+            if until is not None
+            else f"Waiting for the network: the session lost the model API ({error.strip()[:300]})."
             f" It resumes when the API is reachable again, waiting up to {hours:g} h in all;"
             " this is not a failed session."
         )
@@ -982,7 +986,9 @@ class Swarm:
             at.world_id, at.run_id, at.stage_id, name, self.clock(), error.strip()[:300]
         )
         try:
-            waited = self.network.wait(spent, lambda: hooks.renew() or self.budget(at.run_id))
+            waited = self.network.wait(
+                spent, lambda: hooks.renew() or self.budget(at.run_id), until
+            )
         except NetworkDown as exc:
             self.board.log(at.stage_id, name, "error", f"Gave up: {exc}.")
             self.board.update_agent(at.stage_id, name, status="failed")
@@ -992,7 +998,11 @@ class Swarm:
         if reason := self.budget(at.run_id):
             self.board.log(at.stage_id, name, "session", f"Stopped while waiting: {reason}")
             raise Stopped(reason)
-        said = f"The network is back after {waited / 60:.1f} min; resuming the session."
+        said = (
+            f"The usage limit has reset after {waited / 60:.1f} min; resuming the session."
+            if until is not None
+            else f"The network is back after {waited / 60:.1f} min; resuming the session."
+        )
         self.board.log(at.stage_id, name, "session", said)
         return waited
 
