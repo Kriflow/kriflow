@@ -7,7 +7,8 @@ stored data, keep the newest 3.
 Run on the host as a user in the docker group, no sudo: it starts itself again in a throwaway
 container of the api image with the volume at /data and DEST at /out. There every SQLite file is
 copied with SQLite's backup API, never tarred live, and the rest goes in as is, less what can be
-made again: node_modules, caches, a run's build and frames folders and the motionlib store. The tar
+made again: node_modules, caches and a run's build and frames folders. A world's Owned Folders
+are kept whole: a package's data there may be its only copy. The tar
 streams through zstd on every core at a fast level (most of the bulk is media that barely shrinks),
 or through gzip -1 if the image has no zstd, so the archive is a .tar.zst (or a .tgz, like the
 older ones, which still count toward --keep). The archive is read back in full before the oldest
@@ -43,7 +44,6 @@ EXCLUDE = (
     "sandbox/cache",
     "worlds/*/runs/*/*/build",
     "worlds/*/runs/*/*/frames",
-    "worlds/*/assets/motionlib/.store",
 )
 SQLITE_EXT = (".db", ".sqlite", ".sqlite3")
 SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
