@@ -718,6 +718,23 @@ export function StagePanel(p: PanelProps) {
           </Link>
         </p>
       )}
+      {(stage.items ?? []).length > 0 && (
+        <ul className="fanout-items" aria-label="Items" data-testid="stage-items">
+          {(stage.items ?? []).map((item) => (
+            <li key={item.key}>
+              {item.child ? (
+                <Link to="/worlds/$worldId/runs/$runId" params={{ worldId: item.child.world_id, runId: item.child.id }}>
+                  {item.title}
+                </Link>
+              ) : (
+                item.title
+              )}{" "}
+              <span className={item.status === "failed" || item.status === "aborted" ? "chip warn" : "chip"}>{item.status}</span>
+              {item.error && <span className="faint"> {item.error}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {(stage.notes ?? []).map((note, i) => (
         <p className="faint" key={i}>
           Sent back with: {note}

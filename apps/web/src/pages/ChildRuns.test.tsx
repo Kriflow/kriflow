@@ -66,3 +66,48 @@ test("the gates inbox labels a child run's gate with its parent", async () => {
   await expect.element(card).toMatchTextContent(/Research\s*Trends\s*stage 2, pick\s*waiting .*child of Weekly short/);
   await expect.element(card.getByRole("link", { name: "Weekly short" })).toHaveAttribute("href", "/worlds/world_1/runs/run_top");
 });
+
+test("a fan-out stage lists its items with a status chip and a link to each child", async () => {
+  const items = [
+    { key: "p1", title: "Paragraph 1", status: "done", child: { id: "run_p1", world_id: "world_2", name: "Translate: Paragraph 1" } },
+    { key: "p2", title: "Paragraph 2", status: "failed", error: "could not translate", child: { id: "run_p2", world_id: "world_2", name: "Translate: Paragraph 2" } },
+    { key: "p3", title: "Paragraph 3", status: "pending", child: null },
+  ];
+  const parent = run("running", [stage(0, "translate each", "workflow", "running", { items })], top);
+  fakeFetch({
+    "GET /api/runs/run_top": () => Response.json(parent),
+    "GET /api/runs/run_top/agents": () => Response.json([]),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_top");
+  const list = screen.getByTestId("stage-items");
+  await expect.element(list).toMatchTextContent(/Paragraph 1\s*done.*Paragraph 2\s*failed\s*could not translate.*Paragraph 3\s*pending/);
+  await expect.element(list.getByRole("link", { name: "Paragraph 2" })).toHaveAttribute("href", "/worlds/world_2/runs/run_p2");
+  expect(list.getByRole("link").elements()).toHaveLength(2);
+});
+
+test("an items gate retries the failed items", async () => {
+  const sent: unknown[] = [];
+  const items = gate("items", { run_id: "run_top", world_id: "world_1", run_name: "Weekly short", ask: "1 of 3 items did not finish" });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([research]),
+    "GET /api/gates": () => Response.json([items]),
+    "POST /api/runs/run_top/decision": async (req: Request) => {
+      sent.push(await req.json());
+      return Response.json(run("running", [], top));
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  await screen.getByRole("button", { name: "Retry the failed items" }).click();
+  await expect.poll(() => sent).toEqual([{ note: "", choice: "retry" }]);
+});
+
+test("a fan-out child's gate names its item beside its parent", async () => {
+  const child = gate("approve", { run_id: "run_p1", world_id: "world_2", run_name: "Translate: P1", parent_run_id: top.id, parent: top, item: "P1" });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([research]),
+    "GET /api/gates": () => Response.json([child]),
+    "GET /api/runs/run_p1/artifacts": () => Response.json([]),
+  });
+  const { screen } = await mountAt("/gates");
+  await expect.element(screen.getByTestId("gate-run_p1")).toMatchTextContent(/child of Weekly short\s*item P1/);
+});

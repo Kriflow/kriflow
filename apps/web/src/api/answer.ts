@@ -125,6 +125,7 @@ export type Choice =
   | { kind: "approve" }
   | { kind: "send_back"; to: string }
   | { kind: "confirm" }
+  | { kind: "items"; retry: boolean }
   | { kind: "budget"; add: number }
   | { kind: "abort" }
   | { kind: "skill"; proposal: Proposal; approve: boolean; content: string; applyWorkflow: boolean };
@@ -163,6 +164,11 @@ export function decision(gate: Gate, choice: Choice, { note = "", edits = {}, re
     };
   }
   const body: Decide = { note };
+  if (choice.kind === "items") {
+    body.choice = choice.retry ? "retry" : "continue";
+    const said = choice.retry ? "You retried the failed items" : "You went on without the failed items";
+    return { send: () => decide(gate.run_id, body), said };
+  }
   if (choice.kind === "pick") {
     body.choice = choice.choice;
     if (choice.artifact) body.artifact = choice.artifact;
