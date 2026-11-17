@@ -202,6 +202,8 @@ def validate(
                     )
                 )
             produced.update(stage.take)
+            if source is not None:  # the join's index, which a later stage may read
+                produced.add("items.json")
             for name in stage.take:
                 swarm_made.pop(name, None)
         # gates produce a decision, which no stage declares as input
