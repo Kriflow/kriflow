@@ -704,9 +704,18 @@ def card_status(
 
 
 def _gist(card: ArtifactFile) -> str:
-    """A card's text fields (a study, a fact, a hook) and the start of its body, at most GIST."""
+    """A card's text fields (a study, a fact, a hook; a list of words joined by commas) and the
+    start of its body, at most GIST. The shortest fields come first, so short labels (a style,
+    a lead, a set) survive the cut that a long pitch would cause."""
+    values = {
+        k: ", ".join(v) if isinstance(v, list) and all(isinstance(x, str) for x in v) else v
+        for k, v in card.fields.items()
+        if k not in _NOT_GIST
+    }
     text = [
-        f"{k}: {v}" for k, v in card.fields.items() if k not in _NOT_GIST and isinstance(v, str)
+        f"{k}: {v}"
+        for k, v in sorted(values.items(), key=lambda kv: len(str(kv[1])))
+        if isinstance(v, str) and v
     ]
     paragraphs = [p for p in re.split(r"\n\s*\n", card.body) if p.strip()]
     text += [" ".join(p.split()) for p in paragraphs if not p.lstrip().startswith("#")][:1]
@@ -718,15 +727,15 @@ def made(world: Path, runs: Mapping[str, str], promoted: Collection[str] = ()) -
     """What the world at `world` already made, one line per run, newest first: every run with a
     publish record, and every run in `runs` (run id to status: the runs the caller counts, not
     failed or aborted ones) that settled on one idea. A run's subject is what its pick gate
-    picked: the idea card (named by the decision, or titled as its choice), else the choice
-    itself (a pick of a whole list); with no pick, its only idea, else its publish record or
-    metadata.md. A review or approve gate's artifact never names a run. A run that ranked ideas
-    and picked none is not listed. Each line says the title, whether it was published (with its
-    outcome) or is done or in the making, and its gist: the subject's text fields (a study, a
-    fact, a hook) and the start of its body. After them, the world's Parked cards ("Parked:
-    <title> (<date>): <gist>") and Rejected cards ("Rejected: <title>: <reason>"), newest
-    first, as `card_status` says with `promoted`. Read from the files alone, so it holds when the
-    graph is behind."""
+    picked: the idea card (named by the decision, or titled as its choice; a pick of several
+    idea cards lists each), else the choice itself (a pick of a whole list); with no pick, its
+    only idea, else its publish record or metadata.md. A review or approve gate's artifact
+    never names a run. A run that ranked ideas and picked none is not listed. Each line says
+    the title, whether it was published (with its outcome) or is done or in the making, and its
+    gist: the subject's text fields (a study, a fact, a hook) and the start of its body. After
+    them, the world's Parked cards ("Parked: <title> (<date>): <gist>") and Rejected cards
+    ("Rejected: <title>: <reason>"), newest first, as `card_status` says with `promoted`. Read
+    from the files alone, so it holds when the graph is behind."""
     everything = library(world)
     by_path = {a.path: a for a in everything}  # a fork's pick names its parent's card
     by_run: dict[str, list[ArtifactFile]] = {}
@@ -745,6 +754,14 @@ def made(world: Path, runs: Mapping[str, str], promoted: Collection[str] = ()) -
             (a for a in found if a.type == "decision" and a.fields.get("kind") == "pick"), None
         )
         subject: ArtifactFile | None = None
+        picked = pick.fields.get("artifacts") if pick is not None else None
+        cards = [by_path[str(p)] for p in picked or [] if str(p) in by_path]
+        if len(cards) > 1 and all(c.type == "idea" for c in cards):  # one line per picked card
+            state = "made" if runs.get(run_id) == "done" else "in the making"
+            for card in cards:
+                gist = _gist(card)
+                lines.append(f"- {_bare(card.title)} ({state})" + (f": {gist}" if gist else ""))
+            continue
         if pick is not None:
             card = by_path.get(str(pick.fields.get("artifact")))
             choice = _bare(str(pick.fields.get("choice") or ""))
