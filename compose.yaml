@@ -51,6 +51,8 @@ services:
       SWARMIFY_BASE_URL: ${SWARMIFY_BASE_URL:-http://localhost:8000}
       # The folders a package installed from a local path must be in (README, Connector Packages)
       SWARMIFY_PACKAGE_SOURCES: ${SWARMIFY_PACKAGE_SOURCES:-}
+      # Resource Slot counts, as gpu=1,seat=2 (README, Resources); one Slot each when blank.
+      SWARMIFY_RESOURCES: ${SWARMIFY_RESOURCES:-}
       # Web Push (README, Push notifications); blank makes a pair once in /data/vapid.json.
       SWARMIFY_VAPID_PUBLIC_KEY: ${SWARMIFY_VAPID_PUBLIC_KEY:-}
       SWARMIFY_VAPID_PRIVATE_KEY: ${SWARMIFY_VAPID_PRIVATE_KEY:-}
