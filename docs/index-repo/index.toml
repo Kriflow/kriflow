@@ -146,6 +146,7 @@ permissions = [
   "install_network: pypi.org",
   "install_network: files.pythonhosted.org",
   "services: engines",
+  "resources: gpu",
   "owned_folders: voices",
 ]
 

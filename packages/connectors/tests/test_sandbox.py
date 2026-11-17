@@ -301,7 +301,7 @@ def test_a_process_granted_the_gpu_gets_the_one_shared_gpu_lock_and_others_none(
         return done.stdout.strip()
 
     one, two = said(Grants(gpu=True)), said(Grants(gpu=True))
-    assert one == two == str(sandbox.scratch / "gpu.lock")
+    assert one == two == str(sandbox.scratch / "resources" / "gpu" / "0.lock")
     assert said(Grants()) == "none"
 
 

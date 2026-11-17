@@ -75,6 +75,11 @@ _domains = {
     "type": "array",
     "items": {"type": "string", "pattern": "^(\\*\\.)?[a-z0-9.-]+(:\\d+)?$"},
 }
+_resources = {
+    "type": "array",
+    "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"},
+    "uniqueItems": True,
+}
 _FOLDER = "^(\\{world\\}|[a-z0-9][a-z0-9_-]*)(/(\\{world\\}|[a-z0-9][a-z0-9_-]*))*$"
 """A folder of the data directory: plain names, so never a file such as `setup.json`."""
 _inside = {"type": "string", "pattern": "^(?![/~])(?!.*(^|/)\\.\\.(/|$)).+$"}
@@ -262,7 +267,9 @@ SCHEMA: dict[str, Any] = {
         # What the sandbox lets it use (ADR 0021): the hosts it reaches (`localhost` alone: its
         # own loopback servers), the Services whose URLs it calls, the data directory's folders it
         # reads (`{world}` is the world it runs for), the hosts its install step reaches
-        # besides its runtime's registry, and the host's GPU (a browser rendering 3D on it).
+        # besides its runtime's registry, the host's GPU (a browser rendering 3D on it), the
+        # Resources its processes take Slots of and those the core holds around each stage call
+        # (ADR 0030).
         "permissions": {
             "type": "object",
             "additionalProperties": False,
@@ -275,6 +282,8 @@ SCHEMA: dict[str, Any] = {
                 },
                 "install_network": _domains,
                 "gpu": {"type": "boolean"},
+                "resources": _resources,
+                "hold": _resources,
             },
         },
     },
@@ -486,6 +495,14 @@ def _changes(old: dict[str, Any], new: dict[str, Any]) -> dict[str, list[str]]:
     }
 
 
+def resource_names(manifest: dict[str, Any]) -> list[str]:
+    """The Resources a package's processes get Slots of: `resources`, `hold`, and `gpu` with
+    `gpu = true` (ADR 0030)."""
+    granted = manifest.get("permissions", {})
+    gpu = ["gpu"] if granted.get("gpu") else []
+    return list(dict.fromkeys([*gpu, *granted.get("resources", []), *granted.get("hold", [])]))
+
+
 def permissions(manifest: dict[str, Any]) -> list[str]:
     """Every permission the Manifest declares, as `network: api.example.org`, which the operator
     approves before anything of the package runs (ADR 0021): the hosts it reaches (`network`),
@@ -506,6 +523,8 @@ def permissions(manifest: dict[str, Any]) -> list[str]:
     out += [f"folders: {f}" for f in granted.get("folders", [])]
     out += [f"services: {s}" for s in granted.get("services", [])]
     out += ["gpu: the host's graphics card"] if granted.get("gpu") else []
+    gpu = ["gpu"] if granted.get("gpu") else []  # said by `gpu` already
+    out += [f"resources: {r}" for r in resource_names(manifest) if r not in gpu]
     out += [f"owned_folders: {f['folder']}" for f in manifest.get("owned_folders", [])]
     out += [
         f"credentials: {setup.env_name(f)}"

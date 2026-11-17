@@ -72,6 +72,7 @@ from swarmify_connectors import (
     Packages,
     build_session,
     publish,
+    resources,
 )
 from swarmify_connectors import SqliteStorage as ConnectorStorage
 from swarmify_kernel import AGENT_TOOLS, Event
@@ -988,6 +989,7 @@ def create_app(
     workflow_svc = workflow_service(root, registry, runner)
     runner.pin = runs.pinner(workflow_svc)
     registry.aborted = lambda run_id: runner.storage.stop_of(run_id) == "abort"
+    registry.root_of = lambda run_id: runner.top(run).id if (run := runner.get(run_id)) else run_id
     runner.check = runs.checker(workflow_svc)
     runner.check_text = text_check(registry, pins)
     runner.stage_spend = stage_spend
@@ -1118,8 +1120,16 @@ def create_app(
             retro,
             whiteboard.list_tasks,
             swarm.waiting,
+            lambda: resources.waits(registry.packages.sandbox.resources),
         )  # fmt: skip
     )
+
+    @app.get("/api/resources")
+    def list_resources() -> list[dict[str, Any]]:
+        """Every Resource with its Slots, their holders and its waiters (ADR 0030); install-wide.
+        Each note names its run, top run, stage, package and since (Unix seconds)."""
+        return resources.snapshot(registry.packages.sandbox.resources)
+
     app.include_router(connectors.router(registry, world_svc, workflow_svc))
     app.include_router(tasks.router(whiteboard, runner.get, clock))
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))

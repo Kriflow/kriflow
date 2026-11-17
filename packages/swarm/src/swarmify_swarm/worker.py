@@ -77,8 +77,9 @@ STAGE_TOOLS = {"web_search": ["WebSearch", "WebFetch"], "graph": []}
 """What each Agent Tool (the kernel's AGENT_TOOLS) grants; the graph tools come with every
 non-baseline stage. A stage's other `tools` name connectors, allowed as `mcp__<name>__*`."""
 
-Servers = Callable[[str, list[str], dict[str, str]], dict[str, dict[str, Any]]]
-"""(world id, connector names, package versions) to their MCP server configs, for the session.
+Servers = Callable[..., dict[str, dict[str, Any]]]
+"""(world id, connector names, package versions, run=(run id, stage id)) to their MCP server
+configs, for the session; `run` names the processes' run identity.
 The run puts the package versions its workflow version recorded in the stage's config as
 `packages` (issue 223)."""
 Budget = Callable[[str], str | None]
@@ -307,7 +308,7 @@ def _schema(at: "_At", kind: OutputType | None) -> dict[str, Any] | None:
 
 
 def no_servers(
-    _world_id: str, _names: list[str], _packages: dict[str, str]
+    _world_id: str, _names: list[str], _packages: dict[str, str], run: Any = None
 ) -> dict[str, dict[str, Any]]:
     return {}
 
@@ -591,7 +592,12 @@ class Swarm:
                     at.baseline,
                 ),
                 allowed=allowed,
-                servers=self.servers(at.world_id, servers, at.config.get("packages") or {}),
+                servers=self.servers(
+                    at.world_id,
+                    servers,
+                    at.config.get("packages") or {},
+                    run=(at.run_id, at.stage_id),
+                ),
                 resume=resume,
                 max_turns=MAX_TURNS,
                 model=entry.model,

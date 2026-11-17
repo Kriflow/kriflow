@@ -131,6 +131,8 @@ class RunStageView:
     """Why the running stage is waiting for the network, while it is."""
     items: list[ItemView] = field(default_factory=list)
     """A fan-out stage's Items of its latest visit, each with its child run (ADR 0031)."""
+    waiting: str | None = None
+    """What Resource the running stage waits for and who holds it, while it does (ADR 0030)."""
 
 
 @dataclass(frozen=True)

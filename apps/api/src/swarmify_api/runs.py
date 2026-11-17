@@ -4,6 +4,7 @@ typed goal, fork a run or promote a Library artifact into one, list runs, read o
 Changes, read the baseline it is measured against, the world's spend this month, list every open
 gate and save a finished run as a workflow."""
 
+import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
@@ -310,6 +311,19 @@ def network_note(w: Waiting) -> str:
     )
 
 
+def resource_note(wait: dict[str, Any], runner: Runner, now: float) -> str:
+    """A stage's wait for a Resource in words: who holds it and for how long."""
+    said = f"waiting for {wait['resource']}"
+    if not wait["holders"]:
+        return said
+    held = wait["holders"][0]
+    run = runner.get(str(held.get("run")))
+    stage = next((s.name for s in run.stages if s.id == held.get("stage")), None) if run else None
+    who = f"{run.name} / {stage or held.get('stage')}" if run else str(held.get("package", "?"))
+    minutes = int((now - float(held.get("since") or now)) // 60)
+    return f"{said}: held by {who} for {minutes} min" if minutes else f"{said}: held by {who}"
+
+
 def router(
     runner: Runner,
     workflows: Workflows,
@@ -318,11 +332,13 @@ def router(
     retro: bool = True,
     tasks_of: TasksOf = lambda _stage_id: [],
     waiting: Callable[[], list[Waiting]] = lambda: [],
+    resource_waits: Callable[[], list[dict[str, Any]]] = lambda: [],
 ) -> APIRouter:
     """`tools_for` names the world's connectors an Ad Hoc Run's stage gets as its tools. With
     `retro`, every run but a baseline ends with the Retro stage. `tasks_of` reads a swarm
     stage's whiteboard, whose hand-added tasks a run saved as a workflow keeps. `waiting` names
-    the agents waiting for the network, which a run's stage then says."""
+    the agents waiting for the network and `resource_waits` the processes waiting for a
+    Resource (resources.waits), which a run's running stage then says."""
     api = APIRouter(prefix="/api", tags=["runs"])
     pin = pinner(workflows)
 
@@ -481,9 +497,17 @@ def router(
         if run is None:
             raise HTTPException(404, "run not found")
         notes = {w.stage_id: network_note(w) for w in reversed(waiting()) if w.run_id == run_id}
-        if not notes:
+        running = {s.id for s in run.stages if s.status == "running"}
+        now = time.time()
+        waits = {
+            str(w.get("stage")): resource_note(w, runner, now)
+            for w in resource_waits()
+            if w.get("run") == run_id and w.get("stage") in running
+        }
+        if not notes and not waits:
             return run
-        return replace(run, stages=[replace(s, network=notes.get(s.id)) for s in run.stages])
+        stages = [replace(s, network=notes.get(s.id), waiting=waits.get(s.id)) for s in run.stages]
+        return replace(run, stages=stages)
 
     @api.get("/runs/{run_id}/baseline")
     def get_baseline(run_id: str) -> Run | None:

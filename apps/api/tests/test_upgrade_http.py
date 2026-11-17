@@ -114,14 +114,14 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
         assert client.get(f"/api/worlds/{world}/packages").json() == [
             {"name": "meta", "version": "1.0.3"},
             {"name": "remotion_build", "version": "1.0.3"},
-            {"name": "remotion_render", "version": "1.0.7"},
+            {"name": "remotion_render", "version": "1.0.8"},
             {"name": "script_writer", "version": "0.0.1"},  # the world's own, moved (#211)
-            {"name": "speech", "version": "1.1.1"},
+            {"name": "speech", "version": "1.2.0"},
             {"name": "upload_post", "version": "1.0.1"},
             {"name": "youtube", "version": "1.3.1"},
         ]
         version = client.get(f"/api/workflows/{flow}/versions/1").json()
-        assert version["packages"] == {"script_writer": "0.0.1", "speech": "1.1.1"}  # stamped
+        assert version["packages"] == {"script_writer": "0.0.1", "speech": "1.2.0"}  # stamped
         (key,) = client.get(f"/api/worlds/{world}/packages/upload_post/setup").json()["fields"]
         assert (key["env"], key["shared_set"], key["shared"]) == ("UPLOAD_POST_API_KEY", True, None)
         posts = next(
@@ -131,7 +131,7 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
         )
         assert posts["missing"] == [] and "up-k3y" not in json.dumps(posts)
         setup = client.get(f"/api/worlds/{world}/packages/speech/setup").json()
-        (engines,) = setup["fields"]
+        engines, _gpu_engines = setup["fields"]
         assert (engines["env"], engines["shared"]) == ("SPEECH_ENDPOINTS", engine)
         (check,) = client.get(f"/api/worlds/{world}/packages/speech/health").json()
         assert check == {"name": engine, "ok": True, "message": "up"}
@@ -164,8 +164,8 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
     assert again.get(f"/api/worlds/{new}/packages").json() == [
         {"name": "meta", "version": "1.0.3"},
         {"name": "remotion_build", "version": "1.0.3"},
-        {"name": "remotion_render", "version": "1.0.7"},
-        {"name": "speech", "version": "1.1.1"},
+        {"name": "remotion_render", "version": "1.0.8"},
+        {"name": "speech", "version": "1.2.0"},
         {"name": "upload_post", "version": "1.0.1"},
         {"name": "youtube", "version": "1.3.1"},
     ]

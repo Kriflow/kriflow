@@ -14,6 +14,7 @@ A long job is a tool answer carrying `job_id` and `poll`, the tool to poll with
 `progress` (0 to 1), `message` and `error`.
 """
 
+import functools
 import hmac
 import logging
 import os
@@ -23,7 +24,7 @@ import shlex
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,7 +34,7 @@ import httpx
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-from swarmify_connectors import build_session, oauth, publish, setup
+from swarmify_connectors import build_session, oauth, publish, resources, setup
 from swarmify_connectors.credentials import Credentials
 from swarmify_connectors.fake import FakeTransport
 from swarmify_connectors.mcp_transport import Caller, McpTransport
@@ -57,6 +58,7 @@ from swarmify_connectors.packages import (
     Packages,
     manifest_diff,
     read_manifest,
+    resource_names,
 )
 from swarmify_connectors.ports import ConnectorTransport, Storage
 from swarmify_connectors.sandbox import (
@@ -261,6 +263,8 @@ class Connectors:
         self.on_blocked = on_blocked
         self.aborted: Callable[[str], bool] = lambda _run_id: False
         """Whether a run was aborted, asked between polls so a long job stops with its run."""
+        self.root_of: Callable[[str], str] = lambda run_id: run_id
+        """The id of the top run of a run's family (the run itself when it has no parent)."""
         self._watched: list[tuple[Connector, Confined]] = []
         """Processes others start (a swarm stage's agents), whose blocks `drain` reports."""
         self.setups = SetupStore(self.data_dir / "setup.json")
@@ -734,6 +738,7 @@ class Connectors:
             grants.reads += extra.reads
             grants.writes += extra.writes
             grants.domains += extra.domains
+            grants.env.update(extra.env)
         cwd = Path(connector.folder) if connector.folder else None
         try:
             confined = self.packages.sandbox.wrap(command, cwd, grants, env, session=session)
@@ -754,7 +759,7 @@ class Connectors:
         world = self.data_dir / "worlds" / world_id
         permissions = m.get("permissions", {})
         network, gpu = list(permissions.get("network", [])), permissions.get("gpu", False)
-        grants = Grants(domains=network, gpu=gpu)
+        grants = Grants(domains=network, gpu=gpu, resources=resource_names(m))
         for f in m.get("owned_folders", []):
             folder = world / "assets" / f["folder"]
             folder.mkdir(parents=True, exist_ok=True)
@@ -788,7 +793,14 @@ class Connectors:
             (run / stage[1]).mkdir(parents=True, exist_ok=True)
             grants.reads.append(run)
             grants.writes.append(run / stage[1])
+            grants.env = self.identity(stage)
         return grants
+
+    def identity(self, stage: Stage) -> dict[str, str]:
+        """What tells a package process the run, the top run and the stage it works for."""
+        run_id, stage_id = stage
+        root = self.root_of(run_id)
+        return {"SWARMIFY_RUN_ID": run_id, "SWARMIFY_RUN_ROOT": root, "SWARMIFY_STAGE_ID": stage_id}
 
     def _grantable(self, value: str | None) -> Path | None:
         """A folder an operator named (a `path` Setting, a local package's command) when the
@@ -1029,6 +1041,7 @@ class Connectors:
         names: list[str],
         pins: Mapping[str, str] | None = None,
         stage: Stage | None = None,
+        run: Stage | None = None,
     ) -> dict[str, dict[str, Any]]:
         """The standard MCP server config of each named connector that has a server, with its
         credentials: what a swarm stage's agents or a Build Session connect to. With `stage`
@@ -1037,7 +1050,9 @@ class Connectors:
         `SWARMIFY_ASSETS`, the world's assets folder, where its Owned Folders are; it grants
         nothing. A command's config also names, as `stderr`, the file its last stderr lines land
         in, for the session to show when it fails to start; not MCP's, so the runtime takes it
-        out before handing the config on. Raises ConnectorError when one is missing a credential."""
+        out before handing the config on. `run`, the (run, stage) it works for without being
+        confined to it (a swarm stage's), names its run identity only; every command's process
+        gets its Manifest's Resources. Raises ConnectorError when one is missing a credential."""
         servers: dict[str, dict[str, Any]] = {}
         for name in names:
             connector = self.find(world_id, name, pins)
@@ -1048,7 +1063,8 @@ class Connectors:
                 servers[name] = {"type": "http", "url": connector.url, "headers": env}
                 continue
             env["SWARMIFY_ASSETS"] = str(self.data_dir / "worlds" / world_id / "assets")
-            confined, sandboxed = self.confine(connector, env, stage)
+            known = Grants(env=self.identity(run)) if run and not stage else None
+            confined, sandboxed = self.confine(connector, env, stage, extra=known)
             assert confined is not None  # it has a command
             self._watched.append((connector, confined))
             servers[name] = {
@@ -1339,7 +1355,10 @@ class Connectors:
         call = done
         # One process for the call and the polls of its long job, so the sandbox it runs in,
         # and the network it grants, lasts as long as the job.
-        with self._open(connector, env, (run_id, stage_id)) as tool:
+        with (
+            self._held(connector, (run_id, stage_id)),
+            self._open(connector, env, (run_id, stage_id)) as tool,
+        ):
             if call is None or call.status != "polling":
                 call = self._call(connector, world_id, run_id, stage_id, visit, config, tool, call)
             while call.status == "polling":
@@ -1348,6 +1367,29 @@ class Connectors:
                     self._cancel(connector, call, tool)
                 call = self._poll(connector, call, tool)
         return call
+
+    @contextmanager
+    def _held(self, connector: Connector, stage: Stage) -> Iterator[None]:
+        """One Slot of each Resource the Manifest's `hold` names, held around the whole call
+        (ADR 0030); the wait is logged once and shows on the stage through its waiting note."""
+        identity = self.identity(stage)
+        note = {
+            "run": identity["SWARMIFY_RUN_ID"],
+            "root": identity["SWARMIFY_RUN_ROOT"],
+            "stage": identity["SWARMIFY_STAGE_ID"],
+            "package": connector.name,
+        }
+        root = self.packages.sandbox.resources
+        with ExitStack() as stack:
+            for name in connector.manifest.get("permissions", {}).get("hold", []):
+                place, slots = resources.folder(root, name)
+                said = functools.partial(log.info, "%s waits for %s", connector.name, name)
+                stop = functools.partial(self.aborted, stage[0])
+                try:
+                    stack.enter_context(resources.hold(place, slots, note, said, stop))
+                except InterruptedError as exc:
+                    raise JobCancelled(f"{connector.name}: the run was aborted") from exc
+            yield
 
     def _cancel(self, connector: Connector, call: Call, call_tool: Caller) -> NoReturn:
         """Cancel the job of an aborted run: its poll tool, called with `cancel: true`, stops the
