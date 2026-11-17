@@ -18,6 +18,7 @@ from swarmify_api.assistant import Card, Message, RunAssistant, Unanswered, read
 from swarmify_api.auth import CALLER
 from swarmify_api.runs import checker, pinner, start_pinned
 from swarmify_connectors import Connectors
+from swarmify_connectors.resources import snapshot
 from swarmify_memory import Memory
 from swarmify_runs import TERMINAL, Illegal, Run, RunChange, RunControl
 from swarmify_swarm import OPERATOR, Refused, Storage
@@ -75,6 +76,25 @@ def server(
         if (workflow := workflows.get(workflow_id)) is not None:
             reach(workflow.world_id)
 
+    @mcp.tool(
+        description="List every Resource (the GPU, a one-seat service) with its Slots, who holds"
+        " each (run, top run, stage, package, since in Unix seconds) and who waits for one."
+    )
+    def resources() -> list[dict[str, Any]]:
+        found = snapshot(root / "sandbox" / "resources")
+        if scope() is None:
+            return found
+
+        def mine(note: dict[str, Any] | None) -> bool:
+            run = control.get(str((note or {}).get("run")))
+            return run is not None and run.world_id == scope()
+
+        for r in found:  # a world's token sees only its own runs' notes
+            r["waiting"] = [w for w in r["waiting"] if mine(w)]
+            for slot in r["slots"]:
+                slot["holder"] = slot["holder"] if mine(slot["holder"]) else None
+        return found
+
     @mcp.tool(description="Create a world: one long-lived memory with its own folder and stream.")
     def create_world(name: str, purpose: str = "") -> dict[str, Any]:
         if (only := scope()) is not None:
@@ -103,6 +123,12 @@ def server(
     @mcp.tool(
         description="Save workflow YAML. Without workflow_id this creates a workflow at version 1;"
         " with it, a new immutable version. Returns the version, or the violations when refused."
+        " A workflow stage with `for_each` is a fan-out stage: one child run of `runs` per item"
+        " of an earlier stage's cards, a pick gate's picked cards or a .json list file an"
+        " earlier stage produces, at most `max_parallel` (1 to 8, default 2) at once, each given"
+        " its item as file `as` (default item.md, item.json for JSON; the child workflow names it"
+        " under top-level `given`). Each child's `take` lands in <stage>/artifacts/<item key>/"
+        " with an items.json index; when items fail the stage waits at an `items` gate."
     )
     def save_workflow(world_id: str, yaml: str, workflow_id: str | None = None) -> dict[str, Any]:
         reach(world_id)
@@ -320,9 +346,13 @@ def server(
         description="Answer the gate a run waits at. A pick gate needs `choice` or `artifact`,"
         " the chosen artifact's path in the world folder, `runs/<run>/<stage id>/artifacts/<name>`"
         " as the API's `GET /api/runs/{run_id}/artifacts` lists it (the choice then takes its"
-        " title); an approve gate may name `send_back_to`, an earlier stage that runs again"
-        " with `note` in its context (at most twice per run); a confirm gate takes neither."
-        " Writes a decision artifact."
+        " title); a pick gate whose `picks` is above one takes `artifacts`, up to that many"
+        " card paths in pick order; any pick may take `rejects`, [{artifact, reason}], offered"
+        " cards the operator rejects (the rest it offered are Parked);"
+        " an approve gate may name `send_back_to`, an earlier stage that runs again"
+        " with `note` in its context (at most twice per run); a confirm gate takes neither;"
+        " a fan-out stage's `items` gate takes choice `retry` (the failed items run again) or"
+        " `continue` (finish without them). Writes a decision artifact."
     )
     def decide_gate(
         run_id: str,
@@ -330,10 +360,20 @@ def server(
         note: str = "",
         send_back_to: str | None = None,
         artifact: str | None = None,
+        artifacts: list[str] | None = None,
+        rejects: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         run_of(run_id)
         return run_or_fail(
-            lambda: control.decide(run_id, choice, note, send_back_to, artifact=artifact)
+            lambda: control.decide(
+                run_id,
+                choice,
+                note,
+                send_back_to,
+                artifact=artifact,
+                artifacts=artifacts,
+                rejects=rejects,
+            )  # fmt: skip
         )
 
     @mcp.tool(

@@ -26,6 +26,42 @@ class RunLink:
 
 
 @dataclass(frozen=True)
+class Item:
+    """One Item of a Fan-out Stage (ADR 0031), as its source gives it: a card's `file` (its
+    absolute path) or a JSON list's element `data`. `key` names its folder of gathered files."""
+
+    key: str
+    title: str
+    file: str | None = None
+    data: Any = None
+
+
+@dataclass(frozen=True)
+class ItemView:
+    """An Item of a fan-out stage's latest visit as the timeline shows it, with its child run."""
+
+    key: str
+    title: str
+    status: str
+    """pending, running, done, failed or aborted."""
+    child: RunLink | None = None
+    error: str | None = None
+
+
+def items_ask(items: list[ItemView]) -> str:
+    """What a fan-out stage's `items` gate asks once every Item settled and some failed."""
+    failed = [i for i in items if i.status in ("failed", "aborted")]
+    lines = [f"- {i.title} ({i.key}): {i.error or i.status}" for i in failed]
+    return "\n".join(
+        [
+            f"{len(failed)} of {len(items)} items did not finish:",
+            *lines,
+            "Retry the failed items, continue without them, or abort.",
+        ]
+    )
+
+
+@dataclass(frozen=True)
 class Pinned:
     """A workflow version as Runs needs it to start a run of it."""
 
@@ -62,6 +98,25 @@ class Decision:
     by: str | None = None
     """Who answered from outside the web UI (a Remote Approval), as its connector names them,
     such as "anuj in chat"; None for an answer given in Swarmify."""
+    artifacts: list[str] = field(default_factory=list)
+    """At a pick gate: the cards picked, as paths in the world folder, in pick order; the first
+    is `artifact`. Empty for a pick by name alone."""
+    parked: list[str] = field(default_factory=list)
+    """The cards the pick gate offered that were neither picked nor rejected."""
+    rejected: list[dict[str, str]] = field(default_factory=list)
+    """The cards the operator rejected at the gate, each `{"artifact": path, "reason": why}`
+    (the reason may be "")."""
+    titles: dict[str, str] = field(default_factory=dict)
+    """The title of each card named above, by path, as the decision artifact lists them."""
+
+    def cards(self) -> dict[str, Any]:
+        """The pick's cards as the decision row stores them."""
+        return {
+            "artifacts": self.artifacts,
+            "parked": self.parked,
+            "rejected": self.rejected,
+            "titles": self.titles,
+        }
 
 
 @dataclass(frozen=True)
@@ -93,6 +148,10 @@ class RunStageView:
     """The stage's definition as this run holds it, Stage Edits included."""
     network: str | None = None
     """Why the running stage is waiting for the network, while it is."""
+    items: list[ItemView] = field(default_factory=list)
+    """A fan-out stage's Items of its latest visit, each with its child run (ADR 0031)."""
+    waiting: str | None = None
+    """What Resource the running stage waits for and who holds it, while it does (ADR 0030)."""
 
 
 @dataclass(frozen=True)
@@ -258,3 +317,7 @@ class Gate:
     budget_usd: float | None = None
     """For a `budget` gate: the Budget that was spent, and the spend so far."""
     spent_usd: float | None = None
+    item: str | None = None
+    """For a gate of a fan-out stage's child run: the title of the Item the child works on."""
+    picks: int = 1
+    """For a pick gate: how many cards it takes in one answer, its workflow's `picks`."""

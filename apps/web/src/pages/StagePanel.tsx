@@ -34,6 +34,7 @@ export function stepMeta(s: Stage, queued = false): string {
     case "done":
       return took === null ? "done" : clock(took);
     case "running":
+      if (s.waiting) return s.waiting.split(":", 1)[0] ?? s.waiting;
       return s.network ? "waiting for the network" : "running";
     case "waiting":
       return "waiting";
@@ -718,6 +719,23 @@ export function StagePanel(p: PanelProps) {
           </Link>
         </p>
       )}
+      {(stage.items ?? []).length > 0 && (
+        <ul className="fanout-items" aria-label="Items" data-testid="stage-items">
+          {(stage.items ?? []).map((item) => (
+            <li key={item.key}>
+              {item.child ? (
+                <Link to="/worlds/$worldId/runs/$runId" params={{ worldId: item.child.world_id, runId: item.child.id }}>
+                  {item.title}
+                </Link>
+              ) : (
+                item.title
+              )}{" "}
+              <span className={item.status === "failed" || item.status === "aborted" ? "chip warn" : "chip"}>{item.status}</span>
+              {item.error && <span className="faint"> {item.error}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {(stage.notes ?? []).map((note, i) => (
         <p className="faint" key={i}>
           Sent back with: {note}
@@ -726,6 +744,11 @@ export function StagePanel(p: PanelProps) {
       {stage.network && (
         <p className="notice" role="status" data-testid="stage-network">
           {stage.network}
+        </p>
+      )}
+      {stage.waiting && (
+        <p className="notice" role="status" data-testid="stage-waiting">
+          {stage.waiting.charAt(0).toUpperCase() + stage.waiting.slice(1)}.
         </p>
       )}
       {stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}

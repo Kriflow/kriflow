@@ -11,8 +11,11 @@ the layer the Agent SDK puts a Build Session's Bash in (ADR 0018).
   and reach its own loopback servers (a render's browser talking to its bundle);
 - devices: on Linux, with `Grants.gpu`, the GPU device files of the host the sandbox starts on
   (the launcher finds them there) and Unix sockets, which a GPU browser opens; the sandbox
-  runner's socket stays out of reach, its folder denied to every process. With `Grants.gpu` on
-  any platform it also writes the shared GPU lock (`SWARMIFY_GPU_LOCK`);
+  runner's socket stays out of reach, its folder denied to every process;
+- Resources (ADR 0030): for each in `Grants.resources` (`gpu` with `Grants.gpu`) it writes the
+  Resource's folder of Slot files, named by `SWARMIFY_RESOURCE_<NAME>` with its Slot count in
+  `SWARMIFY_RESOURCE_<NAME>_SLOTS` (resources.py); `SWARMIFY_GPU_LOCK` names the gpu's first
+  Slot, for packages from before Resources;
 - environment: what the caller gives it, which for a connector is its own Setup values only, and
   no other process's (Linux's PID namespace; on macOS, launcher.mjs's Seatbelt rules).
 
@@ -39,6 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from swarmify_connectors import resources
+
 HERE = Path(__file__).parent
 LAUNCHER = HERE.parents[1] / "sandbox" / "launcher.mjs"
 OBSERVER = HERE / "observe.py"
@@ -46,9 +51,9 @@ SECCOMP = LAUNCHER.parent / "node_modules/@anthropic-ai/sandbox-runtime/vendor/s
 """sandbox-runtime's `apply-seccomp` helpers, which bubblewrap starts in the sandbox on Linux."""
 RUNNER = "SWARMIFY_SANDBOX_RUNNER"
 GPU_LOCK = "SWARMIFY_GPU_LOCK"
-"""Names, to a process granted the GPU, the one lock file every such process shares: a package
-holds an exclusive `flock` on it around each process it runs on the card, so two GPU jobs never
-run at once."""
+"""Names, to a process granted the GPU, the gpu Resource's first Slot file (`gpu/0.lock`): a
+package from before Resources holds an exclusive `flock` on it around each process it runs on the
+card. Kept for one release (ADR 0030)."""
 REGISTRIES = {
     "uv": ["pypi.org", "files.pythonhosted.org"],
     "npm": ["registry.npmjs.org"],
@@ -87,7 +92,11 @@ class Grants:
     domains: list[str] = field(default_factory=list)
     gpu: bool = False
     """The host's GPU (Manifest `permissions.gpu`): a browser rendering 3D on it, not in
-    software."""
+    software. Implies the `gpu` Resource."""
+    resources: list[str] = field(default_factory=list)
+    """The Resources its processes take Slots of (Manifest `permissions.resources`)."""
+    env: dict[str, str] = field(default_factory=dict)
+    """Variables the core sets for it, as its run identity (`SWARMIFY_RUN_ID`)."""
 
 
 def domain(url: str) -> str | None:
@@ -185,6 +194,7 @@ class Sandbox:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir.resolve()
         self.scratch = self.data_dir / "sandbox"
+        self.resources = self.scratch / "resources"
         self.runner = os.environ.get(RUNNER) or None
 
     def wrap(
@@ -225,12 +235,15 @@ class Sandbox:
         home.mkdir(parents=True)
         cwd = cwd.resolve() if cwd else home
         writes = [home, *(p.resolve() for p in grants.writes)]
-        env = {"HOME": str(home), "TMPDIR": str(home)}
-        if grants.gpu:  # the scratch folder's own file, kept by prune
-            lock = self.scratch / "gpu.lock"
-            lock.touch()
-            writes.append(lock)
-            env[GPU_LOCK] = str(lock)
+        env = {**grants.env, "HOME": str(home), "TMPDIR": str(home)}
+        named: list[str] = [*grants.resources, *(["gpu"] if grants.gpu else [])]
+        for name in dict.fromkeys(named):
+            place, slots = resources.folder(self.resources, name)  # not a dated folder: kept
+            writes.append(place)
+            env[resources.env_name(name)] = str(place)
+            env[resources.env_name(name) + "_SLOTS"] = str(slots)
+            if name == "gpu":
+                env[GPU_LOCK] = str(place / "0.lock")
         what = [cwd, home, *_around([p.resolve() for p in grants.reads], writes), *writes]
         reads = self._readable(what, path or os.environ.get("PATH", ""), cwd)  # and writes
         denied = self.denied()

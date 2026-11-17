@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 STAGE_TYPES = ("swarm", "gate", "connector", "workflow")
+MAX_PARALLEL = 8
+"""The most children a Fan-out Stage runs at once."""
 GATE_KINDS = ("pick", "approve", "confirm")
+PICKS_MAX = 10
+"""The most cards a pick gate takes in one answer."""
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,9 @@ class GateStage:
     kind: str = "approve"
     max_send_backs: int | None = None
     """How often an approve gate may send the run back (None: twice); the next is refused."""
+    picks: int | None = None
+    """How many cards a pick gate takes in one answer, 1 to 10 (None: one); the cards offered
+    and not picked are Parked."""
     type: Literal["gate"] = "gate"
 
 
@@ -55,11 +62,17 @@ class ConnectorStage:
 
 @dataclass(frozen=True)
 class WorkflowStage:
-    """Runs workflow `runs` as a child run and takes the named artifacts from it."""
+    """Runs workflow `runs` as a child run and takes the named artifacts from it. With
+    `for_each` it is a Fan-out Stage (ADR 0031): one child run per Item of an earlier stage's
+    cards, the cards picked at a pick gate, or the elements of a JSON list file, each given its
+    Item as file `as_` (`as` in YAML), at most `max_parallel` at once."""
 
     name: str
     runs: str
     take: list[str] = field(default_factory=list)
+    for_each: str | None = None
+    as_: str | None = None
+    max_parallel: int | None = None
     type: Literal["workflow"] = "workflow"
 
 
@@ -74,6 +87,9 @@ class WorkflowModel:
     budget_usd: float | None = None
     agents: int | None = None
     """The worker count of every swarm stage that does not set its own; one when left out."""
+    given: list[str] = field(default_factory=list)
+    """The files a run of it is given before its first stage (a Fan-out Stage's Item), which
+    its stages may name as inputs."""
 
 
 @dataclass(frozen=True)

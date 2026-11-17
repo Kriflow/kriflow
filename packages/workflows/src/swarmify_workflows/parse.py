@@ -6,6 +6,8 @@ import yaml
 
 from swarmify_workflows.model import (
     GATE_KINDS,
+    MAX_PARALLEL,
+    PICKS_MAX,
     STAGE_TYPES,
     ConnectorStage,
     GateStage,
@@ -17,12 +19,12 @@ from swarmify_workflows.model import (
 )
 from swarmify_workflows.schedule import CRON_RULE, cron_problem
 
-TOP_FIELDS = {"name", "schedule", "budget_usd", "agents", "stages"}
+TOP_FIELDS = {"name", "schedule", "budget_usd", "agents", "given", "stages"}
 STAGE_FIELDS: dict[str, set[str]] = {
     "swarm": {"goal", "done_when", "tools", "graphs", "output_type", "produces", "model", "agents"},
-    "gate": {"ask", "kind", "max_send_backs"},
+    "gate": {"ask", "kind", "max_send_backs", "picks"},
     "connector": {"calls", "input", "inputs", "output", "params"},
-    "workflow": {"runs", "take"},
+    "workflow": {"runs", "take", "for_each", "as", "max_parallel"},
 }
 
 
@@ -96,6 +98,9 @@ def parse_workflow(text: str) -> tuple[WorkflowModel | None, list[Violation]]:
         out.append(Violation(CRON_RULE, problem))
     budget = top.number("budget_usd")
     agents = top.number("agents", integer=True)
+    given = top.names("given")
+    for bad in [g for g in given if not _plain(g)]:
+        top.fail(f"given names files, not paths: '{bad}'")
     top.unknown(TOP_FIELDS)
     raw_stages = doc.get("stages")
     if not isinstance(raw_stages, list) or not raw_stages:
@@ -115,7 +120,7 @@ def parse_workflow(text: str) -> tuple[WorkflowModel | None, list[Violation]]:
     if name is None:
         return None, out
     model = WorkflowModel(
-        name, stages, schedule, budget, int(agents) if agents is not None else None
+        name, stages, schedule, budget, int(agents) if agents is not None else None, given
     )
     return model, out
 
@@ -158,12 +163,23 @@ def _parse_stage(
         ask = f.text("ask", required=True)
         gate_kind = f.text("kind") or "approve"
         limit = f.number("max_send_backs", integer=True)
+        picks = f.number("picks", integer=True)
         if gate_kind not in GATE_KINDS:
             f.fail(f"kind must be one of {', '.join(GATE_KINDS)}")
         elif limit is not None and gate_kind != "approve":
             f.fail(f"max_send_backs needs an approve gate; a {gate_kind} gate cannot send back")
+        elif picks is not None and gate_kind != "pick":
+            f.fail("picks needs a pick gate")
+        elif picks is not None and picks > PICKS_MAX:
+            f.fail(f"picks must be 1 to {PICKS_MAX}")
         elif ask:
-            stage = GateStage(stage_name, ask, gate_kind, None if limit is None else int(limit))
+            stage = GateStage(
+                stage_name,
+                ask,
+                gate_kind,
+                None if limit is None else int(limit),
+                None if picks is None else int(picks),
+            )
     elif kind == "connector":
         calls = f.text("calls") or stage_name
         input_, output, inputs = f.text("input"), f.text("output"), f.names("inputs")
@@ -177,6 +193,24 @@ def _parse_stage(
     else:
         runs = f.text("runs", required=True)
         take = f.names("take")
+        for_each, given = f.text("for_each"), f.text("as")
+        most = f.number("max_parallel", integer=True)
+        if for_each is None and (given is not None or most is not None):
+            f.fail("as and max_parallel belong to a fan-out stage: give for_each")
+        if given is not None and not _plain(given):
+            f.fail(f"as names the file each child is given, not a path: '{given}'")
+        if most is not None and most > MAX_PARALLEL:
+            f.fail(f"max_parallel is 1 to {MAX_PARALLEL}")
+        if for_each is not None:
+            given = given or ("item.json" if for_each.endswith(".json") else "item.md")
+            most = most or 2
         if runs:
-            stage = WorkflowStage(stage_name, runs, take)
+            stage = WorkflowStage(
+                stage_name, runs, take, for_each, given, None if most is None else int(most)
+            )
     return stage_name, (stage if len(out) == before else None)
+
+
+def _plain(name: str) -> bool:
+    """A bare file name, as an input is named: no folder, not `.` or `..`."""
+    return "/" not in name and "\\" not in name and name not in (".", "..")

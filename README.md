@@ -565,6 +565,8 @@ services = ["echo_service"]       # Services whose URLs (its Setting's) it reach
 folders = ["echo-cache", "worlds/{world}/assets"]   # data directory folders it reads
 install_network = ["downloads.example.org"]         # hosts its install step reaches too
 gpu = true                        # the host's GPU, for a browser rendering 3D (GPU renders)
+resources = ["seat"]              # Resources whose Slots its processes take (the sandbox's)
+hold = ["seat"]                   # Resources the core holds a Slot of around each stage call
 ```
 
 The full fixture is `packages/connectors/tests/fixtures/packages/echo`, and every rule has an
@@ -675,22 +677,35 @@ sandboxed command any user namespace of its own.
   with them Unix sockets, which Chrome for Testing opens and the sandbox otherwise refuses. No process, granted or not,
   can reach the sandbox runner's socket: its folder is denied like the data directory. See GPU
   renders under Deployment for giving the `sandbox` service the GPU.
-- GPU lock: on any platform, a process granted `permissions.gpu` gets `SWARMIFY_GPU_LOCK`, the
-  full path of one lock file (`<data>/sandbox/gpu.lock`) that every such process, in every run,
-  shares and may write; a process without the grant gets no variable and cannot write it. Two
-  GPU jobs on one card at once fail or crawl, so a package holds an exclusive `flock` on that
-  file around each process it runs on the GPU, and when the lock is taken says so in its
-  progress (`waiting for the GPU`). In Python:
+- Resources (ADR 0030): a shared thing only one process (or n) may use at once, the GPU or a
+  one-seat service, named `[a-z][a-z0-9_]{0,31}`. A Manifest lists those its processes take in
+  `permissions.resources`; `gpu = true` means the `gpu` Resource too. Each is a folder of Slot
+  files, `<data>/sandbox/resources/<name>/<i>.lock`, shared by every world on the install. A
+  process declaring it gets `SWARMIFY_RESOURCE_<NAME>` (the folder, writable in its sandbox) and
+  `SWARMIFY_RESOURCE_<NAME>_SLOTS` (how many); without the declaration it gets neither. One Slot
+  each by default; the operator sets more with `SWARMIFY_RESOURCES="gpu=1,seat=2"` in the API's
+  environment. The protocol a process follows:
+  1. Try an exclusive non-blocking `flock` on each `<i>.lock` in turn.
+  2. None free: write `waiting/<id>.json` (`run`, `root`, `stage`, `package`, `since`), hold it
+     locked too, say so in the log (`Waiting for the GPU`), and try again every half second.
+  3. Holding Slot i: write `<i>.holder` with the same fields and remove the waiting note.
+  4. Let go by removing `<i>.holder` and closing the file. The kernel lets go on any exit, a crash
+     or a kill included, so nothing stays locked by a dead process; a note whose file nobody
+     holds locked is stale and ignored.
 
-  ```python
-  with open(os.environ["SWARMIFY_GPU_LOCK"], "a") as lock:
-      fcntl.flock(lock, fcntl.LOCK_EX)  # try LOCK_NB first to report the wait
-      subprocess.run(gpu_command)
-  ```
-
-  Hold it per process, not per job, so other jobs get the card between a long job's steps.
-  Without the variable (not granted, or run outside Swarmify) a package runs unlocked.
-  remotion_render holds it for each GPU render chunk.
+  `swarmify_connectors/resources.py` is the core's copy (`hold`, `snapshot`); a package carries
+  its own, as blender_render's `_slot` (it cannot import the core). Hold a Slot per process, not
+  per job, so other jobs get the card between a long job's steps. `permissions.hold` asks the
+  core to hold one Slot of each Resource it names around each whole call of a connector stage
+  (for a package that cannot lock by itself); `hold` implies `resources`. A waiting stage says so
+  on the run page (`waiting for gpu: held by <run> / <stage> for 3 min`, the stage's `waiting`),
+  and `GET /api/resources` and the MCP tool `resources` list every Resource's Slots, holders and
+  waiters. `SWARMIFY_GPU_LOCK` still names the gpu's first Slot (`gpu/0.lock`) for one release,
+  for packages from before Resources.
+- Run identity: every package process started for a stage (a connector stage's, a tool server
+  lent to a swarm stage or a Build Session) gets `SWARMIFY_RUN_ID`, `SWARMIFY_RUN_ROOT` (the top
+  run of its family, the run itself when it has no parent) and `SWARMIFY_STAGE_ID`, to scope what
+  it makes to one run family.
 - Environment: its own Setup values and the few variables every process needs, never another
   package's nor the API's own (the sign-in password, the Claude token), whatever starts it. A
   tool's MCP server (a swarm stage's, a Build Session's) also gets `SWARMIFY_ASSETS`, the full
@@ -1568,7 +1583,7 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   `DEST/swarmify-data-backup-LABEL-YYYYMMDD-HHMM.tar.zst` from the `swarmify_data` volume in a
   throwaway container of the api image: each SQLite file copied with SQLite's backup API, the
   rest as is, less what can be made again (`node_modules`, `npm-cache`, `sandbox/cache`, a run's
-  `build` and `frames` folders, `assets/motionlib/.store`). The tar streams through `zstd -T0 -1`
+  `build` and `frames` folders; a world's Owned Folders are kept whole). The tar streams through `zstd -T0 -1`
   on every core (a `.tgz` through `gzip -1` from an api image older than zstd); older `.tgz`
   backups still count toward keeping 3. The backups that keeping 3 deletes
   anyway (all but the newest 2) go first, once the 2 that stay read back whole. It refuses to

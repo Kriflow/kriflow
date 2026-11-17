@@ -111,6 +111,8 @@ export function decisionLine(d: Decision): string {
   const note = d.note ? ` Your note: ${d.note}` : "";
   const what = d.choice ? ` "${d.choice}"` : "";
   if (d.send_back_to) return `You sent it back to ${d.send_back_to}.${note}`;
+  const picked = d.artifacts?.length ?? 0;
+  if (d.kind === "pick" && picked > 1) return `You picked ${picked}, "${d.choice ?? ""}" first.${note}`;
   if (d.kind === "pick") return `You picked${what || " nothing"}.${note}`;
   if (d.kind === "confirm") return `You confirmed.${note}`;
   return `You approved${what}.${note}`;

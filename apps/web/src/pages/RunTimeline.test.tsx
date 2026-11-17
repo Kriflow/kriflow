@@ -560,6 +560,16 @@ test("a step waiting for the network says so on the rail and in its panel", asyn
   await expect.element(screen.getByTestId("stage-network")).toHaveTextContent(note);
 });
 
+test("a step waiting for a Resource names it on the rail and who holds it in its panel", async () => {
+  const note = "waiting for seat: held by Translate notes / translate for 3 min";
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(run("running", [stage(0, "translate", "connector", "running", { ...timed(0, null), waiting: note })])),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await expect.element(screen.getByRole("button", { name: "Step 1, translate, waiting for seat" })).toBeVisible();
+  await expect.element(screen.getByTestId("stage-waiting")).toHaveTextContent("Waiting for seat: held by Translate notes / translate for 3 min.");
+});
+
 test("an unknown run explains itself and links back to runs", async () => {
   fakeFetch({});
   const { screen } = await mountAt("/worlds/world_1/runs/run_nope");

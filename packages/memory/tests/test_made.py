@@ -2,6 +2,7 @@
 went on to make something, and every publish record, so research never pitches them again
 whether or not the graph is current."""
 
+import json
 import re
 from contextlib import closing
 from datetime import UTC, datetime
@@ -173,3 +174,32 @@ def test_with_no_pick_a_run_falls_back_to_its_metadata_title(memory: Memory) -> 
     )
     (line,) = made(memory.world_folder("w1"), {})
     assert line.startswith("- Why Your Cat Stares At The Wall (published")
+
+
+def _multi(memory: Memory, run: str, picked: list[str], parked: list[str], rejected: str) -> None:
+    folder = memory.stage_folder("w1", run, "s2")
+    out = json.dumps([{"artifact": rejected, "reason": "seen it before"}])
+    (folder / "decision.md").write_text(
+        f'---\ntype: "decision"\nrun: "{run}"\nkind: "pick"\nartifact: "{picked[0]}"\n'
+        f"artifacts: {json.dumps(picked)}\nparked: {json.dumps(parked)}\nrejected: {out}\n"
+        'created: "2026-11-07T00:00:00+00:00"\n---\n\n# Decision\n\nPicked them.\n'
+    )
+
+
+def test_parked_and_rejected_cards_are_listed_with_the_reason_and_a_promote_unparks(
+    memory: Memory,
+) -> None:
+    a, b = _idea(memory, "r5", "Card A"), _idea(memory, "r5", "Card B")
+    c = _idea(memory, "r5", "Card C", gist="the third one")
+    d = _idea(memory, "r5", "Card D")
+    _multi(memory, "r5", [a, b], [c], d)
+    lines = memory.made("w1", {"r5": "done"})
+    assert "- Parked: Card C (2026-11-07): gist: the third one; The pitch of Card C." in lines
+    assert "- Rejected: Card D: seen it before" in lines
+    assert not any("Card B" in line for line in lines if line.startswith("- Parked"))
+    status = memory.card_status("w1")
+    assert [status[p].status for p in (a, b, c, d)] == ["picked", "picked", "parked", "rejected"]
+    assert status[d].reason == "seen it before"
+    promoted = memory.card_status("w1", promoted={c})
+    assert promoted[c].status == "picked"
+    assert not any("Parked" in line for line in memory.made("w1", {"r5": "done"}, {c}))

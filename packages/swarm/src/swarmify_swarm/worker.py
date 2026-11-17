@@ -23,6 +23,7 @@ with the world it came from.
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -77,8 +78,9 @@ STAGE_TOOLS = {"web_search": ["WebSearch", "WebFetch"], "graph": []}
 """What each Agent Tool (the kernel's AGENT_TOOLS) grants; the graph tools come with every
 non-baseline stage. A stage's other `tools` name connectors, allowed as `mcp__<name>__*`."""
 
-Servers = Callable[[str, list[str], dict[str, str]], dict[str, dict[str, Any]]]
-"""(world id, connector names, package versions) to their MCP server configs, for the session.
+Servers = Callable[..., dict[str, dict[str, Any]]]
+"""(world id, connector names, package versions, run=(run id, stage id)) to their MCP server
+configs, for the session; `run` names the processes' run identity.
 The run puts the package versions its workflow version recorded in the stage's config as
 `packages` (issue 223)."""
 Budget = Callable[[str], str | None]
@@ -238,7 +240,9 @@ def _decisions(world_folder: Path, run_id: str) -> list[str]:
     for _, path, fields, body in sorted(newest.values(), key=lambda d: d[0]):
         if fields.get("send_back_to"):
             continue
-        outcome = " ".join(ln for ln in body.splitlines()[1:] if ln.strip())
+        # The cards a pick passed on are no work of this run: idea stages read them in `made`.
+        kept = re.split(r"\n\n(?:Parked|Rejected):\n", body)[0]
+        outcome = " ".join(ln for ln in kept.splitlines()[1:] if ln.strip())
         artifact = fields.get("artifact")
         picked = f" The artifact it names (Read it): {world_folder / artifact}." if artifact else ""
         out.append(
@@ -270,8 +274,21 @@ def _wants(config: dict[str, Any]) -> str:
     return out.strip()
 
 
-REPEATS = "\nLeave out any item that repeats one of them."
+REPEATS = (
+    "\nLeave out any item that repeats one of them. Never offer a Rejected idea or a close"
+    " variant of it. A Parked idea may be offered again when it still fits; say it was parked."
+)
 """What the judge of an idea stage is told after the world's made list."""
+
+
+def _prior(prior: list[str]) -> str:
+    """The run's artifacts as a stage's prompt names them. A `given/` file is what a Fan-out
+    Stage gave this run to work on (ADR 0031): the Item comes first."""
+    if not prior:
+        return ""
+    given = [p for p in prior if p.startswith("given/")]
+    item = f" This run was given {', '.join(given)} to work on: read it first." if given else ""
+    return f"Artifacts of earlier stages: {', '.join(prior)}.{item}"
 
 
 def _made(config: dict[str, Any]) -> str:
@@ -283,7 +300,10 @@ def _made(config: dict[str, Any]) -> str:
     return "\n".join(
         [
             "Already made in this world, newest first. Do not pitch any of these again, nor the"
-            " same core fact, study or premise under a new title or angle:",
+            " same core fact, study or premise under a new title or angle. Then the ideas a"
+            " pick passed on: a Rejected one (with why) is never offered again, nor a close"
+            " variant; a Parked one may be offered again when it still fits, saying it was"
+            " parked:",
             *lines,
         ]
     )
@@ -297,7 +317,7 @@ def _schema(at: "_At", kind: OutputType | None) -> dict[str, Any] | None:
 
 
 def no_servers(
-    _world_id: str, _names: list[str], _packages: dict[str, str]
+    _world_id: str, _names: list[str], _packages: dict[str, str], run: Any = None
 ) -> dict[str, dict[str, Any]]:
     return {}
 
@@ -508,7 +528,7 @@ class Swarm:
                 f"Goal: {goal}",
                 f"Done when: {at.config.get('done_when', '')}",
                 _wants(at.config),
-                f"Artifacts of earlier stages: {', '.join(prior)}." if prior else "",
+                _prior(prior),
                 self._pins(at),
                 _made(at.config),
                 "Query the graph for what the world already knows, then answer with the tasks:"
@@ -581,7 +601,12 @@ class Swarm:
                     at.baseline,
                 ),
                 allowed=allowed,
-                servers=self.servers(at.world_id, servers, at.config.get("packages") or {}),
+                servers=self.servers(
+                    at.world_id,
+                    servers,
+                    at.config.get("packages") or {},
+                    run=(at.run_id, at.stage_id),
+                ),
                 resume=resume,
                 max_turns=MAX_TURNS,
                 model=entry.model,
@@ -1002,7 +1027,7 @@ class Swarm:
                 f"Goal: {at.config.get('goal', '')}",
                 f"Done when: {at.config.get('done_when', '')}",
                 _wants(at.config),
-                f"Artifacts of earlier stages: {', '.join(prior)}." if prior else "",
+                _prior(prior),
                 self._pins(at),
                 _made(at.config),
                 *(f"Sent back to you with this note: {n}" for n in at.notes),

@@ -4,6 +4,7 @@ typed goal, fork a run or promote a Library artifact into one, list runs, read o
 Changes, read the baseline it is measured against, the world's spend this month, list every open
 gate and save a finished run as a workflow."""
 
+import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ from swarmify_runs import (
     Runner,
     StageDef,
 )
+from swarmify_runs.control import run_folder
 from swarmify_swarm import OPERATOR, Task
 from swarmify_swarm.network import Waiting
 from swarmify_workflows import Invalid, Stage, Workflows, WorkflowVersion, dump_workflow
@@ -85,10 +87,17 @@ class SetBudget(BaseModel):
     budget_usd: float = Field(gt=0, allow_inf_nan=False)
 
 
+class Reject(BaseModel):
+    """A card the operator rejects at a pick gate, and why (optional)."""
+
+    artifact: str = Field(max_length=2_000)
+    reason: str = Field(default="", max_length=2_000)
+
+
 class Decide(BaseModel):
-    """A gate answer. Pick gates need `choice` or `artifact`; approve gates may name
-    `send_back_to`, an earlier stage that then runs again with `note` in its context; confirm
-    gates take neither."""
+    """A gate answer. Pick gates need `choice` or `artifact`, or `artifacts` at a gate that
+    takes several picks; approve gates may name `send_back_to`, an earlier stage that then runs
+    again with `note` in its context; confirm gates take neither."""
 
     choice: str | None = Field(default=None, max_length=2_000)
     note: str = Field(default="", max_length=10_000)
@@ -96,6 +105,12 @@ class Decide(BaseModel):
     artifact: str | None = Field(default=None, max_length=2_000)
     """The chosen artifact's path in the world folder, as `GET /runs/{run_id}/artifacts` lists
     it: the card picked, or what was approved. A pick with no `choice` takes its title."""
+    artifacts: list[str] | None = Field(default=None, max_length=10)
+    """At a pick gate: the cards picked, in pick order, up to the gate's `picks`; the first
+    stands as `artifact`. The cards it offered and nobody picked or rejected are Parked."""
+    rejects: list[Reject] | None = Field(default=None, max_length=100)
+    """At a pick gate: offered cards rejected, each with an optional reason, which idea stages
+    read so they never offer them again."""
     edits: dict[str, Any] | None = None
     """At a gate before a publish stage: new values for fields its connector marks editable, by
     key. Every field's value as posted is recorded with the decision."""
@@ -223,6 +238,7 @@ def checker(
             run.name,
             [(d.type, d.name, d.config) for d in stages if d.type != RETRO.type],
             agents=version.model.agents if version else None,
+            given=version.model.given if version else (),
         )
         draft = workflows.check(
             run.world_id, yaml, run.workflow_id, version.packages if version else None
@@ -308,6 +324,19 @@ def network_note(w: Waiting) -> str:
     )
 
 
+def resource_note(wait: dict[str, Any], runner: Runner, now: float) -> str:
+    """A stage's wait for a Resource in words: who holds it and for how long."""
+    said = f"waiting for {wait['resource']}"
+    if not wait["holders"]:
+        return said
+    held = wait["holders"][0]
+    run = runner.get(str(held.get("run")))
+    stage = next((s.name for s in run.stages if s.id == held.get("stage")), None) if run else None
+    who = f"{run.name} / {stage or held.get('stage')}" if run else str(held.get("package", "?"))
+    minutes = int((now - float(held.get("since") or now)) // 60)
+    return f"{said}: held by {who} for {minutes} min" if minutes else f"{said}: held by {who}"
+
+
 def router(
     runner: Runner,
     workflows: Workflows,
@@ -316,11 +345,13 @@ def router(
     retro: bool = True,
     tasks_of: TasksOf = lambda _stage_id: [],
     waiting: Callable[[], list[Waiting]] = lambda: [],
+    resource_waits: Callable[[], list[dict[str, Any]]] = lambda: [],
 ) -> APIRouter:
     """`tools_for` names the world's connectors an Ad Hoc Run's stage gets as its tools. With
     `retro`, every run but a baseline ends with the Retro stage. `tasks_of` reads a swarm
     stage's whiteboard, whose hand-added tasks a run saved as a workflow keeps. `waiting` names
-    the agents waiting for the network, which a run's stage then says."""
+    the agents waiting for the network and `resource_waits` the processes waiting for a
+    Resource (resources.waits), which a run's running stage then says."""
     api = APIRouter(prefix="/api", tags=["runs"])
     pin = pinner(workflows)
 
@@ -457,6 +488,9 @@ def router(
                 for d in defs
             ],
             budget_usd=run.budget_usd,
+            given=sorted(
+                p.name for p in (run_folder(runner.data_dir, run) / "given").glob("[!.]*")
+            ),
         )
         try:
             return workflows.save(run.world_id, yaml)
@@ -476,9 +510,17 @@ def router(
         if run is None:
             raise HTTPException(404, "run not found")
         notes = {w.stage_id: network_note(w) for w in reversed(waiting()) if w.run_id == run_id}
-        if not notes:
+        running = {s.id for s in run.stages if s.status == "running"}
+        now = time.time()
+        waits = {
+            str(w.get("stage")): resource_note(w, runner, now)
+            for w in resource_waits()
+            if w.get("run") == run_id and w.get("stage") in running
+        }
+        if not notes and not waits:
             return run
-        return replace(run, stages=[replace(s, network=notes.get(s.id)) for s in run.stages])
+        stages = [replace(s, network=notes.get(s.id), waiting=waits.get(s.id)) for s in run.stages]
+        return replace(run, stages=stages)
 
     @api.get("/runs/{run_id}/baseline")
     def get_baseline(run_id: str) -> Run | None:
@@ -511,6 +553,8 @@ def router(
                 artifact=body.artifact,
                 edits=body.edits,
                 seen=body.seen,
+                artifacts=body.artifacts,
+                rejects=[r.model_dump() for r in body.rejects or []],
             )
         )
 

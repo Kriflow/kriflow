@@ -21,13 +21,13 @@ def test_backup_leaves_out_what_can_be_made_again_and_keeps_the_newest(tmp_path,
         "worlds/w/runs/r/s/publish.outcomes.json",
         "worlds/w/assets/motionlib/clips.json",
         "worlds/w/assets/build/keep.txt",
+        "worlds/w/assets/motionlib/.store/clip.bin",
     ]
     dropped = [
         "packages/p/node_modules/x.js",
         "npm-cache/x",
         "worlds/w/runs/r/s/build/out.mp4",
         "worlds/w/runs/r/s/frames/0001.png",
-        "worlds/w/assets/motionlib/.store/clip.bin",
     ]
     for rel in kept + dropped:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)

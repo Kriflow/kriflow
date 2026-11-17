@@ -699,6 +699,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Resources
+         * @description Every Resource with its Slots, their holders and its waiters (ADR 0030); install-wide.
+         *     Each note names its run, top run, stage, package and since (Unix seconds).
+         */
+        get: operations["list_resources_api_resources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/worlds/{world_id}/connectors": {
         parameters: {
             query?: never;
@@ -1356,7 +1377,8 @@ export interface paths {
         };
         /**
          * Library
-         * @description Every artifact of the world across its runs, newest first.
+         * @description Every artifact of the world across its runs, newest first; with `status`, only the
+         *     cards a pick gate left so (`parked`: offered, not picked, not yet promoted).
          */
         get: operations["library_api_worlds__world_id__library_get"];
         put?: never;
@@ -2625,9 +2647,9 @@ export interface components {
         };
         /**
          * Decide
-         * @description A gate answer. Pick gates need `choice` or `artifact`; approve gates may name
-         *     `send_back_to`, an earlier stage that then runs again with `note` in its context; confirm
-         *     gates take neither.
+         * @description A gate answer. Pick gates need `choice` or `artifact`, or `artifacts` at a gate that
+         *     takes several picks; approve gates may name `send_back_to`, an earlier stage that then runs
+         *     again with `note` in its context; confirm gates take neither.
          */
         Decide: {
             /** Choice */
@@ -2641,6 +2663,10 @@ export interface components {
             send_back_to?: string | null;
             /** Artifact */
             artifact?: string | null;
+            /** Artifacts */
+            artifacts?: string[] | null;
+            /** Rejects */
+            rejects?: components["schemas"]["Reject"][] | null;
             /** Edits */
             edits?: {
                 [key: string]: unknown;
@@ -2703,6 +2729,18 @@ export interface components {
             } | null;
             /** By */
             by?: string | null;
+            /** Artifacts */
+            artifacts?: string[];
+            /** Parked */
+            parked?: string[];
+            /** Rejected */
+            rejected?: {
+                [key: string]: string;
+            }[];
+            /** Titles */
+            titles?: {
+                [key: string]: string;
+            };
         };
         /**
          * Device
@@ -2820,6 +2858,13 @@ export interface components {
             budget_usd?: number | null;
             /** Spent Usd */
             spent_usd?: number | null;
+            /** Item */
+            item?: string | null;
+            /**
+             * Picks
+             * @default 1
+             */
+            picks: number;
         };
         /**
          * GateStage
@@ -2837,6 +2882,8 @@ export interface components {
             kind: string;
             /** Max Send Backs */
             max_send_backs?: number | null;
+            /** Picks */
+            picks?: number | null;
             /**
              * Type
              * @default gate
@@ -2929,6 +2976,21 @@ export interface components {
             permissions: string[];
         };
         /**
+         * ItemView
+         * @description An Item of a fan-out stage's latest visit as the timeline shows it, with its child run.
+         */
+        ItemView: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            child?: components["schemas"]["RunLink"] | null;
+            /** Error */
+            error?: string | null;
+        };
+        /**
          * Judgement
          * @description The blind judge's pick between the two arms' trials `index` of one task. `winner` is
          *     the better arm, None for a tie.
@@ -2991,6 +3053,16 @@ export interface components {
             stage_index: number | null;
             /** Stage Name */
             stage_name: string;
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /**
          * ListedWorkflow
@@ -3638,6 +3710,19 @@ export interface components {
              */
             cost_usd: number;
         };
+        /**
+         * Reject
+         * @description A card the operator rejects at a pick gate, and why (optional).
+         */
+        Reject: {
+            /** Artifact */
+            artifact: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /** RenameBody */
         RenameBody: {
             /** Name */
@@ -3861,6 +3946,10 @@ export interface components {
             };
             /** Network */
             network?: string | null;
+            /** Items */
+            items?: components["schemas"]["ItemView"][];
+            /** Waiting */
+            waiting?: string | null;
         };
         /** SaveAsWorkflow */
         SaveAsWorkflow: {
@@ -4583,10 +4672,15 @@ export interface components {
             budget_usd?: number | null;
             /** Agents */
             agents?: number | null;
+            /** Given */
+            given?: string[];
         };
         /**
          * WorkflowStage
-         * @description Runs workflow `runs` as a child run and takes the named artifacts from it.
+         * @description Runs workflow `runs` as a child run and takes the named artifacts from it. With
+         *     `for_each` it is a Fan-out Stage (ADR 0031): one child run per Item of an earlier stage's
+         *     cards, the cards picked at a pick gate, or the elements of a JSON list file, each given its
+         *     Item as file `as_` (`as` in YAML), at most `max_parallel` at once.
          */
         WorkflowStage: {
             /** Name */
@@ -4595,6 +4689,12 @@ export interface components {
             runs: string;
             /** Take */
             take?: string[];
+            /** For Each */
+            for_each?: string | null;
+            /** As */
+            as_?: string | null;
+            /** Max Parallel */
+            max_parallel?: number | null;
             /**
              * Type
              * @default workflow
@@ -6173,6 +6273,28 @@ export interface operations {
             };
         };
     };
+    list_resources_api_resources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
     list_connectors_api_worlds__world_id__connectors_get: {
         parameters: {
             query?: never;
@@ -7304,7 +7426,9 @@ export interface operations {
     };
     library_api_worlds__world_id__library_get: {
         parameters: {
-            query?: never;
+            query?: {
+                status?: ("picked" | "parked" | "rejected") | null;
+            };
             header?: never;
             path: {
                 world_id: string;

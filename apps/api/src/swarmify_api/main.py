@@ -45,6 +45,7 @@ from swarmify_api import (
     auth,
     connectors,
     evals,
+    fanout,
     graph,
     learning,
     library,
@@ -71,6 +72,7 @@ from swarmify_connectors import (
     Packages,
     build_session,
     publish,
+    resources,
 )
 from swarmify_connectors import SqliteStorage as ConnectorStorage
 from swarmify_kernel import AGENT_TOOLS, Event
@@ -889,7 +891,8 @@ def create_app(
             # behind the graph is. Failed and aborted runs made nothing.
             others = runner.list_all(run.world_id)
             made = {r.id: r.status for r in others if r.id != run.id and r.status in UNSPOILED}
-            config["made"] = memory.made(run.world_id, made)
+            promoted = {r.promoted_from for r in others if r.promoted_from}  # unparks a card
+            config["made"] = memory.made(run.world_id, made, promoted)
         try:
             swarm.run_stage(
                 run.world_id,
@@ -946,10 +949,11 @@ def create_app(
             by_stage[a.stage_id] = by_stage.get(a.stage_id, 0.0) + a.cost_usd
         return by_stage
 
-    def take(child: Run, run: Run, stage_id: str, names: list[str]) -> None:
+    def take(child: Run, run: Run, stage_id: str, names: list[str], folder: str = "") -> None:
         stage = next(s.name for s in run.stages if s.id == stage_id)
         source = (child.world_id, child.id, [s.id for s in child.stages])
-        memory.copy_artifacts(source, names, run.world_id, run.id, stage_id, f"workflow:{stage}")
+        author = f"workflow:{stage}"
+        memory.copy_artifacts(source, names, run.world_id, run.id, stage_id, author, folder)
 
     def setting(world_id: str, name: str) -> Any:
         world = world_svc.get(world_id)
@@ -981,13 +985,18 @@ def create_app(
         retro=run_retro,
         worlds=lambda: [w.id for w in world_svc.list_all()],
         poll_seconds=max(0.05, min(poll_seconds, 1.0)),
+        items=lambda run, index, stage: fanout.items(memory, run, index, stage),
     )
     workflow_svc = workflow_service(root, registry, runner)
     runner.pin = runs.pinner(workflow_svc)
     registry.aborted = lambda run_id: runner.storage.stop_of(run_id) == "abort"
+    registry.root_of = lambda run_id: runner.top(run).id if (run := runner.get(run_id)) else run_id
     runner.check = runs.checker(workflow_svc)
     runner.check_text = text_check(registry, pins)
     runner.stage_spend = stage_spend
+    runner.offered = lambda run, index: [
+        c.path for c in remote.offered(agents.run_artifacts(memory, run, index))
+    ]
     # On upgrade: versions saved before they recorded package versions take the world's pins.
     workflow_svc.stamp(registry.enabled)
 
@@ -1115,8 +1124,16 @@ def create_app(
             retro,
             whiteboard.list_tasks,
             swarm.waiting,
+            lambda: resources.waits(registry.packages.sandbox.resources),
         )  # fmt: skip
     )
+
+    @app.get("/api/resources")
+    def list_resources() -> list[dict[str, Any]]:
+        """Every Resource with its Slots, their holders and its waiters (ADR 0030); install-wide.
+        Each note names its run, top run, stage, package and since (Unix seconds)."""
+        return resources.snapshot(registry.packages.sandbox.resources)
+
     app.include_router(connectors.router(registry, world_svc, workflow_svc))
     app.include_router(tasks.router(whiteboard, runner.get, clock))
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))

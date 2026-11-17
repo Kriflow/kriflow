@@ -41,7 +41,7 @@ def validate(
     references: Mapping[str, Sequence[str]],
 ) -> list[Violation]:
     out: list[Violation] = []
-    produced: set[str] = set()
+    produced: set[str] = set(model.given)
     swarm_made: dict[str, SwarmStage] = {}
     """The swarm stage that last produced each file, for typed contracts (issue 133)."""
 
@@ -182,7 +182,28 @@ def validate(
                 out.append(
                     Violation("unknown_workflow", f"no workflow with id '{stage.runs}'", stage.name)
                 )
+            earlier = {s.name for s in model.stages[:index]}
+            source = stage.for_each
+            if source is not None and source not in earlier and source not in produced:
+                out.append(
+                    Violation(
+                        "for_each_unknown",
+                        f"for_each: '{source}' must name an earlier stage, or a .json file an"
+                        " earlier stage produces or takes",
+                        stage.name,
+                    )
+                )
+            elif source is not None and source not in earlier and not source.endswith(".json"):
+                out.append(
+                    Violation(
+                        "for_each_unknown",
+                        f"for_each: '{source}' is a file, so it must be a JSON list (.json)",
+                        stage.name,
+                    )
+                )
             produced.update(stage.take)
+            if source is not None:  # the join's index, which a later stage may read
+                produced.add("items.json")
             for name in stage.take:
                 swarm_made.pop(name, None)
         # gates produce a decision, which no stage declares as input

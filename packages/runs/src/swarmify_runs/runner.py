@@ -18,7 +18,9 @@ The workflow is the only writer of run state. People act through RunControl, who
 workflow waits for them; around a stage it drains what arrived meanwhile.
 """
 
+import json
 import logging
+import re
 import shutil
 import threading
 import time
@@ -26,7 +28,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from dbos import DBOS, DBOSConfig, SetWorkflowID
 
@@ -48,6 +50,7 @@ from swarmify_runs.control import (
     no_spend,
     queue_name,
     run_folder,
+    stage_folder,
     with_sidecar,
 )
 from swarmify_runs.machine import (
@@ -58,6 +61,7 @@ from swarmify_runs.machine import (
     GateAnswered,
     GateRaised,
     Illegal,
+    ItemsRetried,
     MonthSpent,
     OpenGate,
     Paused,
@@ -73,7 +77,7 @@ from swarmify_runs.machine import (
     Started,
     transition,
 )
-from swarmify_runs.model import Pinned, Run, StageDef
+from swarmify_runs.model import Item, ItemView, Pinned, Run, StageDef, items_ask
 from swarmify_runs.ports import Notifier, Storage
 
 CHILD_QUEUE = "child-runs"
@@ -85,7 +89,7 @@ MAX_DEPTH = 2
 guards a run against workflows edited after it pinned its version."""
 # ponytail: pinned so a code change does not orphan runs in flight (DBOS only recovers
 # workflows of the current application version). Bump it when the workflow's step order changes.
-APP_VERSION = "5"
+APP_VERSION = "6"
 
 Connector = Callable[[Run, str, StageDef], None]
 """Calls one connector stage. Arguments: the run, the stage id (the idempotency key) and the
@@ -96,9 +100,22 @@ OverBudget when the run's Budget stopped its agents."""
 Retro = Callable[[Run, str, StageDef], bool]
 """Runs the retro stage of a run, with the same arguments. True when it recorded a proposal:
 the stage then waits at a gate of kind `skill` until a person decides it (ADR 0008)."""
-Take = Callable[[Run, Run, str, list[str]], None]
-"""Copies the named artifacts of a child run into its parent's stage. Arguments: the child, the
-parent, the parent's stage id and the names. Raises to fail the stage."""
+
+
+class Take(Protocol):
+    """Copies the named artifacts of a child run into its parent's stage. Arguments: the child,
+    the parent, the parent's stage id, the names and, for a fan-out stage's Item, the subfolder
+    of the stage's artifacts they go in (the Item's key). Raises to fail the stage."""
+
+    def __call__(
+        self, child: Run, parent: Run, stage_id: str, names: list[str], folder: str = "", /
+    ) -> None: ...
+
+
+Items = Callable[[Run, int, StageDef], list[Item]]
+"""The Items of the fan-out stage at an index of a run, from its `for_each` source: an earlier
+stage's cards, the cards picked at a pick gate, or a JSON list file's elements (ADR 0031).
+Raises to fail the stage."""
 
 _runner: "Runner | None" = None
 # Runs whose workflow thread sits in recv. Shutdown wakes them, because DBOS cannot interrupt a
@@ -156,6 +173,7 @@ class Runner(RunControl):
         cap_for: CapFor | None = None,
         retro: Retro | None = None,
         worlds: Callable[[], list[str]] | None = None,
+        items: Items | None = None,
     ) -> None:
         """`pin` and `take` serve workflow stages; without `pin` they fail the run. `spend` sums
         the agents' estimated cost of runs, for the Budget. `monthly` is each world's Monthly
@@ -169,6 +187,7 @@ class Runner(RunControl):
         self.retro = retro
         self.pin = pin
         self.take = take
+        self.items = items
         self.cap_for = cap_for or (lambda _world_id: cap)
         self.poll_seconds = poll_seconds
         self.worlds = worlds
@@ -389,8 +408,14 @@ def execute_run(run_id: str) -> str:
             taken = _take(run_id, event.child_run_id, event.status)
             if taken is None:
                 continue  # a child of an earlier visit to the stage
-            index, error = taken
-            event = StageFinished(index) if error is None else StageFailed(index)
+            index, error, fan = taken
+            if fan:  # one Item settled: start the next, or join once all have
+                _, settled, error = _fan_out(run_id, index, entering=False)
+                if settled is None:
+                    continue
+                event = settled
+            else:
+                event = StageFinished(index) if error is None else StageFailed(index)
         try:
             state, commands = transition(tuple(kinds), state, event)
         except Illegal as exc:
@@ -411,10 +436,20 @@ def execute_run(run_id: str) -> str:
                 message = {"action": "child", "child": run_id, "status": state.status}
                 DBOS.send(parent, message, topic=CONTROL_TOPIC)
             return state.status
+        if isinstance(event, Resumed) and not commands and "running" in state.stages:
+            running = state.stages.index("running")
+            if kinds[running] == "workflow":  # a fan-out starts the Items a pause held back
+                _, settled, error = _fan_out(run_id, running, entering=False)
+                events = [*events, *([settled] if settled else [])]
+                continue
         if events or not commands or isinstance(commands[0], OpenGate):
             continue
         index, error = commands[0].index, None
         if kinds[index] == "workflow":
+            fan, settled, error = _fan_out(run_id, index, entering=True)
+            if fan:  # its children run on; their ends arrive on the control topic
+                events = [*_drain(run_id), *([settled] if settled else [])]
+                continue
             try:
                 child = _start_child(run_id, index)
             except Exception as exc:
@@ -444,6 +479,8 @@ def _as_event(message: dict[str, Any]) -> RunEvent | _ChildEnded | None:
     match message["action"]:
         case "child":
             return _ChildEnded(message["child"], message["status"])
+        case "decide" if message.get("retry"):
+            return ItemsRetried(message["index"])
         case "decide" if "to" in message:
             return SentBack(message["index"], message["to"])
         case "decide":
@@ -509,16 +546,9 @@ def _start_child(run_id: str, index: int) -> str:
         raise KeyError(f"run not found: {run_id}")
     if (child := run.stages[index].child) is not None:
         return child.id
-    if runner.pin is None:
-        raise NotImplementedError("workflow stages need a pin to find their workflow")
-    depth, above = 1, run.parent_run_id
-    while above is not None:
-        depth, parent = depth + 1, runner.storage.get_run(above)
-        above = parent.parent_run_id if parent else None
-    if depth > MAX_DEPTH:
-        raise ValueError(f"child runs nest at most {MAX_DEPTH} deep")
+    pin = _child_pin(runner, run)
     _, stage = runner.storage.stage_def(run_id, index)
-    pinned = runner.pin(str(stage.config.get("runs") or ""))
+    pinned = pin(str(stage.config.get("runs") or ""))
     now = datetime.now(UTC).isoformat()
     child = Run(
         new_id("run"), pinned.world_id, pinned.workflow_id, pinned.version, pinned.name,
@@ -532,13 +562,219 @@ def _start_child(run_id: str, index: int) -> str:
     return child.id
 
 
-@DBOS.step(name="swarmify.take")
-def _take(run_id: str, child_run_id: str, status: str) -> tuple[int, str | None] | None:
-    """The stage a child ended for and its error, after copying the artifacts it names into the
-    stage. None when no running stage waits on this child."""
+def _child_pin(runner: Runner, run: Run) -> Pin:
+    """The pin a child of `run` starts with. Raises when there is none or the child would nest
+    deeper than MAX_DEPTH (ADR 0013)."""
+    if runner.pin is None:
+        raise NotImplementedError("workflow stages need a pin to find their workflow")
+    depth, above = 1, run.parent_run_id
+    while above is not None:
+        depth, parent = depth + 1, runner.storage.get_run(above)
+        above = parent.parent_run_id if parent else None
+    if depth > MAX_DEPTH:
+        raise ValueError(f"child runs nest at most {MAX_DEPTH} deep")
+    return runner.pin
+
+
+def _fan_out(run_id: str, index: int, entering: bool) -> tuple[bool, RunEvent | None, str | None]:
+    """Move the fan-out stage at `index` on (ADR 0031): start pending Items up to its
+    `max_parallel`, enqueue their children and, once every Item settled, finish the stage or
+    raise its `items` gate when some failed. Returns (whether the stage fans out, the event its
+    settling makes or None while children run, an error that fails it)."""
+    try:
+        started, outcome = _fan_next(run_id, index, entering)
+    except Exception as exc:
+        return True, StageFailed(index), f"{type(exc).__name__}: {exc}"
+    for child in started:
+        with SetWorkflowID(child):  # a workflow-level op, so a replay never enqueues twice
+            DBOS.enqueue_workflow(CHILD_QUEUE, execute_run, child)
+    settled = {"done": StageFinished(index), "failed": GateRaised(index)}.get(outcome)
+    return outcome != "plain", settled, None
+
+
+@DBOS.step(name="swarmify.fan_next")
+def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
+    """Start the next children of the fan-out stage at `index`. Returns the ids started and
+    `plain` (no for_each), `wait` (children run), `done` or `failed` (every Item settled, some
+    failed). On `entering` the stage just became running: its visit's Items are planned, or, on
+    a retry from its gate, the failed ones go again."""
     runner = _current()
     run = runner.storage.get_run(run_id)
+    if run is None:
+        raise KeyError(f"run not found: {run_id}")
+    stage_id, stage = runner.storage.stage_def(run_id, index)
+    if not stage.config.get("for_each"):
+        return [], "plain"
+    if run.stages[index].status != "running":
+        return [], "wait"  # a child that ended after the stage moved on
+    visit = run.send_backs
+    rows = runner.storage.items(run_id, index, visit)
+    if not rows:
+        rows = _plan(runner, run, index, stage, visit)
+    elif entering:
+        for _, view in rows:
+            if view.status in ("failed", "aborted"):
+                runner.storage.set_item(run_id, index, visit, view.key, "pending", None)
+        rows = runner.storage.items(run_id, index, visit)
+    held = run.status == "paused" or runner.storage.stop_of(run_id) is not None
+    live = sum(1 for _, v in rows if v.status == "running")
+    most = int(stage.config.get("max_parallel") or 2)
+    started: list[str] = []
+    for item, view in rows:
+        if held or live >= most:
+            break
+        if view.status == "pending":
+            started.append(_start_item(runner, run, index, visit, item, stage))
+            live += 1
+    rows = runner.storage.items(run_id, index, visit)
+    if any(v.status in ("pending", "running") for _, v in rows):
+        return started, "wait"
+    _join(runner, run, index, stage_id, [v for _, v in rows])
+    return started, "failed" if any(v.status != "done" for _, v in rows) else "done"
+
+
+def _plan(
+    runner: Runner, run: Run, index: int, stage: StageDef, visit: int
+) -> list[tuple[Item, ItemView]]:
+    """Record the Items of a new visit. A revisit whose note names Items (by key or title,
+    whole words, any case) runs only those; the others keep what their last visit gathered."""
+    if runner.items is None:
+        raise NotImplementedError("fan-out stages need items to read their source")
+    items, keys = [], set()
+    for item in runner.items(run, index, stage):
+        key, n = item.key, 1
+        while key in keys:  # two cards of one slug still get a folder each
+            n, key = n + 1, f"{item.key}-{n + 1}"
+        keys.add(key)
+        items.append(Item(key, item.title, item.file, item.data))
+    note = run.send_back_note(stage.name)
+    named = {i.key for i in items if any(_says(note, w) for w in (i.key, i.title))}
+    before = {v.key: v for _, v in runner.storage.items(run.id, index)} if visit else {}
+    rows = [
+        (i, before[i.key] if named and i.key not in named and i.key in before else _fresh(i))
+        for i in items
+    ]
+    runner.storage.add_items(run.id, index, visit, rows)
+    return rows
+
+
+def _fresh(item: Item) -> ItemView:
+    return ItemView(item.key, item.title, "pending")
+
+
+def _says(note: str, word: str) -> bool:
+    return bool(word) and re.search(rf"(?<!\w){re.escape(word)}(?!\w)", note, re.I) is not None
+
+
+def _start_item(
+    runner: Runner, run: Run, index: int, visit: int, item: Item, stage: StageDef
+) -> str:
+    """Record the child run of one Item, with the Item as its given input, and link it."""
+    pinned = _child_pin(runner, run)(str(stage.config.get("runs") or ""))
+    now = datetime.now(UTC).isoformat()
+    child = Run(
+        new_id("run"), pinned.world_id, pinned.workflow_id, pinned.version,
+        f"{pinned.name}: {item.title}", "queued", now, now, [], parent_run_id=run.id,
+        baseline=run.baseline,
+    )  # fmt: skip
+    given = run_folder(runner.data_dir, child) / "given"
+    given.mkdir(parents=True, exist_ok=True)
+    name = str(stage.config.get("as_") or "item.md")
+    if item.file:
+        files = sorted(with_sidecar(Path(item.file)), key=lambda f: len(f.name))
+        for file, target in zip(files, (name, name + ".md"), strict=False):
+            shutil.copyfile(file, given / target)
+    else:
+        (given / name).write_text(json.dumps(item.data, indent=2, ensure_ascii=False) + "\n")
+    # ponytail: a crash between these two leaves an unlinked queued child, as _start_child does
+    child = runner.storage.add_run(child, pinned.stages)
+    runner.storage.set_item(run.id, index, visit, item.key, "running", child.id)
+    return child.id
+
+
+def _join(runner: Runner, run: Run, index: int, stage_id: str, views: list[ItemView]) -> None:
+    """Write the stage's `items.json`: every Item with its status, child and gathered files."""
+    folder = stage_folder(runner.data_dir, run, index) / "artifacts"
+    folder.mkdir(parents=True, exist_ok=True)
+    out = [
+        {
+            "key": v.key,
+            "title": v.title,
+            "status": v.status,
+            "child_run_id": v.child.id if v.child else None,
+            "files": sorted(
+                str(p.relative_to(folder)) for p in (folder / v.key).rglob("*") if p.is_file()
+            ),
+        }
+        for v in views
+    ]
+    path = folder / "items.json"
+    path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
+    world = runner.data_dir / "worlds" / run.world_id
+    runner.storage.record(
+        Event.new(
+            "artifact.created",
+            world_id=run.world_id,
+            run_id=run.id,
+            payload={
+                "type": "file",
+                "path": str(path.relative_to(world)),
+                "author": f"workflow:{run.stages[index].name}",
+                "stage_id": stage_id,
+            },
+        )
+    )
+
+
+def _take_item(
+    runner: Runner, run_id: str, child: Run, status: str
+) -> tuple[int, str | None, bool] | None:
+    """Settle the Item a fan-out child worked on: gather its `take` artifacts into the stage's
+    `<key>/` folder, or record why it failed. None when no running visit waits on it."""
+    found = runner.storage.item_of(child.id)
+    run = runner.storage.get_run(run_id)
+    if found is None or run is None or found[0] != run_id:
+        return None
+    _, index, visit, key = found
+    stage = run.stages[index]
+    current = {v.key: v for _, v in runner.storage.items(run_id, index, visit)}.get(key)
+    if stage.status != "running" or visit != run.send_backs or current is None:
+        return None
+    if current.status != "running" or current.child is None or current.child.id != child.id:
+        return None
+    folder = stage_folder(runner.data_dir, run, index) / "artifacts" / key
+    shutil.rmtree(folder, ignore_errors=True)  # what an earlier visit gathered gives way
+    error: str | None = None
+    if status != "done":
+        failed = next((s.error for s in child.stages if s.status == "failed" and s.error), None)
+        error = failed or f"child run {child.name} ended {status}"
+    else:
+        names = [
+            str(n) for n in runner.storage.stage_def(run_id, index)[1].config.get("take") or []
+        ]
+        try:
+            if names:
+                if runner.take is None:
+                    raise NotImplementedError("taking artifacts needs a take")
+                runner.take(child, run, stage.id, names, key)
+        except Exception as exc:
+            shutil.rmtree(folder, ignore_errors=True)
+            error = f"{type(exc).__name__}: {exc}"
+    settled = "done" if error is None else ("aborted" if status == "aborted" else "failed")
+    runner.storage.set_item(run_id, index, visit, key, settled, child.id, error)
+    return index, None, True
+
+
+@DBOS.step(name="swarmify.take")
+def _take(run_id: str, child_run_id: str, status: str) -> tuple[int, str | None, bool] | None:
+    """The stage a child ended for, its error and whether it is a fan-out stage's Item, after
+    copying the artifacts it names into the stage. None when no running stage waits on this
+    child."""
+    runner = _current()
     child = runner.storage.get_run(child_run_id)
+    if child is not None and (fan := _take_item(runner, run_id, child, status)) is not None:
+        return fan
+    run = runner.storage.get_run(run_id)
     stage = next(
         (s for s in (run.stages if run else []) if s.child and s.child.id == child_run_id),
         None,
@@ -546,7 +782,7 @@ def _take(run_id: str, child_run_id: str, status: str) -> tuple[int, str | None]
     if run is None or child is None or stage is None or stage.status != "running":
         return None
     if status != "done":
-        return stage.index, f"child run {child.name} ended {status}"
+        return stage.index, f"child run {child.name} ended {status}", False
     names = [
         str(n) for n in runner.storage.stage_def(run_id, stage.index)[1].config.get("take") or []
     ]
@@ -556,8 +792,8 @@ def _take(run_id: str, child_run_id: str, status: str) -> tuple[int, str | None]
                 raise NotImplementedError("taking artifacts needs a take")
             runner.take(child, run, stage.id, names)
     except Exception as exc:
-        return stage.index, f"{type(exc).__name__}: {exc}"
-    return stage.index, None
+        return stage.index, f"{type(exc).__name__}: {exc}", False
+    return stage.index, None, False
 
 
 @DBOS.step(name="swarmify.drop_change")
@@ -576,26 +812,45 @@ def _save(run_id: str, state: RunState, error: str | None, gate_opened: bool) ->
     run = runner.storage.save_state(run_id, state, error)
     if run is None:
         return
-    if before is not None and (closed := gate_closed(before, run)) is not None:
-        runner.notify(closed)
+    family_budget = before is not None and before.over_budget and run.parent_run_id is not None
+    if before is not None and (closed := gate_closed(before, run)) and not family_budget:
+        runner.notify(closed)  # a child's budget gate is its top run's: set_budget closes it
     if gate_opened:
         index = state.stages.index("waiting")
         _, stage = runner.storage.stage_def(run_id, index)
         shown = runner.preview_after(run, index)
         kind, ask = stage.config.get("kind") or "approve", stage.config.get("ask") or ""
+        if stage.type == "workflow":  # a fan-out stage whose Items settled, some failed
+            kind, ask = "items", items_ask([v for _, v in runner.storage.items(run_id, index)])
+        at, visit, name = run, state.send_backs, stage.name
         if state.over_budget:
             top, shown = runner.top(run), None
             kind, ask = "budget", budget.ask(top.spent_usd, top.budget_usd or 0.0)
+            if top.id != run.id:
+                # One budget gate for the family, on its top run (ADR 0013): the first member
+                # to stop announces it. Two stopping at once may both announce; never neither.
+                over = [
+                    m
+                    for m in runner.family(top.id)
+                    if (r := runner.storage.get_run(m))
+                    and r.over_budget
+                    and r.status not in TERMINAL
+                ]
+                if min(over, default=run.id) != run.id:
+                    return
+                active = next((s for s in top.stages if s.status in ("running", "waiting")), None)
+                at, visit = top, top.send_backs
+                index, name = (active.index, active.name) if active else (index, name)
         event = Event.new(
             "gate.opened",
-            world_id=run.world_id,
-            run_id=run.id,
+            world_id=at.world_id,
+            run_id=at.id,
             payload={
-                "run_id": run.id,
-                "name": run.name,
+                "run_id": at.id,
+                "name": at.name,
                 "stage_index": index,
-                "visit": state.send_backs,
-                "stage": stage.name,
+                "visit": visit,
+                "stage": name,
                 "kind": kind,
                 "ask": ask,
                 "publish": asdict(shown) if shown else None,
@@ -644,6 +899,8 @@ def gate_closed(before: Run, after: Run) -> Event | None:
             "note": decision.note,
             "by": decision.by,
         }
+        if len(decision.artifacts) > 1:
+            resolution["picked"] = [decision.titles.get(a, a) for a in decision.artifacts]
     return Event.new(
         "gate.closed",
         world_id=after.world_id,

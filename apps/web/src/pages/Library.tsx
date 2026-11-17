@@ -22,8 +22,10 @@ type Item = components["schemas"]["LibraryItem"];
 type StageDef = components["schemas"]["WorkflowModel"]["stages"][number];
 
 const ANY = "";
-type Filters = { workflow: string; stage: string; run: string; from: string; to: string };
-const NONE: Filters = { workflow: ANY, stage: ANY, run: ANY, from: ANY, to: ANY };
+type Filters = { workflow: string; stage: string; run: string; status: string; from: string; to: string };
+const NONE: Filters = { workflow: ANY, stage: ANY, run: ANY, status: ANY, from: ANY, to: ANY };
+/** A card's status at the pick gate that offered it, as the Status filter names it. */
+const STATUS: Record<string, string> = { picked: "Picked", parked: "Parked", rejected: "Rejected" };
 
 /** The items that pass every set filter; dates compare on the calendar day. */
 function filter(items: Item[], f: Filters): Item[] {
@@ -32,6 +34,7 @@ function filter(items: Item[], f: Filters): Item[] {
       (!f.workflow || i.workflow_id === f.workflow) &&
       (!f.stage || i.stage_name === f.stage) &&
       (!f.run || i.run_id === f.run) &&
+      (!f.status || i.status === f.status) &&
       (!f.from || i.created.slice(0, 10) >= f.from) &&
       (!f.to || i.created.slice(0, 10) <= f.to),
   );
@@ -111,6 +114,12 @@ export function Library() {
         value={filters.run}
         onChange={set("run")}
         options={options((i) => [i.run_id, `${i.run_name} ${i.run_id.slice(-6)}`])}
+      />
+      <Select
+        label="Status"
+        value={filters.status}
+        onChange={set("status")}
+        options={options((i) => [i.status, STATUS[i.status] ?? i.status]).filter(([v]) => v)}
       />
       <label>
         From <input type="date" value={filters.from} onChange={(e) => set("from")(e.target.value)} />
@@ -256,6 +265,7 @@ export function Library() {
                           {i.run_name}
                           {i.stage_index !== null && ` · stage ${i.stage_index + 1} ${i.stage_name}`}
                           {i.workflow_version !== null && ` · v${i.workflow_version}`}
+                          {i.status && ` · ${STATUS[i.status] ?? i.status}`}
                         </span>
                       </span>
                       {i.created && (
@@ -353,6 +363,16 @@ function Detail({
           {item.stage_index !== null && ` · stage ${item.stage_index + 1} ${item.stage_name}`}
           {item.workflow_version !== null && ` · v${item.workflow_version}`}
         </dd>
+        {item.status && (
+          <>
+            <dt>At its pick</dt>
+            <dd data-testid="card-status">
+              {STATUS[item.status] ?? item.status}
+              {item.reason && `: ${item.reason}`}
+              {item.status === "parked" && ". Start a run from it to pick it after all."}
+            </dd>
+          </>
+        )}
         {item.created && (
           <>
             <dt>Made</dt>

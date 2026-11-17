@@ -301,3 +301,14 @@ def test_a_failed_run_shows_the_retro_its_failure_and_the_failed_stages_log_tail
     assert "which ended failed" in text and "# The failure" in text and "died 0" in text
     quiet = evidence([run_event("run_2", [])], "run_2")
     assert "# The failure" not in prompt(quiet, [], [], [], None)
+
+
+def test_a_multi_pick_shows_the_retro_its_picks_rejects_with_reasons_and_parked_cards() -> None:
+    titles = {"a": "Card A", "b": "Card B", "c": "Card C", "d": "Card D"}
+    picked = decision(
+        "review", kind="pick", choice="Card A", artifacts=["a", "b"], parked=["c"],
+        rejected=[{"artifact": "d", "reason": "done before"}], titles=titles,
+    )  # fmt: skip
+    assert evidence([run_event("run_3", [picked])], "run_3").decisions == [
+        "at review: picked Card A, Card B; rejected Card D because done before; parked Card C"
+    ]

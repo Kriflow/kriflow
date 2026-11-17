@@ -5,7 +5,7 @@ from typing import Protocol
 
 from swarmify_kernel import Event
 from swarmify_runs.machine import RunState
-from swarmify_runs.model import AppliedChange, Decision, Gate, Run, StageDef
+from swarmify_runs.model import AppliedChange, Decision, Gate, Item, ItemView, Run, StageDef
 
 
 class Storage(Protocol):
@@ -83,6 +83,33 @@ class Storage(Protocol):
 
     def set_child(self, run_id: str, index: int, child_run_id: str) -> None:
         """Link the workflow stage at `index` to the child run it started."""
+        ...
+
+    def add_items(
+        self, run_id: str, index: int, visit: int, items: list[tuple[Item, ItemView]]
+    ) -> None:
+        """Record the Items of a fan-out stage's visit, in order (ADR 0031)."""
+        ...
+
+    def items(
+        self, run_id: str, index: int, visit: int | None = None
+    ) -> list[tuple[Item, ItemView]]:
+        """The Items of a fan-out stage's visit, its latest when `visit` is None."""
+        ...
+
+    def set_item(
+        self,
+        run_id: str,
+        index: int,
+        visit: int,
+        key: str,
+        status: str,
+        child_run_id: str | None,
+        error: str | None = None,
+    ) -> None: ...
+
+    def item_of(self, child_run_id: str) -> tuple[str, int, int, str] | None:
+        """(run, stage index, visit, item key) of the Item a child run works on, if any."""
         ...
 
     def remove_change(self, change_id: str, reason: str) -> None:

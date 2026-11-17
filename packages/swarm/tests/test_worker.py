@@ -394,11 +394,13 @@ def test_tools_outside_the_stage_allowlist_are_denied(board: SqliteStorage, tmp_
         PASS,
     )
     servers: list[list[str]] = []
+    runs: list[object] = []
 
     def connectors(
-        world_id: str, names: list[str], packages: dict[str, str]
+        world_id: str, names: list[str], packages: dict[str, str], run: object = None
     ) -> dict[str, dict[str, object]]:
         servers.append(names)
+        runs.append(run)  # the run and stage its tool servers learn (ADR 0030)
         return {n: {"type": "stdio", "command": n} for n in names}
 
     stage = {**STAGE, "tools": ["web_search", "graph", "fal"]}  # Agent Tools need no server
@@ -406,6 +408,7 @@ def test_tools_outside_the_stage_allowlist_are_denied(board: SqliteStorage, tmp_
     assert _tools(board, "denied") == ["Bash", "mcp__youtube__upload", "Read"]
     assert _tools(board)[:3] == ["WebSearch", "mcp__fal__run", "Read"]
     assert servers == [["fal"]] and set(STAGE_TOOLS) == set(AGENT_TOOLS)
+    assert runs == [(R, S)]
     options = script.sessions[0]
     assert options.mcp_servers["fal"] == {"type": "stdio", "command": "fal"}  # type: ignore[index]
     assert "WebSearch" in options.allowed_tools and "mcp__fal__*" in options.allowed_tools
@@ -427,7 +430,7 @@ def test_a_tool_server_that_fails_to_start_has_its_stderr_in_the_stage_log(
         (tmp_path / f"{name}.log").write_text(said + "\n")
 
     def connectors(
-        world_id: str, names: list[str], packages: dict[str, str]
+        world_id: str, names: list[str], packages: dict[str, str], run: object = None
     ) -> dict[str, dict[str, object]]:
         return {
             n: {"type": "stdio", "command": n, "stderr": str(tmp_path / f"{n}.log")} for n in names
@@ -680,13 +683,17 @@ def test_what_the_world_already_made_is_in_every_prompt_of_an_idea_stage(
     plan = Answer({"tasks": [{"title": "Pull top shorts"}]})
     script = Script([GRAPH, plan], [GRAPH, CLAIM, FINISH], PASS)
     line = "- Contrafreeloading (published 2026-11-04): study: Delgado 2021"
-    stage = {**STAGE, "output_type": "list[idea]", "made": [line]}
+    parked = "- Parked: Card C (2026-11-07): the third one"
+    rejected = "- Rejected: Card D: seen it before"
+    stage = {**STAGE, "output_type": "list[idea]", "made": [line, parked, rejected]}
     _run(_swarm(board, tmp_path, script), tmp_path, stage)
 
     planner, _, judge = script.prompts
     for prompt in (planner, str(script.sessions[1].system_prompt), judge):
         assert "Already made in this world" in prompt and line in prompt
-    assert "repeats one of them" in judge
+        assert parked in prompt and rejected in prompt
+        assert "a Parked one may be offered again when it still fits" in prompt
+    assert "repeats one of them" in judge and "Never offer a Rejected idea" in judge
 
 
 DOLLAR = {"input_tokens": 250_000}
@@ -978,3 +985,12 @@ def test_a_spent_budget_ends_the_wait_and_stops_the_stage(
     with pytest.raises(Stopped, match="Paused."):
         _run(swarm, tmp_path)
     assert swarm.waiting() == []
+
+
+def test_a_given_item_is_named_first_in_the_prompt() -> None:
+    from swarmify_swarm.worker import _prior
+
+    assert _prior([]) == ""
+    assert _prior(["s1/artifacts/a.md"]) == "Artifacts of earlier stages: s1/artifacts/a.md."
+    said = _prior(["given/item.json", "s1/artifacts/a.md"])
+    assert said.endswith("This run was given given/item.json to work on: read it first.")

@@ -1,5 +1,13 @@
+from dataclasses import asdict
+
 from samples import WEEKLY_SHORT
-from swarmify_workflows import ConnectorStage, GateStage, SwarmStage, WorkflowStage
+from swarmify_workflows import (
+    ConnectorStage,
+    GateStage,
+    SwarmStage,
+    WorkflowStage,
+    dump_workflow,
+)
 from swarmify_workflows.parse import parse_workflow
 
 
@@ -168,3 +176,24 @@ def test_an_approve_gate_may_set_how_often_it_sends_back() -> None:
     assert rules(text.format(field="kind: pick\n    max_send_backs: 3")) == [
         ("schema", "review", "max_send_backs needs an approve gate; a pick gate cannot send back")
     ]
+
+
+def test_a_pick_gate_may_take_up_to_ten_picks() -> None:
+    text = "name: N\nstages:\n  - gate: choose\n    ask: Which?\n    {field}\n"
+    model, violations = parse_workflow(text.format(field="kind: pick\n    picks: 3"))
+    assert violations == [] and model is not None
+    assert model.stages == [GateStage("choose", "Which?", "pick", None, 3)]
+    model, _ = parse_workflow(text.format(field="kind: pick"))
+    assert model is not None and model.stages == [GateStage("choose", "Which?", "pick")]
+    for bad in ("0", "2.5", "many"):
+        assert rules(text.format(field=f"kind: pick\n    picks: {bad}")) == [
+            ("schema", "choose", "picks must be a positive whole number")
+        ], bad
+    assert rules(text.format(field="kind: pick\n    picks: 11")) == [
+        ("schema", "choose", "picks must be 1 to 10")
+    ]
+    assert rules(text.format(field="picks: 2")) == [("schema", "choose", "picks needs a pick gate")]
+    gate = GateStage("choose", "Which?", "pick", None, 3)
+    fields = {k: v for k, v in asdict(gate).items() if k not in ("type", "name")}
+    again, violations = parse_workflow(dump_workflow("N", [("gate", "choose", fields)]))
+    assert violations == [] and again is not None and again.stages == [gate]

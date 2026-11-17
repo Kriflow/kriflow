@@ -21,7 +21,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -30,7 +30,7 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from swarmify_connectors import Call, Connector, InstallError, build_session
-from swarmify_memory import ASSETS, ArtifactFile, Memory
+from swarmify_memory import ASSETS, ArtifactFile, CardStatus, Memory, card_status
 from swarmify_runs import Run
 from swarmify_workflows import ConnectorStage, Workflows
 from swarmify_worlds import Worlds
@@ -63,6 +63,11 @@ class LibraryItem:
     workflow_version: int | None
     stage_index: int | None
     stage_name: str
+    status: str = ""
+    """For a card a pick gate offered: `picked`, `parked` or `rejected`, from the latest decision
+    that offered it (a promote unparks it); "" for any other artifact."""
+    reason: str = ""
+    """Why a rejected card was rejected, as the operator said."""
 
 
 @dataclass(frozen=True)
@@ -359,7 +364,7 @@ class PinBody(BaseModel):
     pinned: bool = True
 
 
-def item(artifact: ArtifactFile, run: Run | None) -> LibraryItem:
+def item(artifact: ArtifactFile, run: Run | None, status: CardStatus | None = None) -> LibraryItem:
     stage = None
     if run is not None:
         stage = next((s for s in run.stages if s.id == artifact.stage), None)
@@ -382,6 +387,8 @@ def item(artifact: ArtifactFile, run: Run | None) -> LibraryItem:
         run.workflow_version if run else None,
         stage.index if stage else None,
         stage.name if stage else "",
+        status.status if status else "",
+        status.reason if status else "",
     )
 
 
@@ -406,11 +413,21 @@ def router(
             raise HTTPException(404, "world not found")
 
     @api.get("/worlds/{world_id}/library")
-    def library(world_id: str) -> list[LibraryItem]:
-        """Every artifact of the world across its runs, newest first."""
+    def library(
+        world_id: str, status: Literal["picked", "parked", "rejected"] | None = None
+    ) -> list[LibraryItem]:
+        """Every artifact of the world across its runs, newest first; with `status`, only the
+        cards a pick gate left so (`parked`: offered, not picked, not yet promoted)."""
         world_or_404(world_id)
         runs = {r.id: r for r in list_runs(world_id)}
-        return [item(a, runs.get(a.run_id)) for a in memory.library(world_id)]
+        everything = memory.library(world_id)
+        promoted = {r.promoted_from for r in runs.values() if r.promoted_from}
+        statuses = card_status(everything, promoted)
+        return [
+            item(a, runs.get(a.run_id), statuses.get(a.path))
+            for a in everything
+            if status is None or (a.path in statuses and statuses[a.path].status == status)
+        ]
 
     @api.get("/worlds/{world_id}/files/{path:path}", response_class=FileResponse)
     def file(world_id: str, path: str) -> FileResponse:

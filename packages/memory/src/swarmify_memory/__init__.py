@@ -27,7 +27,7 @@ import json
 import os
 import re
 import shutil
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -68,6 +68,7 @@ __all__ = [
     "DEBOUNCE",
     "EMPTY",
     "ArtifactFile",
+    "CardStatus",
     "GRAPH_OUT",
     "GRAPH_TOOLS",
     "OUTCOMES",
@@ -81,6 +82,7 @@ __all__ = [
     "McpGraphIndex",
     "Memory",
     "ShrinkRefused",
+    "card_status",
     "extract_command",
     "graph_map",
     "graph_size",
@@ -203,10 +205,13 @@ class Memory:
         return folder
 
     def artifacts(self, world_id: str, run_id: str) -> list[str]:
+        """The run's artifacts as paths in its folder, its `given/` input first: what a Fan-out
+        Stage gave a child run counts as made by a stage before its first (ADR 0031)."""
         run = self.world_folder(world_id) / "runs" / run_id
-        files = [p for p in run.glob("*/artifacts/[!.]*") if p.is_file()]
+        files = [p for p in run.glob("given/[!.]*") if p.is_file()]
+        files += [p for p in sorted(run.glob("*/artifacts/[!.]*")) if p.is_file()]
         sidecars = {p.with_name(f"{p.name}.md") for p in files}
-        return sorted(str(p.relative_to(run)) for p in files if p not in sidecars)
+        return [str(p.relative_to(run)) for p in files if p not in sidecars]
 
     def write_note(
         self,
@@ -276,13 +281,17 @@ class Memory:
         run_id: str,
         stage_id: str,
         author: str,
+        subfolder: str = "",
     ) -> list[str]:
         """Copy the named artifacts of run `source` (world id, run id, stage ids in run order)
         into a stage, sidecars included: how a workflow stage takes its child run's artifacts.
         Each file keeps its frontmatter, which names the run that made it. When several stages
-        of the source made one name, the latest stage wins. Raises ValueError, copying nothing,
-        when a name is missing.
+        of the source made one name, the latest stage wins. A fan-out stage takes each Item's
+        into `subfolder`, the Item's key. Raises ValueError, copying nothing, when a name is
+        missing or the subfolder is not a plain name.
         """
+        if subfolder and not _NAME.match(subfolder):
+            raise ValueError(f"{subfolder!r} is not a plain folder name")
         run = self.world_folder(source[0]) / "runs" / source[1]
         found: dict[str, Path] = {}
         for name in names:
@@ -291,8 +300,8 @@ class Memory:
             if path is None:
                 raise ValueError(f"the child run made no artifact named {name}")
             found[name] = path
-        folder = self.stage_folder(world_id, run_id, stage_id) / "artifacts"
-        folder.mkdir(exist_ok=True)
+        folder = self.stage_folder(world_id, run_id, stage_id) / "artifacts" / subfolder
+        folder.mkdir(parents=True, exist_ok=True)
         out = []
         for name, path in found.items():
             shutil.copyfile(path, folder / name)
@@ -450,9 +459,15 @@ class Memory:
     def _artifacts(self, world_id: str, files: list[Path]) -> list[ArtifactFile]:
         return _read(self.world_folder(world_id), files)
 
-    def made(self, world_id: str, runs: Mapping[str, str]) -> list[str]:
+    def made(
+        self, world_id: str, runs: Mapping[str, str], promoted: Collection[str] = ()
+    ) -> list[str]:
         """See `made`."""
-        return made(self.world_folder(world_id), runs)
+        return made(self.world_folder(world_id), runs, promoted)
+
+    def card_status(self, world_id: str, promoted: Collection[str] = ()) -> "dict[str, CardStatus]":
+        """See `card_status`."""
+        return card_status(library(self.world_folder(world_id)), promoted)
 
     def publish_records(self, world_id: str) -> list[tuple[str, dict[str, Any]]]:
         """Every publish artifact of the world: (path relative to the world folder, fields)."""
@@ -650,7 +665,56 @@ def retention(outcomes: Any) -> list[str]:
     return out
 
 
-def made(world: Path, runs: Mapping[str, str]) -> list[str]:
+@dataclass(frozen=True)
+class CardStatus:
+    """Where a card offered at a pick gate stands (Runs context: Parked, Rejected)."""
+
+    status: str
+    """`picked`, `parked` or `rejected`."""
+    reason: str
+    """Why it was rejected, as the operator said; "" otherwise."""
+    decided: str
+    """When the decision that set it was made (ISO)."""
+
+
+def card_status(
+    everything: list[ArtifactFile], promoted: Collection[str] = ()
+) -> dict[str, CardStatus]:
+    """The status of every card a pick gate offered, by path: that of the latest pick decision
+    that offered it, derived from the decision files, never stored on the card. A Parked card
+    that a run was promoted from (`promoted`, paths) is picked."""
+    picks = [a for a in everything if a.type == "decision" and a.fields.get("kind") == "pick"]
+    out: dict[str, CardStatus] = {}
+    for d in sorted(picks, key=lambda a: a.created):
+        f = d.fields
+        picked = f.get("artifacts") or ([f["artifact"]] if f.get("artifact") else [])
+        for path in picked:
+            out[str(path)] = CardStatus("picked", "", d.created)
+        for path in f.get("parked") or []:
+            out[str(path)] = CardStatus("parked", "", d.created)
+        for r in f.get("rejected") or []:
+            if isinstance(r, dict) and r.get("artifact"):
+                out[str(r["artifact"])] = CardStatus(
+                    "rejected", str(r.get("reason") or ""), d.created
+                )
+    for path in promoted:
+        if (found := out.get(path)) and found.status == "parked":
+            out[path] = CardStatus("picked", "", found.decided)
+    return out
+
+
+def _gist(card: ArtifactFile) -> str:
+    """A card's text fields (a study, a fact, a hook) and the start of its body, at most GIST."""
+    text = [
+        f"{k}: {v}" for k, v in card.fields.items() if k not in _NOT_GIST and isinstance(v, str)
+    ]
+    paragraphs = [p for p in re.split(r"\n\s*\n", card.body) if p.strip()]
+    text += [" ".join(p.split()) for p in paragraphs if not p.lstrip().startswith("#")][:1]
+    gist = "; ".join(text)
+    return gist if len(gist) <= GIST else gist[: GIST - 3] + "..."
+
+
+def made(world: Path, runs: Mapping[str, str], promoted: Collection[str] = ()) -> list[str]:
     """What the world at `world` already made, one line per run, newest first: every run with a
     publish record, and every run in `runs` (run id to status: the runs the caller counts, not
     failed or aborted ones) that settled on one idea. A run's subject is what its pick gate
@@ -659,7 +723,9 @@ def made(world: Path, runs: Mapping[str, str]) -> list[str]:
     metadata.md. A review or approve gate's artifact never names a run. A run that ranked ideas
     and picked none is not listed. Each line says the title, whether it was published (with its
     outcome) or is done or in the making, and its gist: the subject's text fields (a study, a
-    fact, a hook) and the start of its body. Read from the files alone, so it holds when the
+    fact, a hook) and the start of its body. After them, the world's Parked cards ("Parked:
+    <title> (<date>): <gist>") and Rejected cards ("Rejected: <title>: <reason>"), newest
+    first, as `card_status` says with `promoted`. Read from the files alone, so it holds when the
     graph is behind."""
     everything = library(world)
     by_path = {a.path: a for a in everything}  # a fork's pick names its parent's card
@@ -706,16 +772,20 @@ def made(world: Path, runs: Mapping[str, str]) -> list[str]:
                 state += f", posted as {publish.title}"
         else:
             state = "made" if runs.get(run_id) == "done" else "in the making"
-        text = [
-            f"{k}: {v}"
-            for k, v in subject.fields.items()
-            if k not in _NOT_GIST and isinstance(v, str)
-        ]
-        paragraphs = [p for p in re.split(r"\n\s*\n", subject.body) if p.strip()]
-        text += [" ".join(p.split()) for p in paragraphs if not p.lstrip().startswith("#")][:1]
-        gist = "; ".join(text)
-        gist = gist if len(gist) <= GIST else gist[: GIST - 3] + "..."
+        gist = _gist(subject)
         lines.append(f"- {_bare(subject.title)} ({state})" + (f": {gist}" if gist else ""))
         if len(lines) == MADE_MAX:
             break
+    settled = sorted(
+        card_status(everything, promoted).items(), key=lambda kv: kv[1].decided, reverse=True
+    )
+    parked = [(by_path[p], s) for p, s in settled if s.status == "parked" and p in by_path]
+    rejected = [(by_path[p], s) for p, s in settled if s.status == "rejected" and p in by_path]
+    for card, s in parked[:MADE_MAX]:
+        gist = _gist(card)
+        lines.append(
+            f"- Parked: {_bare(card.title)} ({s.decided[:10]})" + (f": {gist}" if gist else "")
+        )
+    for card, s in rejected[:MADE_MAX]:
+        lines.append(f"- Rejected: {_bare(card.title)}" + (f": {s.reason}" if s.reason else ""))
     return lines
