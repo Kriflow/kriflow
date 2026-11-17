@@ -119,3 +119,25 @@ def test_a_patient_runtime_passes_any_other_failure_on() -> None:
     runtime = Patient(SdkRuntime(transport=Script([Die()]).transport), wait)
     with pytest.raises(Exception, match="process died"):
         asyncio.run(runtime.run(SPEC, _Hooks()))
+
+
+def test_a_usage_limit_is_waited_out_until_the_reset_it_names() -> None:
+    from datetime import UTC, datetime
+
+    from swarmify_swarm.network import reset_in
+
+    said = "You've hit your session limit · resets 10:50am (UTC)"
+    now = datetime(2026, 11, 17, 8, 0, tzinfo=UTC)
+    assert transient(said)
+    assert reset_in(said, now) == (2 * 3600 + 50 * 60) + 60
+    assert (
+        reset_in("You've hit your usage limit · resets 3pm (Europe/London)", now) == 7 * 3600 + 60
+    )
+    assert reset_in("You've hit your session limit · resets 7am (UTC)", now) == 23 * 3600 + 60
+    assert reset_in("Claude usage limit reached.", now) == 1800
+    assert reset_in("API Error: Connection error.", now) is None
+    slept: list[float] = []
+    wait = NetworkWait(probe=lambda: False, sleep=slept.append, tick=600)
+    assert wait.wait(until=1500) == 1500 and slept == [600, 600, 300]
+    with pytest.raises(NetworkDown, match="usage limit"):
+        NetworkWait(limit=3600, sleep=slept.append).wait(until=4000)
