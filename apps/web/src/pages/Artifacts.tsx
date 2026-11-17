@@ -62,22 +62,55 @@ export function summary(body: string): string {
 
 /** Choosable cards for a pick gate as a ranked radio list (story 32): rank, title and hook or
  * summary, with the judge's reason and the note paragraphs it came from folded away (story 33). */
-export function ArtifactCards({ cards, worldId }: { cards: ArtifactFile[]; worldId: string }) {
+/** A pick gate that takes several cards: the paths picked in order, the rejected ones with the
+ * reason typed so far, and how to change either. */
+export type MultiPick = {
+  picks: number;
+  picked: string[];
+  rejected: Record<string, string>;
+  toggle: (path: string) => void;
+  /** A reason ("" for none) rejects the card; null takes the reject back. */
+  reject: (path: string, reason: string | null) => void;
+};
+
+export function ArtifactCards({ cards, worldId, multi }: { cards: ArtifactFile[]; worldId: string; multi?: MultiPick }) {
   return (
     <fieldset className="pick-cards" data-testid="pick-cards">
-      <legend>Your pick{cards.some((c) => c.fields.rank != null) ? `, ranked by ${the("judge")}` : ""}</legend>
+      <legend>
+        {multi ? `Your picks, up to ${multi.picks}` : "Your pick"}
+        {cards.some((c) => c.fields.rank != null) ? `, ranked by ${the("judge")}` : ""}
+      </legend>
       {cards.map((a) => {
         const sources = (a.fields.sources as string[] | undefined) ?? [];
         const hook = typeof a.fields.hook === "string" ? a.fields.hook : summary(a.body);
         const why = [a.fields.reason, a.fields.why].find((w) => typeof w === "string" && w) as string | undefined;
-        return (
-          <label key={a.path} className="pick-card" data-testid="pick-card">
-            <input type="radio" name="artifact" value={a.path} required />
+        const order = multi ? multi.picked.indexOf(a.path) : -1;
+        const out = multi ? a.path in multi.rejected : false;
+        const card = (
+          <label key={a.path} className="pick-card" data-testid="pick-card" data-rejected={out || undefined}>
+            {multi ? (
+              <input
+                type="checkbox"
+                name="artifacts"
+                value={a.path}
+                checked={order >= 0}
+                disabled={out || (order < 0 && multi.picked.length >= multi.picks)}
+                onChange={() => multi.toggle(a.path)}
+              />
+            ) : (
+              <input type="radio" name="artifact" value={a.path} required />
+            )}
             <span className="rank" title={a.fields.rank != null ? `${cap(the("judge"))}'s #${String(a.fields.rank)} of ${cards.length}` : undefined}>
               {a.fields.rank != null ? `#${String(a.fields.rank)}` : a.type}
             </span>
             <b>{a.title}</b>
-            <Icon name="check" size={20} className="pick-check" />
+            {order >= 0 ? (
+              <span className="pick-order" aria-label={`pick ${order + 1}`}>
+                {order + 1}
+              </span>
+            ) : (
+              <Icon name="check" size={20} className="pick-check" />
+            )}
             {hook && <span className="hook">{hook}</span>}
             <details>
               <summary>Why</summary>
@@ -99,6 +132,29 @@ export function ArtifactCards({ cards, worldId }: { cards: ArtifactFile[]; world
               </p>
             </details>
           </label>
+        );
+        if (!multi) return card;
+        return (
+          <div key={a.path} className="pick-slot">
+            {card}
+            {out ? (
+              <div className="pick-reject row">
+                <input
+                  aria-label={`Why reject ${a.title} (optional)`}
+                  placeholder="Why (optional)"
+                  value={multi.rejected[a.path]}
+                  onChange={(e) => multi.reject(a.path, e.target.value)}
+                />
+                <button type="button" onClick={() => multi.reject(a.path, null)}>
+                  Undo reject
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="pick-reject-button" aria-label={`Reject ${a.title}`} onClick={() => multi.reject(a.path, "")}>
+                Reject
+              </button>
+            )}
+          </div>
         );
       })}
     </fieldset>

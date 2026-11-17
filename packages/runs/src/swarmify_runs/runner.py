@@ -899,6 +899,8 @@ def gate_closed(before: Run, after: Run) -> Event | None:
             "note": decision.note,
             "by": decision.by,
         }
+        if len(decision.artifacts) > 1:
+            resolution["picked"] = [decision.titles.get(a, a) for a in decision.artifacts]
     return Event.new(
         "gate.closed",
         world_id=after.world_id,

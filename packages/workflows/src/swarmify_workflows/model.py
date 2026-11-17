@@ -8,6 +8,8 @@ STAGE_TYPES = ("swarm", "gate", "connector", "workflow")
 MAX_PARALLEL = 8
 """The most children a Fan-out Stage runs at once."""
 GATE_KINDS = ("pick", "approve", "confirm")
+PICKS_MAX = 10
+"""The most cards a pick gate takes in one answer."""
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,9 @@ class GateStage:
     kind: str = "approve"
     max_send_backs: int | None = None
     """How often an approve gate may send the run back (None: twice); the next is refused."""
+    picks: int | None = None
+    """How many cards a pick gate takes in one answer, 1 to 10 (None: one); the cards offered
+    and not picked are Parked."""
     type: Literal["gate"] = "gate"
 
 

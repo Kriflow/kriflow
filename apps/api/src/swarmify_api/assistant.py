@@ -129,7 +129,8 @@ To change an editable field of the form (title, description, hashtags, tags), an
 so propose no change for it. To change a file the post reads (like metadata.md), propose an
 artifact_edit of it."""
 PICK = """The gate is a pick. It offers these cards, best ranked first, and the operator can pick
-only one of them: {cards}
+{picks}, and reject any with a reason (idea stages never offer a rejected card again; the cards
+nobody picked or rejected are parked and may be offered again): {cards}
 
 When the operator wants an item that is not among them (another idea, a rank the cards do not
 have), say plainly that this gate does not offer it; never tell them to pick it here. Say what
@@ -624,7 +625,9 @@ def picking(run: Run, index: int, cards: list[ArtifactFile]) -> str:
     ]
     made = [s for s in run.stages[:index] if s.type != "gate"]
     maker = f"{made[-1].name} ({made[-1].id})" if made else "the stage before"
-    told = PICK.format(cards=json.dumps(shown), maker=maker)
+    picks = int(run.stages[index].config.get("picks") or 1)
+    many = "only one of them" if picks == 1 else f"up to {picks} of them, in order"
+    told = PICK.format(cards=json.dumps(shown), maker=maker, picks=many)
     promised = "".join(str(made[-1].config.get("output_type") or "").split()) if made else ""
     if len(shown) <= 1 and promised and not promised.startswith("list["):
         told = "\n\n".join([told, ONE.format(maker=maker, type=promised)])

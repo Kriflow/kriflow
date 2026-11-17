@@ -87,10 +87,17 @@ class SetBudget(BaseModel):
     budget_usd: float = Field(gt=0, allow_inf_nan=False)
 
 
+class Reject(BaseModel):
+    """A card the operator rejects at a pick gate, and why (optional)."""
+
+    artifact: str = Field(max_length=2_000)
+    reason: str = Field(default="", max_length=2_000)
+
+
 class Decide(BaseModel):
-    """A gate answer. Pick gates need `choice` or `artifact`; approve gates may name
-    `send_back_to`, an earlier stage that then runs again with `note` in its context; confirm
-    gates take neither."""
+    """A gate answer. Pick gates need `choice` or `artifact`, or `artifacts` at a gate that
+    takes several picks; approve gates may name `send_back_to`, an earlier stage that then runs
+    again with `note` in its context; confirm gates take neither."""
 
     choice: str | None = Field(default=None, max_length=2_000)
     note: str = Field(default="", max_length=10_000)
@@ -98,6 +105,12 @@ class Decide(BaseModel):
     artifact: str | None = Field(default=None, max_length=2_000)
     """The chosen artifact's path in the world folder, as `GET /runs/{run_id}/artifacts` lists
     it: the card picked, or what was approved. A pick with no `choice` takes its title."""
+    artifacts: list[str] | None = Field(default=None, max_length=10)
+    """At a pick gate: the cards picked, in pick order, up to the gate's `picks`; the first
+    stands as `artifact`. The cards it offered and nobody picked or rejected are Parked."""
+    rejects: list[Reject] | None = Field(default=None, max_length=100)
+    """At a pick gate: offered cards rejected, each with an optional reason, which idea stages
+    read so they never offer them again."""
     edits: dict[str, Any] | None = None
     """At a gate before a publish stage: new values for fields its connector marks editable, by
     key. Every field's value as posted is recorded with the decision."""
@@ -540,6 +553,8 @@ def router(
                 artifact=body.artifact,
                 edits=body.edits,
                 seen=body.seen,
+                artifacts=body.artifacts,
+                rejects=[r.model_dump() for r in body.rejects or []],
             )
         )
 

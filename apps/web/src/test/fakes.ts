@@ -183,6 +183,7 @@ export function gate(kind: "pick" | "approve" | "confirm" | "budget" | "skill" |
     max_send_backs: 2,
     earlier_stages: ["research"],
     parent_run_id: null,
+    picks: 1,
     ...over,
   };
 }

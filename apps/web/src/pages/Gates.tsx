@@ -33,7 +33,7 @@ import { CurrentWorld } from "../Shell";
 import { piedPiper } from "../skin";
 import { Loading, Skeleton } from "../Skeleton";
 import { notify } from "../Toast";
-import { ArtifactCards, ArtifactView } from "./Artifacts";
+import { ArtifactCards, ArtifactView, type MultiPick } from "./Artifacts";
 import { RunRef } from "./Runs";
 import { PublishValue } from "./Connectors";
 import { GateAsk } from "./GateAsk";
@@ -578,6 +578,23 @@ export function GateCard({
   }, [shows, gate.run_id, gate.stage_index, gate.send_backs_left]);
 
   const cards = gate.kind === "pick" && artifacts ? choosable(artifacts) : [];
+  // A gate that takes several picks: the cards picked, in order, and those rejected with why.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [rejected, setRejected] = useState<Record<string, string>>({});
+  const picks = gate.picks ?? 1;
+  const multi: MultiPick | undefined =
+    picks > 1 && cards.length > 0
+      ? {
+          picks,
+          picked,
+          rejected,
+          toggle: (path) => setPicked((p) => (p.includes(path) ? p.filter((x) => x !== path) : p.length < picks ? [...p, path] : p)),
+          reject: (path, reason) => {
+            setPicked((p) => p.filter((x) => x !== path));
+            setRejected(({ [path]: _, ...rest }) => (reason === null ? rest : { ...rest, [path]: reason }));
+          },
+        }
+      : undefined;
   const reviewed = gate.kind === "approve" && artifacts ? underReview(artifacts) : [];
   const card = cards.findIndex((c) => c.path === chosen);
   const pickLabel = !phone
@@ -596,7 +613,7 @@ export function GateCard({
     const fields = new FormData(e.currentTarget);
     const target = sendBack.current;
     sendBack.current = null;
-    const picked = cards.find((c) => c.path === fields.get("artifact"));
+    const one = cards.find((c) => c.path === fields.get("artifact"));
     const retry = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "retry";
     const choice: Choice =
       gate.kind === "items"
@@ -605,9 +622,17 @@ export function GateCard({
         ? { kind: "budget", add: Number(fields.get("add")) }
         : target
           ? { kind: "send_back", to: target }
+          : gate.kind === "pick" && multi
+            ? {
+                kind: "pick",
+                choice: cards.find((c) => c.path === multi.picked[0])?.title ?? "",
+                artifact: multi.picked[0],
+                artifacts: multi.picked,
+                rejects: Object.entries(multi.rejected).map(([artifact, reason]) => ({ artifact, reason: reason.trim() })),
+              }
           : gate.kind === "pick"
-            ? picked
-              ? { kind: "pick", choice: picked.title, artifact: picked.path }
+            ? one
+              ? { kind: "pick", choice: one.title, artifact: one.path }
               : { kind: "pick", choice: String(fields.get("choice") ?? "").trim() }
             : { kind: gate.kind === "confirm" ? "confirm" : "approve" };
     const edits = Object.fromEntries(
@@ -736,7 +761,7 @@ export function GateCard({
                 </p>
               </div>
             )}
-            {gate.kind === "pick" && cards.length > 0 && <ArtifactCards cards={cards} worldId={gate.world_id} />}
+            {gate.kind === "pick" && cards.length > 0 && <ArtifactCards cards={cards} worldId={gate.world_id} multi={multi} />}
             {gate.kind === "pick" && artifacts && cards.length === 0 && (
               <>
                 <label>
@@ -762,7 +787,18 @@ export function GateCard({
                   </button>
                 </>
               )}
-              {gate.kind === "pick" && (
+              {gate.kind === "pick" && multi && (
+                <>
+                  <button type="submit" form={formId} className="primary" disabled={busy || picked.length === 0}>
+                    Continue with {picked.length > 1 ? "these picks" : "this pick"}
+                  </button>
+                  <span className="pick-count" role="status" data-testid="pick-count">
+                    {picked.length} of {picks} picked
+                  </span>
+                  <span className="faint">The ones you pass on are parked for later; rejected ones are never offered again.</span>
+                </>
+              )}
+              {gate.kind === "pick" && !multi && (
                 <>
                   <button type="submit" form={formId} className="primary" disabled={busy || artifacts === null || (phone && !chosen)}>
                     {pickLabel}

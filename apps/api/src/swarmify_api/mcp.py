@@ -346,7 +346,10 @@ def server(
         description="Answer the gate a run waits at. A pick gate needs `choice` or `artifact`,"
         " the chosen artifact's path in the world folder, `runs/<run>/<stage id>/artifacts/<name>`"
         " as the API's `GET /api/runs/{run_id}/artifacts` lists it (the choice then takes its"
-        " title); an approve gate may name `send_back_to`, an earlier stage that runs again"
+        " title); a pick gate whose `picks` is above one takes `artifacts`, up to that many"
+        " card paths in pick order; any pick may take `rejects`, [{artifact, reason}], offered"
+        " cards the operator rejects (the rest it offered are Parked);"
+        " an approve gate may name `send_back_to`, an earlier stage that runs again"
         " with `note` in its context (at most twice per run); a confirm gate takes neither;"
         " a fan-out stage's `items` gate takes choice `retry` (the failed items run again) or"
         " `continue` (finish without them). Writes a decision artifact."
@@ -357,10 +360,20 @@ def server(
         note: str = "",
         send_back_to: str | None = None,
         artifact: str | None = None,
+        artifacts: list[str] | None = None,
+        rejects: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         run_of(run_id)
         return run_or_fail(
-            lambda: control.decide(run_id, choice, note, send_back_to, artifact=artifact)
+            lambda: control.decide(
+                run_id,
+                choice,
+                note,
+                send_back_to,
+                artifact=artifact,
+                artifacts=artifacts,
+                rejects=rejects,
+            )  # fmt: skip
         )
 
     @mcp.tool(

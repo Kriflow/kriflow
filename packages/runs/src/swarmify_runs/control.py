@@ -131,6 +131,9 @@ TEXT = (".md", ".markdown", ".json", ".yaml", ".yml", ".txt")
 """The files an Artifact Edit rewrites in place; a Rerun remakes the rest (ADR 0027)."""
 
 
+Offered = Callable[[Run, int], list[str]]
+"""The cards the pick gate at an index of a run offers, as paths in the world folder, best ranked
+first. Runs cannot read Memory; the composition root hands it this."""
 StageSpend = Callable[[str], dict[str, float]]
 """A run's id to its agents' estimated cost by stage id, for what a Rerun will cost again."""
 
@@ -224,6 +227,9 @@ class RunControl:
         """Set by the composition root; every Run Change is checked with it."""
         self.check_text: TextCheck = no_text_check
         """Set by the composition root; every Artifact Edit's new text is checked with it."""
+        self.offered: Offered = lambda _run, _index: []
+        """Set by the composition root; a pick gate parks the cards it offered and nobody
+        picked, and refuses a card it did not offer."""
         self.stage_spend: StageSpend = lambda _run_id: {}
         """Set by the composition root; a Rerun's proposal estimates its cost with it."""
 
@@ -364,6 +370,8 @@ class RunControl:
         seen: dict[str, Any] | None = None,
         gate: tuple[int, int] | None = None,
         by: str | None = None,
+        artifacts: list[str] | None = None,
+        rejects: list[dict[str, str]] | None = None,
     ) -> Run:
         """Answer the gate the run waits at. Writes the decision artifact, then resumes the run.
         A skill gate takes only the answer of its proposal (`proposal=True`, from Learning).
@@ -376,14 +384,19 @@ class RunControl:
         A Remote Approval names the gate it answers as `gate`, (stage index, visit), so a stale
         message never answers a later gate or a later visit to the same one, and `by`, who
         answered, which the decision records.
+        A pick gate with `picks` above one takes `artifacts`, up to that many offered cards in
+        pick order (the first is `artifact`); any pick gate may take `rejects`, offered cards
+        each with an optional `reason`. The cards it offered and nobody picked or rejected are
+        Parked.
 
         Raises KeyError for an unknown run, Illegal when the run is not at a gate, when the
         send-back target is not an earlier stage, on a send-back past the gate's limit, when someone
         else already answered this gate, or when the publish stage after it has problems
         (send back or abort instead), and ValueError when a pick gate gets no choice or
-        the artifact is not one of this run's before the gate, or when an edit is refused (a field
-        that is not editable, a value the connector reports a problem with, or the next stage does
-        not publish), or a field the gate showed has changed.
+        the artifact is not one of this run's before the gate, on more picks than the gate
+        takes, a card it did not offer or a card both picked and rejected, or when an edit is
+        refused (a field that is not editable, a value the connector reports a problem with, or
+        the next stage does not publish), or a field the gate showed has changed.
         """
         try:
             run = self._run(run_id)
@@ -405,6 +418,10 @@ class RunControl:
         if kind == "skill" and not proposal:
             raise Illegal("a skill gate is answered by deciding its proposal")
         note = note.strip()
+        picks = int(stage.config.get("picks") or 1)
+        picked = artifacts or ([artifact] if artifact else [])
+        cards = self._cards(run, index, kind, picks, picked, rejects or [], choice)
+        artifact = cards.artifacts[0] if cards.artifacts else artifact
         if artifact:
             file = self._artifact_before(run, index, artifact)
             choice = (choice or "").strip() or artifact_title(file)
@@ -458,6 +475,10 @@ class RunControl:
             artifact or None,
             shown.values() if shown else None,
             by,
+            cards.artifacts,
+            cards.parked,
+            cards.rejected,
+            cards.titles,
         )
         decision = self._write_decision(run, decision)
         message: dict[str, Any] = {"action": "decide", "index": index}
@@ -1070,6 +1091,45 @@ class RunControl:
             raise ValueError(f"{path} is not an artifact of this run before this gate")
         return file
 
+    def _cards(
+        self, run: Run, index: int, kind: str, picks: int, picked: list[str],
+        rejects: list[dict[str, str]], choice: str | None,
+    ) -> Decision:  # fmt: skip
+        """The cards of a pick gate's answer, checked, as the decision records them (only its
+        card fields are set): `picked` in order, the `rejects` with their reasons, the rest of
+        what the gate offered Parked, but a card a pick by name alone names. Raises ValueError
+        as `decide` says."""
+        if kind != "pick":
+            if rejects or len(picked) > 1:
+                raise ValueError("only a pick gate takes several cards or rejects")
+            return Decision("", index, "", kind, None, "", None, "", "")
+        if len(picked) > picks:
+            raise ValueError(f"this gate takes at most {picks} pick{'s' if picks > 1 else ''}")
+        if len(set(picked)) < len(picked):
+            raise ValueError("a card is picked twice")
+        rejected = [
+            {"artifact": str(r.get("artifact") or ""), "reason": str(r.get("reason") or "").strip()}
+            for r in rejects
+        ]
+        out = [r["artifact"] for r in rejected]
+        if both := [p for p in picked if p in out]:
+            raise ValueError(f"{both[0]} is both picked and rejected")
+        if len(set(out)) < len(out):
+            raise ValueError("a card is rejected twice")
+        offered = self.offered(run, index)
+        for path in [*picked, *out]:
+            self._artifact_before(run, index, path)
+            if offered and path not in offered:
+                raise ValueError(f"{path} is not a card this gate offered")
+        world = run_folder(self.data_dir, run).parent.parent
+        titles = {p: artifact_title(world / p) for p in [*offered, *picked, *out]}
+        named = (choice or "").strip() if not picked else None
+        parked = [p for p in offered if p not in picked and p not in out and titles[p] != named]
+        return Decision(
+            "", index, "", kind, None, "", None, "", "", None, None, None,
+            picked, parked, rejected, {p: titles[p] for p in [*picked, *parked, *out]},
+        )  # fmt: skip
+
     def _write_decision(self, run: Run, decision: Decision) -> Decision:
         """Record the decision row, then its markdown file."""
         folder = stage_folder(self.data_dir, run, decision.stage_index)
@@ -1244,6 +1304,9 @@ def decision_markdown(run: Run, decision: Decision) -> str:
         "send_back_to": decision.send_back_to,
         "publish": decision.publish,
         "by": decision.by,
+        "artifacts": decision.artifacts or None,
+        "parked": decision.parked or None,
+        "rejected": decision.rejected or None,
         "created": decision.decided_at,
     }
     lines = [f"{k}: {json.dumps(v)}" for k, v in front.items() if v is not None]
@@ -1262,4 +1325,15 @@ def decision_markdown(run: Run, decision: Decision) -> str:
     body = [f"# Decision at {decision.stage_name}", "", outcome]
     if decision.note:
         body += ["", f"Note: {decision.note}"]
+    title = decision.titles.get
+    if len(decision.artifacts) > 1:
+        body += ["", "Picked, in order:", *(f"{i}. {title(p, p)}" for i, p in
+                                            enumerate(decision.artifacts, 1))]  # fmt: skip
+    if decision.parked:
+        body += ["", "Parked:", *(f"- {title(p, p)}" for p in decision.parked)]
+    if decision.rejected:
+        body += ["", "Rejected:"] + [
+            f"- {title(r['artifact'], r['artifact'])}" + (f": {r['reason']}" if r["reason"] else "")
+            for r in decision.rejected
+        ]
     return "---\n" + "\n".join(lines) + "\n---\n\n" + "\n".join(body) + "\n"

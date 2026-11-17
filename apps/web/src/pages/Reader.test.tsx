@@ -37,6 +37,8 @@ const script: Item = {
   workflow_version: 2,
   stage_index: 2,
   stage_name: "script",
+  status: "",
+  reason: "",
 };
 
 beforeEach(() => FakeEventSource.install());

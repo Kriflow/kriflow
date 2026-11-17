@@ -45,7 +45,7 @@ def _picked(memory: Memory, run: Run, index: int) -> list[ArtifactFile]:
     decision = next((d for d in reversed(run.decisions) if d.stage_index == index), None)
     if decision is None:
         return []
-    paths = getattr(decision, "artifacts", None) or [decision.artifact]
+    paths = decision.artifacts or [decision.artifact]
     cards = offered(run_artifacts(memory, run, index))
     by_path = {c.path: c for c in cards}
     picked = [by_path[p] for p in paths if p in by_path]
