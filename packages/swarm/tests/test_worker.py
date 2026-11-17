@@ -318,6 +318,7 @@ def test_a_declared_type_is_projected_through_the_judges_structured_output(
     item = (judge.output_format or {})["schema"]["properties"]["items"]["items"]
     assert item["properties"]["fields"] == RECIPE and "fields" in item["required"]
     assert "exactly as its JSON schema asks" in script.prompts[1]
+    assert "word for word from the notes, never summarised" in script.prompts[1]
     recipe = (tmp_path / W / "runs" / R / S / "artifacts" / "recipe.md").read_text()
     assert '"steps": [\n    "Boil.",\n    "Season."\n  ]' in recipe
     assert [(n, t) for n, t, *_ in files.typed] == [

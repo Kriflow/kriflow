@@ -61,6 +61,12 @@ from swarmify_swarm.projection import (
 )
 
 WORKER, PLANNER, JUDGE = "worker-1", "planner", "judge"
+KEEP = (
+    " Every table, fenced block and section the goal or done condition asks an item to carry goes"
+    " into its body word for word from the notes, never summarised into prose."
+)
+"""A judge rewrites items for people; what the goal names must survive that (a table later stages
+parse, a JSON block a connector reads)."""
 SESSIONS = 2
 """An agent's first session and one replacement."""
 PROGRESS = 50
@@ -636,6 +642,7 @@ class Swarm:
                     if schema is not None
                     else ""
                 )
+                + KEEP
             )
         prompt = "\n".join(
             [
