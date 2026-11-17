@@ -203,3 +203,22 @@ def test_parked_and_rejected_cards_are_listed_with_the_reason_and_a_promote_unpa
     promoted = memory.card_status("w1", promoted={c})
     assert promoted[c].status == "picked"
     assert not any("Parked" in line for line in memory.made("w1", {"r5": "done"}, {c}))
+
+
+def test_a_pick_of_several_lists_each_picked_card_with_its_list_fields(memory: Memory) -> None:
+    # Like run_01M7N4QE: a batch picked two ideas and fanned out; both are in the making and the
+    # next research must see both, with the short labels a long pitch would push past the cut.
+    a = _idea(memory, "r6", "Tail wag", lead="biscuit", why="x" * 500)
+    b = _idea(memory, "r6", "Liquid cat", lead="chonk", why="y" * 500)
+    c = memory.write_typed(
+        "w1", "r6", "s1", "judge", "idea-parked-one.md", "idea",
+        {"title": "Parked one", "rank": 3, "characters": ["mango", "new:okapi"]}, "# Parked one\n",
+    )  # fmt: skip
+    _multi(memory, "r6", [a, b], [c], a)
+    lines = memory.made("w1", {"r6": "waiting_gate"})
+    wag = next(line for line in lines if line.startswith("- Tail wag (in the making)"))
+    assert "lead: biscuit" in wag
+    liquid = next(line for line in lines if line.startswith("- Liquid cat (in the making)"))
+    assert "lead: chonk" in liquid
+    parked = next(line for line in lines if line.startswith("- Parked: Parked one"))
+    assert "characters: mango, new:okapi" in parked
