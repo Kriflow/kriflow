@@ -175,6 +175,8 @@ def test_a_failed_item_never_stops_its_siblings_and_its_gate_retries_only_it(
     (gate,) = runner.gates()
     assert (gate.run_id, gate.kind, gate.stage_name) == (parent.id, "items", "translate each")
     assert "Paragraph 2 (p2): RuntimeError: could not translate Paragraph 2" in gate.ask
+    # The notice is sent after the gate is stored, so it may land a moment later.
+    wait_for(lambda: any(e.type == "gate.opened" for e in notifier.events))
     opened = [e for e in notifier.events if e.type == "gate.opened"]
     assert opened[-1].payload["kind"] == "items"
     with pytest.raises(ValueError, match="retry or continue"):
@@ -351,6 +353,7 @@ def test_a_spent_budget_waits_at_one_gate_on_the_top_run_and_money_releases_ever
     wait_for(lambda: sum(c.over_budget for c in children(spender, parent.id)) == 2)
     (gate,) = spender.gates()
     assert (gate.kind, gate.run_id, gate.stage_name) == ("budget", parent.id, "translate each")
+    wait_for(lambda: any(e.type == "gate.opened" for e in notifier.events))
     opened = [e for e in notifier.events if e.type == "gate.opened"]
     assert opened and {e.run_id for e in opened} == {parent.id}
 
