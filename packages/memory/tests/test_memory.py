@@ -83,6 +83,21 @@ def test_a_stage_takes_another_runs_artifacts_across_worlds_latest_first(memory:
     assert not (memory.world_folder("w1") / "runs/r2/s9/artifacts/brief.md").exists()
 
 
+def test_a_fan_out_item_takes_into_its_own_folder_and_a_given_input_lists_first(
+    memory: Memory,
+) -> None:
+    memory.write_artifact("w2", "child", "s1", "worker-1", "out.md", "Bonjour")
+    taken = memory.copy_artifacts(("w2", "child", ["s1"]), ["out.md"], "w1", "r1", "s9", "c", "p1")
+    assert taken == ["runs/r1/s9/artifacts/p1/out.md"]
+    with pytest.raises(ValueError, match="plain folder"):
+        memory.copy_artifacts(("w2", "child", ["s1"]), ["out.md"], "w1", "r1", "s9", "c", "../x")
+
+    given = memory.world_folder("w2") / "runs/child/given"
+    given.mkdir()
+    (given / "item.json").write_text('{"text": "Hello"}')
+    assert memory.artifacts("w2", "child") == ["given/item.json", "s1/artifacts/out.md"]
+
+
 def test_an_artifact_may_carry_its_own_type_and_frontmatter(memory: Memory) -> None:
     fields = {"links": {"youtube": "https://youtu.be/v"}, "schedule": None}
     rel = memory.write_artifact(

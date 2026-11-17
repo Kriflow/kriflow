@@ -45,6 +45,7 @@ from swarmify_api import (
     auth,
     connectors,
     evals,
+    fanout,
     graph,
     learning,
     library,
@@ -946,10 +947,11 @@ def create_app(
             by_stage[a.stage_id] = by_stage.get(a.stage_id, 0.0) + a.cost_usd
         return by_stage
 
-    def take(child: Run, run: Run, stage_id: str, names: list[str]) -> None:
+    def take(child: Run, run: Run, stage_id: str, names: list[str], folder: str = "") -> None:
         stage = next(s.name for s in run.stages if s.id == stage_id)
         source = (child.world_id, child.id, [s.id for s in child.stages])
-        memory.copy_artifacts(source, names, run.world_id, run.id, stage_id, f"workflow:{stage}")
+        author = f"workflow:{stage}"
+        memory.copy_artifacts(source, names, run.world_id, run.id, stage_id, author, folder)
 
     def setting(world_id: str, name: str) -> Any:
         world = world_svc.get(world_id)
@@ -981,6 +983,7 @@ def create_app(
         retro=run_retro,
         worlds=lambda: [w.id for w in world_svc.list_all()],
         poll_seconds=max(0.05, min(poll_seconds, 1.0)),
+        items=lambda run, index, stage: fanout.items(memory, run, index, stage),
     )
     workflow_svc = workflow_service(root, registry, runner)
     runner.pin = runs.pinner(workflow_svc)

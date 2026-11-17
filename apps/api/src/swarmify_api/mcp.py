@@ -103,6 +103,12 @@ def server(
     @mcp.tool(
         description="Save workflow YAML. Without workflow_id this creates a workflow at version 1;"
         " with it, a new immutable version. Returns the version, or the violations when refused."
+        " A workflow stage with `for_each` is a fan-out stage: one child run of `runs` per item"
+        " of an earlier stage's cards, a pick gate's picked cards or a .json list file an"
+        " earlier stage produces, at most `max_parallel` (1 to 8, default 2) at once, each given"
+        " its item as file `as` (default item.md, item.json for JSON; the child workflow names it"
+        " under top-level `given`). Each child's `take` lands in <stage>/artifacts/<item key>/"
+        " with an items.json index; when items fail the stage waits at an `items` gate."
     )
     def save_workflow(world_id: str, yaml: str, workflow_id: str | None = None) -> dict[str, Any]:
         reach(world_id)
@@ -321,8 +327,9 @@ def server(
         " the chosen artifact's path in the world folder, `runs/<run>/<stage id>/artifacts/<name>`"
         " as the API's `GET /api/runs/{run_id}/artifacts` lists it (the choice then takes its"
         " title); an approve gate may name `send_back_to`, an earlier stage that runs again"
-        " with `note` in its context (at most twice per run); a confirm gate takes neither."
-        " Writes a decision artifact."
+        " with `note` in its context (at most twice per run); a confirm gate takes neither;"
+        " a fan-out stage's `items` gate takes choice `retry` (the failed items run again) or"
+        " `continue` (finish without them). Writes a decision artifact."
     )
     def decide_gate(
         run_id: str,

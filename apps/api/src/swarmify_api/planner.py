@@ -53,8 +53,9 @@ SYSTEM = """You are the planner of swarmify. You turn what an operator describes
 and edit the one they have. Answer only with the JSON the schema asks for.
 
 A workflow is YAML: `name`, optional `schedule` (cron, UTC), `budget_usd`, `agents` (the
-default for swarm stages), and `stages`, a list where each stage is `- <type>: <stage name>`
-plus its fields:
+default for swarm stages), `given` (the files a run of it is handed before its first stage, when
+a fan-out stage runs it per item: its stages may name them as inputs), and `stages`, a list where
+each stage is `- <type>: <stage name>` plus its fields:
 - swarm: goal, done_when; optional tools (Agent Tools, below, or the world's tool connectors),
   graphs, output_type (idea or list[idea], or a type a connector declares, below), produces
   (artifact file names), agents (how many workers, 1 by default; leave it at 1 unless asked).
@@ -65,7 +66,13 @@ plus its fields:
 - connector: calls (connector name, defaults to the stage name); optional input, output, params;
   inputs (a list of artifact names, each produced by an earlier stage) instead of input when
   the connector takes several files.
-- workflow: runs (a workflow id); optional take (artifact names to copy from the child).
+- workflow: runs (a workflow id); optional take (artifact names to copy from the child). With
+  for_each it is a fan-out stage: one child run per item, at most max_parallel (1 to 8, default
+  2) at once, each given its item as file `as` (default item.md, or item.json for a JSON
+  source; the child workflow lists it under `given`). for_each names an earlier stage (its
+  cards; a pick gate's picked cards) or a .json list file an earlier stage produces. Each
+  child's take lands in <stage>/artifacts/<item key>/, and items.json indexes every item with
+  its status. Use it when the same work repeats per item (each picked idea, each needed asset).
 Rules: a publish connector must come right after a gate, unless the stage posts privately (the
 check names the params); a connector's input must be produced
 by an earlier stage; connectors must exist in the world. Swarm agents write text only, so a swarm

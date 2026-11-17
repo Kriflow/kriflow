@@ -978,3 +978,12 @@ def test_a_spent_budget_ends_the_wait_and_stops_the_stage(
     with pytest.raises(Stopped, match="Paused."):
         _run(swarm, tmp_path)
     assert swarm.waiting() == []
+
+
+def test_a_given_item_is_named_first_in_the_prompt() -> None:
+    from swarmify_swarm.worker import _prior
+
+    assert _prior([]) == ""
+    assert _prior(["s1/artifacts/a.md"]) == "Artifacts of earlier stages: s1/artifacts/a.md."
+    said = _prior(["given/item.json", "s1/artifacts/a.md"])
+    assert said.endswith("This run was given given/item.json to work on: read it first.")

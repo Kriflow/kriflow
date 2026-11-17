@@ -274,6 +274,16 @@ REPEATS = "\nLeave out any item that repeats one of them."
 """What the judge of an idea stage is told after the world's made list."""
 
 
+def _prior(prior: list[str]) -> str:
+    """The run's artifacts as a stage's prompt names them. A `given/` file is what a Fan-out
+    Stage gave this run to work on (ADR 0031): the Item comes first."""
+    if not prior:
+        return ""
+    given = [p for p in prior if p.startswith("given/")]
+    item = f" This run was given {', '.join(given)} to work on: read it first." if given else ""
+    return f"Artifacts of earlier stages: {', '.join(prior)}.{item}"
+
+
 def _made(config: dict[str, Any]) -> str:
     """What the world already made, when the composition root hands it in as `made` (one line
     each, Memory's `made`): an idea stage must not pitch any of it again."""
@@ -508,7 +518,7 @@ class Swarm:
                 f"Goal: {goal}",
                 f"Done when: {at.config.get('done_when', '')}",
                 _wants(at.config),
-                f"Artifacts of earlier stages: {', '.join(prior)}." if prior else "",
+                _prior(prior),
                 self._pins(at),
                 _made(at.config),
                 "Query the graph for what the world already knows, then answer with the tasks:"
@@ -1002,7 +1012,7 @@ class Swarm:
                 f"Goal: {at.config.get('goal', '')}",
                 f"Done when: {at.config.get('done_when', '')}",
                 _wants(at.config),
-                f"Artifacts of earlier stages: {', '.join(prior)}." if prior else "",
+                _prior(prior),
                 self._pins(at),
                 _made(at.config),
                 *(f"Sent back to you with this note: {n}" for n in at.notes),

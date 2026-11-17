@@ -27,6 +27,7 @@ from swarmify_runs import (
     Runner,
     StageDef,
 )
+from swarmify_runs.control import run_folder
 from swarmify_swarm import OPERATOR, Task
 from swarmify_swarm.network import Waiting
 from swarmify_workflows import Invalid, Stage, Workflows, WorkflowVersion, dump_workflow
@@ -223,6 +224,7 @@ def checker(
             run.name,
             [(d.type, d.name, d.config) for d in stages if d.type != RETRO.type],
             agents=version.model.agents if version else None,
+            given=version.model.given if version else (),
         )
         draft = workflows.check(
             run.world_id, yaml, run.workflow_id, version.packages if version else None
@@ -457,6 +459,9 @@ def router(
                 for d in defs
             ],
             budget_usd=run.budget_usd,
+            given=sorted(
+                p.name for p in (run_folder(runner.data_dir, run) / "given").glob("[!.]*")
+            ),
         )
         try:
             return workflows.save(run.world_id, yaml)

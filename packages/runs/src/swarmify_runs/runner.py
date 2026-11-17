@@ -108,7 +108,7 @@ class Take(Protocol):
     of the stage's artifacts they go in (the Item's key). Raises to fail the stage."""
 
     def __call__(
-        self, child: Run, parent: Run, stage_id: str, names: list[str], folder: str = ""
+        self, child: Run, parent: Run, stage_id: str, names: list[str], folder: str = "", /
     ) -> None: ...
 
 
