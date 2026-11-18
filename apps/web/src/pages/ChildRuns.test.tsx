@@ -129,7 +129,7 @@ test("an approve items gate shows each item's output and sends approvals and sen
   const list = screen.getByTestId("review-items");
   await expect.element(list).toMatchTextContent(/Paragraph 1\s*approved.*Paragraph 2\s*done.*Paragraph 3\s*failed\s*could not translate/);
   await expect.element(list.getByRole("img", { name: "p2.png" })).toBeVisible();
-  expect(list.getByRole("img", { name: "p1.png" }).elements()).toHaveLength(0);
+  await expect.element(list.getByRole("img", { name: "p1.png" })).toBeVisible();
   const send = screen.getByRole("button", { name: "Send the verdicts" });
   await expect.element(send).toBeDisabled();
   await list.getByRole("radio", { name: "Approve Paragraph 2" }).click();
@@ -137,6 +137,35 @@ test("an approve items gate shows each item's output and sends approvals and sen
   await list.getByRole("textbox", { name: "What to change in Paragraph 3" }).fill("Warmer, less stiff");
   await send.click();
   await expect.poll(() => sent).toEqual([{ approve: ["p2"], send_back: { p3: "Warmer, less stiff" } }]);
+});
+
+test("a partial approval keeps the approve items gate open with the items as they now stand", async () => {
+  const child = (id: string) => ({ id, world_id: "world_2", name: `Make: ${id}` });
+  const items = (p1: boolean) => [
+    { key: "p1", title: "Paragraph 1", status: "done", approved: p1, child: child("run_p1") },
+    { key: "p2", title: "Paragraph 2", status: "done", approved: false, child: child("run_p2") },
+  ];
+  let approved = false;
+  const parent = () => run("waiting_gate", [stage(0, "split", "connector", "done"), stage(1, "translate each", "workflow", "waiting", { items: items(approved) })], top);
+  const review = gate("approve_items", { run_id: "run_top", world_id: "world_1", stage_name: "translate each" });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([research]),
+    "GET /api/gates": () => Response.json([review]),
+    "GET /api/runs/run_top": () => Response.json(parent()),
+    "GET /api/runs/run_top/stages/stage_1/artifacts": () => Response.json([]),
+    "POST /api/runs/run_top/items/review": () => {
+      approved = true;
+      return Response.json(parent());
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  const list = screen.getByTestId("review-items");
+  await list.getByRole("radio", { name: "Approve Paragraph 1" }).click();
+  await screen.getByRole("button", { name: "Send the verdicts" }).click();
+  await expect.element(list).toMatchTextContent(/Paragraph 1\s*approved.*Paragraph 2\s*done/);
+  expect(list.getByRole("radio", { name: "Approve Paragraph 1" }).elements()).toHaveLength(0);
+  await expect.element(list.getByRole("radio", { name: "Approve Paragraph 2" })).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: "Send the verdicts" })).toBeDisabled();
 });
 
 test("a fan-out child's gate names its item beside its parent", async () => {

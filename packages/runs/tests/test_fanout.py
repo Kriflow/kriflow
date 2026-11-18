@@ -518,3 +518,23 @@ def test_review_items_needs_an_approve_fan_out_stage(
     wait_for(lambda: len(children(runner, parent.id)) == 1)
     with pytest.raises(Illegal, match="no fan-out stage with approve"):
         runner.review_items(parent.id, approve=["p1"])
+
+
+def test_a_sent_back_child_that_ends_before_its_stage_runs_again_still_settles(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 2))
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    at(runner, parent.id, "waiting_gate")
+    runner.pause(parent.id)
+    at(runner, parent.id, "paused")
+    runner.review_items(parent.id, approve=["p1"], send_back={"p2": "Warmer"})
+    wait_for(lambda: len(translate.seen.get("Paragraph 2", [])) == 2)
+    p2 = {i.key: i for i in fetch(runner, parent.id).stages[STAGE].items}["p2"]
+    assert p2.child is not None
+    redo = p2.child.id
+    wait_for(lambda: fetch(runner, redo).status == "done")
+    runner.resume(parent.id)
+    again = at(runner, parent.id, "waiting_gate")
+    items = {i.key: i for i in again.stages[STAGE].items}
+    assert items["p2"].status == "done" and out(tmp_path, again, "p2") == redo

@@ -28,7 +28,7 @@ export function ReviewItems({ gate, formId, verdicts, onVerdict }: { gate: Gate;
         const found = data?.stages[gate.stage_index]?.items ?? [];
         if (!live) return;
         setItems(found);
-        for (const item of found.filter((i) => !i.approved && i.status === "done")) {
+        for (const item of found.filter((i) => i.status === "done")) {
           void api
             .GET("/api/runs/{run_id}/stages/{stage_id}/artifacts", { params: { path, query: { folder: item.key } } })
             .then(({ data: made }) => live && setFiles((f) => ({ ...f, [item.key]: made ?? [] })));
@@ -61,11 +61,11 @@ export function ReviewItems({ gate, formId, verdicts, onVerdict }: { gate: Gate;
               </Link>
             )}
           </p>
+          {(files[item.key] ?? []).map((a) => (
+            <Made key={a.path} a={a} worldId={gate.world_id} />
+          ))}
           {!item.approved && (
             <>
-              {(files[item.key] ?? []).map((a) => (
-                <Made key={a.path} a={a} worldId={gate.world_id} />
-              ))}
               <fieldset className="segments review-verdict">
                 <legend className="visually-hidden">Your verdict on {item.title}</legend>
                 {item.status === "done" && (

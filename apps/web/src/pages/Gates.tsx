@@ -560,6 +560,8 @@ export function GateCard({
   const [chosen, setChosen] = useState("");
   // At an approve items gate: the verdict picked on each Item still to review.
   const [verdicts, setVerdicts] = useState<Verdicts>({});
+  // Bumped once a review is taken, so the Items load again with fresh verdicts.
+  const [round, setRound] = useState(0);
   // The budget's top-up, from a preset chip or typed.
   const [add, setAdd] = useState(() => topUpSuggestion(gate));
   // Ask this run mounts the first time its disclosure opens, then stays with its turns.
@@ -649,8 +651,17 @@ export function GateCard({
       [...fields].flatMap(([k, v]) => (k.startsWith("edit:") ? [[k.slice(5), String(v)]] : [])),
     );
     const { send, said } = decision(gate, choice, { note: String(fields.get("note") ?? "").trim(), edits, reviewed });
+    // A partial review keeps the gate open: show the Items as they now stand.
+    const sent = async () => {
+      const why = await send();
+      if (!why && gate.kind === "approve_items") {
+        setVerdicts({});
+        setRound((r) => r + 1);
+      }
+      return why;
+    };
     setBusy(true);
-    await onAnswer(gate, send, said);
+    await onAnswer(gate, sent, said);
     setBusy(false);
   }
 
@@ -774,7 +785,7 @@ export function GateCard({
               </div>
             )}
             {gate.kind === "approve_items" && (
-              <ReviewItems gate={gate} formId={formId} verdicts={verdicts} onVerdict={(key, v) => setVerdicts((all) => ({ ...all, [key]: v }))} />
+              <ReviewItems key={round} gate={gate} formId={formId} verdicts={verdicts} onVerdict={(key, v) => setVerdicts((all) => ({ ...all, [key]: v }))} />
             )}
             {gate.kind === "pick" && cards.length > 0 && <ArtifactCards cards={cards} worldId={gate.world_id} multi={multi} />}
             {gate.kind === "pick" && artifacts && cards.length === 0 && (

@@ -705,6 +705,14 @@ def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
             if view.status in ("failed", "aborted"):
                 runner.storage.set_item(run_id, index, visit, view.key, "pending", None)
         rows = runner.storage.items(run_id, index, visit)
+    # A child that ended while the stage was not running (one sent back from its gate before
+    # the stage ran again) had its end ignored: settle it now.
+    for _, view in rows:
+        if view.status == "running" and view.child is not None:
+            ended = runner.storage.get_run(view.child.id)
+            if ended is not None and ended.status in TERMINAL:
+                _take_item(runner, run_id, ended, ended.status)
+    rows = runner.storage.items(run_id, index, visit)
     held = run.status == "paused" or runner.storage.stop_of(run_id) is not None
     live = sum(1 for _, v in rows if v.status == "running")
     most = int(stage.config.get("max_parallel") or 2)

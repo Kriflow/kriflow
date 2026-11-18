@@ -215,5 +215,7 @@ export function decision(gate: Gate, choice: Choice, { note = "", edits = {}, re
   return { send: () => decide(gate.run_id, body), said };
 }
 
-/** A budget gate stays until the run resumes and can still be aborted, so answering it keeps it open. */
-export const staysOpen = (gate: Gate) => gate.kind === "budget";
+/** A budget gate stays until the run resumes and can still be aborted, so answering it keeps it
+ * open; an approve items gate stays while some Items wait for review. Reloading the gates drops
+ * either once the run moves on. */
+export const staysOpen = (gate: Gate) => gate.kind === "budget" || gate.kind === "approve_items";
