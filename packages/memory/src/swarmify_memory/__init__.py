@@ -344,10 +344,16 @@ class Memory:
             for p in sorted(folder.glob("*.md"))
         ]
 
-    def stage_artifacts(self, world_id: str, run_id: str, stage_id: str) -> list[ArtifactFile]:
-        """The stage's artifacts by name, sidecars standing in for their files."""
-        folder = self.world_folder(world_id) / "runs" / run_id / stage_id / "artifacts"
-        files = [p for p in folder.glob("[!.]*") if p.is_file()]  # dotfiles: connector state
+    def stage_artifacts(
+        self, world_id: str, run_id: str, stage_id: str, folder: str = ""
+    ) -> list[ArtifactFile]:
+        """The stage's artifacts by name, sidecars standing in for their files; with `folder`,
+        those of that subfolder (a fan-out stage's Item key). Raises ValueError for a `folder`
+        that is not a plain name."""
+        if folder and ("/" in folder or "\\" in folder or folder.startswith(".")):
+            raise ValueError(f"{folder} is not a folder of the stage's artifacts")
+        root = self.world_folder(world_id) / "runs" / run_id / stage_id / "artifacts"
+        files = [p for p in (root / folder).glob("[!.]*") if p.is_file()]  # dotfiles: state
         return self._artifacts(world_id, files)
 
     def decisions(self, world_id: str, run_id: str, stage_id: str) -> list[ArtifactFile]:

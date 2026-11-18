@@ -659,3 +659,55 @@ async def test_a_chat_threads_replies_ask_the_run_assistant_and_apply_or_dismiss
         assert [c["by"] for c in http.get(f"/api/runs/{run['id']}/changes").json()] == [
             "slack:lee", "operator", "operator"
         ]  # fmt: skip
+
+
+FAN_CHILD = (
+    "name: Each\ngiven: [item.json]\nstages:\n  - connector: work\n    calls: studio\n"
+    "    input: item.json\n"
+)
+FAN = (
+    "name: Fan\nstages:\n  - connector: split\n    calls: studio\n    output: parts.json\n"
+    "  - workflow: each\n    runs: {child}\n    for_each: parts.json\n    approve: true\n"
+)
+
+
+@pytest.mark.anyio
+async def test_review_items_approves_the_items_of_an_approve_fan_out_stage(
+    tmp_path: Path,
+) -> None:
+    from api_fakes import until
+    from fastapi.testclient import TestClient
+
+    def split(run: Run, stage_id: str, stage: StageDef) -> None:
+        if stage.name == "split":
+            out = tmp_path / "worlds" / run.world_id / "runs" / run.id / stage_id / "artifacts"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "parts.json").write_text('[{"id": "a", "n": 1}, {"id": "b", "n": 2}]')
+
+    worlds = world_service(tmp_path)
+    control = run_control(tmp_path)
+    with TestClient(create_app(tmp_path, connector=split, retro=False)) as http:
+        world = http.post("/api/worlds", json={"name": "Parts"}).json()["id"]
+        studio(http, world)
+        child = http.post(f"/api/worlds/{world}/workflows", json={"yaml": FAN_CHILD}).json()
+        fan = FAN.format(child=child["workflow_id"])
+        wf = http.post(f"/api/worlds/{world}/workflows", json={"yaml": fan}).json()
+        run = http.post(f"/api/workflows/{wf['workflow_id']}/runs", json={}).json()
+        until(lambda: http.get(f"/api/runs/{run['id']}").json()["status"] == "waiting_gate")
+
+        async with Client(
+            server(worlds, workflow_service(tmp_path), task_board(tmp_path), control)
+        ) as client:
+            gates = await client.call_tool("list_gates")
+            assert gates.structured_content
+            assert [g["kind"] for g in gates.structured_content["result"]] == ["approve_items"]
+            blank = {"run_id": run["id"], "send_back": {"a": ""}}
+            assert (await client.call_tool("review_items", blank)).is_error
+            one = await client.call_tool("review_items", {"run_id": run["id"], "approve": ["a"]})
+            assert not one.is_error and one.structured_content
+            items = one.structured_content["stages"][1]["items"]
+            assert [(i["key"], i["approved"]) for i in items] == [("a", True), ("b", False)]
+            rest = await client.call_tool("review_items", {"run_id": run["id"], "approve": ["b"]})
+            assert not rest.is_error
+            until(lambda: http.get(f"/api/runs/{run['id']}").json()["status"] == "done")
+    control.close()

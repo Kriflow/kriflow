@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { FakeEventSource, fakeFetch, gate, run, stage } from "../test/fakes";
+import { artifact, FakeEventSource, fakeFetch, gate, run, stage } from "../test/fakes";
 import { mountAt } from "../test/mount";
 
 const ts = "2026-10-26T10:00:00+00:00";
@@ -69,9 +69,9 @@ test("the gates inbox labels a child run's gate with its parent", async () => {
 
 test("a fan-out stage lists its items with a status chip and a link to each child", async () => {
   const items = [
-    { key: "p1", title: "Paragraph 1", status: "done", child: { id: "run_p1", world_id: "world_2", name: "Translate: Paragraph 1" } },
-    { key: "p2", title: "Paragraph 2", status: "failed", error: "could not translate", child: { id: "run_p2", world_id: "world_2", name: "Translate: Paragraph 2" } },
-    { key: "p3", title: "Paragraph 3", status: "pending", child: null },
+    { key: "p1", title: "Paragraph 1", status: "done", approved: false, child: { id: "run_p1", world_id: "world_2", name: "Translate: Paragraph 1" } },
+    { key: "p2", title: "Paragraph 2", status: "failed", approved: false, error: "could not translate", child: { id: "run_p2", world_id: "world_2", name: "Translate: Paragraph 2" } },
+    { key: "p3", title: "Paragraph 3", status: "pending", approved: false, child: null },
   ];
   const parent = run("running", [stage(0, "translate each", "workflow", "running", { items })], top);
   fakeFetch({
@@ -99,6 +99,73 @@ test("an items gate retries the failed items", async () => {
   const { screen } = await mountAt("/gates");
   await screen.getByRole("button", { name: "Retry the failed items" }).click();
   await expect.poll(() => sent).toEqual([{ note: "", choice: "retry" }]);
+});
+
+test("an approve items gate shows each item's output and sends approvals and send-backs together", async () => {
+  const sent: unknown[] = [];
+  const child = (id: string) => ({ id, world_id: "world_2", name: `Make: ${id}` });
+  const items = [
+    { key: "p1", title: "Paragraph 1", status: "done", approved: true, child: child("run_p1") },
+    { key: "p2", title: "Paragraph 2", status: "done", approved: false, child: child("run_p2") },
+    { key: "p3", title: "Paragraph 3", status: "failed", approved: false, error: "could not translate", child: child("run_p3") },
+  ];
+  const parent = run("waiting_gate", [stage(0, "split", "connector", "done"), stage(1, "translate each", "workflow", "waiting", { items })], top);
+  const review = gate("approve_items", { run_id: "run_top", world_id: "world_1", stage_name: "translate each" });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([research]),
+    "GET /api/gates": () => Response.json([review]),
+    "GET /api/runs/run_top": () => Response.json(parent),
+    "GET /api/runs/run_top/stages/stage_1/artifacts": (req: Request) => {
+      const key = new URL(req.url).searchParams.get("folder");
+      const name = `${key}.png`;
+      return Response.json([{ ...artifact({ name, path: `runs/run_top/stage_1/artifacts/${key}/${name}`, title: name, type: "file" }) }]);
+    },
+    "POST /api/runs/run_top/items/review": async (req: Request) => {
+      sent.push(await req.json());
+      return Response.json(parent);
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  const list = screen.getByTestId("review-items");
+  await expect.element(list).toMatchTextContent(/Paragraph 1\s*approved.*Paragraph 2\s*done.*Paragraph 3\s*failed\s*could not translate/);
+  await expect.element(list.getByRole("img", { name: "p2.png" })).toBeVisible();
+  await expect.element(list.getByRole("img", { name: "p1.png" })).toBeVisible();
+  const send = screen.getByRole("button", { name: "Send the verdicts" });
+  await expect.element(send).toBeDisabled();
+  await list.getByRole("radio", { name: "Approve Paragraph 2" }).click();
+  await list.getByRole("radio", { name: "Send back Paragraph 3" }).click();
+  await list.getByRole("textbox", { name: "What to change in Paragraph 3" }).fill("Warmer, less stiff");
+  await send.click();
+  await expect.poll(() => sent).toEqual([{ approve: ["p2"], send_back: { p3: "Warmer, less stiff" } }]);
+});
+
+test("a partial approval keeps the approve items gate open with the items as they now stand", async () => {
+  const child = (id: string) => ({ id, world_id: "world_2", name: `Make: ${id}` });
+  const items = (p1: boolean) => [
+    { key: "p1", title: "Paragraph 1", status: "done", approved: p1, child: child("run_p1") },
+    { key: "p2", title: "Paragraph 2", status: "done", approved: false, child: child("run_p2") },
+  ];
+  let approved = false;
+  const parent = () => run("waiting_gate", [stage(0, "split", "connector", "done"), stage(1, "translate each", "workflow", "waiting", { items: items(approved) })], top);
+  const review = gate("approve_items", { run_id: "run_top", world_id: "world_1", stage_name: "translate each" });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([research]),
+    "GET /api/gates": () => Response.json([review]),
+    "GET /api/runs/run_top": () => Response.json(parent()),
+    "GET /api/runs/run_top/stages/stage_1/artifacts": () => Response.json([]),
+    "POST /api/runs/run_top/items/review": () => {
+      approved = true;
+      return Response.json(parent());
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  const list = screen.getByTestId("review-items");
+  await list.getByRole("radio", { name: "Approve Paragraph 1" }).click();
+  await screen.getByRole("button", { name: "Send the verdicts" }).click();
+  await expect.element(list).toMatchTextContent(/Paragraph 1\s*approved.*Paragraph 2\s*done/);
+  expect(list.getByRole("radio", { name: "Approve Paragraph 1" }).elements()).toHaveLength(0);
+  await expect.element(list.getByRole("radio", { name: "Approve Paragraph 2" })).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: "Send the verdicts" })).toBeDisabled();
 });
 
 test("a fan-out child's gate names its item beside its parent", async () => {

@@ -106,7 +106,13 @@ class Storage(Protocol):
         status: str,
         child_run_id: str | None,
         error: str | None = None,
-    ) -> None: ...
+    ) -> None:
+        """Set an Item's status and child; any new status clears its approval."""
+        ...
+
+    def approve_items(self, run_id: str, index: int, visit: int, keys: list[str]) -> None:
+        """Mark the Items approved at a fan-out stage's `approve` gate; `set_item` clears it."""
+        ...
 
     def item_of(self, child_run_id: str) -> tuple[str, int, int, str] | None:
         """(run, stage index, visit, item key) of the Item a child run works on, if any."""

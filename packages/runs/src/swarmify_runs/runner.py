@@ -80,7 +80,7 @@ from swarmify_runs.machine import (
     Started,
     transition,
 )
-from swarmify_runs.model import Item, ItemView, Pinned, Run, StageDef, items_ask
+from swarmify_runs.model import Item, ItemView, Pinned, Run, StageDef, items_gate
 from swarmify_runs.ports import Notifier, Storage
 
 CHILD_QUEUE = "child-runs"
@@ -665,8 +665,9 @@ def _child_pin(runner: Runner, run: Run) -> Pin:
 def _fan_out(run_id: str, index: int, entering: bool) -> tuple[bool, RunEvent | None, str | None]:
     """Move the fan-out stage at `index` on (ADR 0031): start pending Items up to its
     `max_parallel`, enqueue their children and, once every Item settled, finish the stage or
-    raise its `items` gate when some failed. Returns (whether the stage fans out, the event its
-    settling makes or None while children run, an error that fails it)."""
+    raise its items gate when some failed or, with `approve`, some are not approved yet.
+    Returns (whether the stage fans out, the event its settling makes or None while children
+    run, an error that fails it)."""
     try:
         started, outcome = _fan_next(run_id, index, entering)
     except Exception as exc:
@@ -682,8 +683,10 @@ def _fan_out(run_id: str, index: int, entering: bool) -> tuple[bool, RunEvent | 
 def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
     """Start the next children of the fan-out stage at `index`. Returns the ids started and
     `plain` (no for_each), `wait` (children run), `done` or `failed` (every Item settled, some
-    failed). On `entering` the stage just became running: its visit's Items are planned, or, on
-    a retry from its gate, the failed ones go again."""
+    failed or, with `approve`, not approved: its gate opens; the name stays for DBOS replays).
+    On `entering` the stage just became running: its visit's Items are planned, or, on a retry
+    from its gate, the failed ones go again (with `approve` only the Items sent back go again,
+    already started by `review_items`)."""
     runner = _current()
     run = runner.storage.get_run(run_id)
     if run is None:
@@ -697,11 +700,19 @@ def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
     rows = runner.storage.items(run_id, index, visit)
     if not rows:
         rows = _plan(runner, run, index, stage, visit)
-    elif entering:
+    elif entering and not stage.config.get("approve"):
         for _, view in rows:
             if view.status in ("failed", "aborted"):
                 runner.storage.set_item(run_id, index, visit, view.key, "pending", None)
         rows = runner.storage.items(run_id, index, visit)
+    # A child that ended while the stage was not running (one sent back from its gate before
+    # the stage ran again) had its end ignored: settle it now.
+    for _, view in rows:
+        if view.status == "running" and view.child is not None:
+            ended = runner.storage.get_run(view.child.id)
+            if ended is not None and ended.status in TERMINAL:
+                _take_item(runner, run_id, ended, ended.status)
+    rows = runner.storage.items(run_id, index, visit)
     held = run.status == "paused" or runner.storage.stop_of(run_id) is not None
     live = sum(1 for _, v in rows if v.status == "running")
     most = int(stage.config.get("max_parallel") or 2)
@@ -716,7 +727,9 @@ def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
     if any(v.status in ("pending", "running") for _, v in rows):
         return started, "wait"
     _join(runner, run, index, stage_id, [v for _, v in rows])
-    return started, "failed" if any(v.status != "done" for _, v in rows) else "done"
+    approve = bool(stage.config.get("approve"))
+    passed = all(v.status == "done" and (v.approved or not approve) for _, v in rows)
+    return started, "done" if passed else "failed"
 
 
 def _plan(
@@ -913,8 +926,9 @@ def _save(run_id: str, state: RunState, error: str | None, gate_opened: bool) ->
         _, stage = runner.storage.stage_def(run_id, index)
         shown = runner.preview_after(run, index)
         kind, ask = stage.config.get("kind") or "approve", stage.config.get("ask") or ""
-        if stage.type == "workflow":  # a fan-out stage whose Items settled, some failed
-            kind, ask = "items", items_ask([v for _, v in runner.storage.items(run_id, index)])
+        if stage.type == "workflow":  # a fan-out stage whose Items settled: failed or to review
+            views = [v for _, v in runner.storage.items(run_id, index)]
+            kind, ask = items_gate(stage.config, views)
         at, visit, name = run, state.send_backs, stage.name
         if state.over_budget:
             top, shown = runner.top(run), None
@@ -957,7 +971,13 @@ def _save(run_id: str, state: RunState, error: str | None, gate_opened: bool) ->
     runner.notify(event)
 
 
-OUTCOMES = {"approve": "approved", "pick": "picked", "confirm": "confirmed", "skill": "answered"}
+OUTCOMES = {
+    "approve": "approved",
+    "approve_items": "approved",
+    "pick": "picked",
+    "confirm": "confirmed",
+    "skill": "answered",
+}
 
 
 def gate_closed(before: Run, after: Run) -> Event | None:
@@ -973,8 +993,12 @@ def gate_closed(before: Run, after: Run) -> Event | None:
     decision = next((d for d in reversed(after.decisions) if d.stage_index == index), None)
     rerun = next((c for c in reversed(after.changes) if c.kind == "rerun"), None)
     resolution: dict[str, Any] = {"outcome": "aborted"}
+    again = after.stages[index].status == "running" and after.send_backs == before.send_backs
     if after.status != "aborted" and before.over_budget:
         resolution = {"outcome": "budget_added"}
+    elif after.status != "aborted" and again and before.stages[index].config.get("approve"):
+        # Items of a fan-out stage with `approve` were sent back (review_items): no decision.
+        resolution = {"outcome": "sent_back", "send_back_to": before.stages[index].name}
     elif after.status != "aborted" and rerun and (not decision or rerun.at > decision.decided_at):
         resolution = {
             "outcome": "rerun",

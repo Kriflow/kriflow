@@ -19,8 +19,11 @@ REVIEW = StageDef("review", "gate", {"ask": "Approve?", "kind": "approve"})
 STAGE = 1  # the fan-out stage's index in every parent below
 
 
-def fan(source: str = "paragraphs", most: int = 2, given: str = "item.md") -> StageDef:
+def fan(
+    source: str = "paragraphs", most: int = 2, given: str = "item.md", approve: bool = False
+) -> StageDef:
     config = {"runs": "wf_t", "for_each": source, "as_": given, "max_parallel": most}
+    config |= {"approve": True} if approve else {}
     return StageDef("translate each", "workflow", {**config, "take": ["out.md"]})
 
 
@@ -31,18 +34,21 @@ class Translate:
         self.data_dir = data_dir
         self.failing: dict[str, int] = {}
         self.seen: dict[str, list[str]] = {}
+        self.notes: dict[str, list[str]] = {}
 
     def __call__(self, run: Run, stage_id: str, stage: StageDef) -> None:
         given = self.data_dir / "worlds" / run.world_id / "runs" / run.id / "given"
         title = run.name.split(": ", 1)[1] if ": " in run.name else run.name
         self.seen.setdefault(title, []).extend(p.read_text() for p in sorted(given.iterdir()))
+        self.notes.setdefault(title, []).append(run.send_back_note(stage.name))
         if self.failing.get(title, 0) > 0:
             self.failing[title] -= 1
             raise RuntimeError(f"could not translate {title}")
 
 
 class FileTake:
-    """Writes each taken name into the parent stage's Item folder, as Memory's copy does."""
+    """Writes each taken name, holding the child's id, into the parent stage's Item folder, as
+    Memory's copy does."""
 
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
@@ -54,7 +60,7 @@ class FileTake:
         out = run / stage_id / "artifacts" / folder
         out.mkdir(parents=True, exist_ok=True)
         for name in names:
-            (out / name).write_text(child.name)
+            (out / name).write_text(child.id)
 
 
 def cards(tmp_path: Path, count: int) -> list[Item]:
@@ -407,3 +413,128 @@ def test_a_failed_item_is_retried_now_from_where_its_child_failed_while_siblings
     retried = next(i.child for i in done.stages[STAGE].items if i.key == "p2")
     assert retried is not None and retried.id == child.id
     assert len(translate.seen["Paragraph 2"]) == 2
+
+
+def out(tmp_path: Path, run: Run, key: str) -> str:
+    folder = tmp_path / "worlds" / run.world_id / "runs" / run.id / run.stages[STAGE].id
+    return (folder / "artifacts" / key / "out.md").read_text()
+
+
+def test_an_approve_stage_waits_at_one_items_gate_until_every_item_is_approved(
+    runner: Runner, translate: Translate, tmp_path: Path, notifier: FakeNotifier
+) -> None:
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 2))
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True), REVIEW])
+    waiting = at(runner, parent.id, "waiting_gate")
+    assert [(i.status, i.approved) for i in waiting.stages[STAGE].items] == [("done", False)] * 2
+    (gate,) = runner.gates()
+    assert (gate.kind, gate.stage_name) == ("approve_items", "translate each")
+    assert gate.ask.startswith("2 of 2 items wait for review")
+    wait_for(lambda: any(e.type == "gate.opened" for e in notifier.events))
+    assert [e.payload["kind"] for e in notifier.events if e.type == "gate.opened"] == [
+        "approve_items"
+    ]
+    with pytest.raises(Illegal, match="approve every item"):
+        runner.decide(parent.id)
+
+    one = runner.review_items(parent.id, approve=["p1"])
+    assert [i.approved for i in one.stages[STAGE].items] == [True, False]
+    assert fetch(runner, parent.id).status == "waiting_gate"
+    runner.review_items(parent.id, approve=["p2"])
+    wait_for(lambda: [g.stage_name for g in runner.gates()] == ["review"])
+    done = fetch(runner, parent.id)
+    assert done.stages[STAGE].status == "done"
+    assert [d.kind for d in done.decisions] == ["approve_items"]
+    assert {t: len(s) for t, s in translate.seen.items()} == {"Paragraph 1": 1, "Paragraph 2": 1}
+
+
+def test_an_item_sent_back_with_a_note_reruns_only_its_child_and_its_output_replaces_the_old(
+    runner: Runner, translate: Translate, tmp_path: Path, notifier: FakeNotifier
+) -> None:
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 3))
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    waiting = at(runner, parent.id, "waiting_gate")
+    first = {i.key: i.child.id for i in waiting.stages[STAGE].items if i.child}
+    assert out(tmp_path, waiting, "p2") == first["p2"]
+    with pytest.raises(ValueError, match="needs a note"):
+        runner.review_items(parent.id, send_back={"p2": " "})
+    with pytest.raises(KeyError):
+        runner.review_items(parent.id, approve=["p9"])
+
+    runner.review_items(parent.id, approve=["p1"], send_back={"p2": "Too stiff, warmer"})
+    wait_for(lambda: len(translate.seen.get("Paragraph 2", [])) == 2)
+    again = at(runner, parent.id, "waiting_gate")
+    (closed,) = [e for e in notifier.events if e.type == "gate.closed"]
+    assert closed.payload["resolution"] == {
+        "outcome": "sent_back",
+        "send_back_to": "translate each",
+    }
+    items = {i.key: i for i in again.stages[STAGE].items}
+    assert [(k, i.status, i.approved) for k, i in items.items()] == [
+        ("p1", "done", True), ("p2", "done", False), ("p3", "done", False),
+    ]  # fmt: skip
+    child = items["p2"].child
+    assert child is not None and child.id != first["p2"]
+    redone = fetch(runner, child.id)
+    assert redone.parent_run_id == parent.id and redone.forked_from is not None
+    assert redone.forked_from.id == first["p2"]
+    assert translate.notes["Paragraph 2"] == ["", "Too stiff, warmer"]
+    assert {t: len(s) for t, s in translate.seen.items()} == {
+        "Paragraph 1": 1, "Paragraph 2": 2, "Paragraph 3": 1,
+    }  # fmt: skip
+    assert out(tmp_path, again, "p2") == child.id
+    assert [i["child_run_id"] for i in joined(tmp_path, again)][1] == child.id
+    (gate,) = runner.gates()
+    assert gate.ask.startswith("2 of 3 items wait for review")
+
+    runner.review_items(parent.id, approve=["p2", "p3"])
+    done = at(runner, parent.id, "done")
+    assert all(i.approved for i in done.stages[STAGE].items)
+
+
+def test_a_failed_item_of_an_approve_stage_is_sent_back_from_where_it_failed(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 2))
+    translate.failing["Paragraph 1"] = 1
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    at(runner, parent.id, "waiting_gate")
+    (gate,) = runner.gates()
+    assert gate.kind == "approve_items" and "Paragraph 1 (p1): RuntimeError" in gate.ask
+    with pytest.raises(Illegal, match="only a finished one"):
+        runner.review_items(parent.id, approve=["p1"])
+    runner.review_items(parent.id, approve=["p2"], send_back={"p1": "Try again"})
+    wait_for(lambda: len(translate.seen.get("Paragraph 1", [])) == 2)
+    at(runner, parent.id, "waiting_gate")
+    runner.review_items(parent.id, approve=["p1"])
+    at(runner, parent.id, "done")
+
+
+def test_review_items_needs_an_approve_fan_out_stage(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [TRANSLATE, REVIEW], paragraphs=cards(tmp_path, 1))
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan()])
+    wait_for(lambda: len(children(runner, parent.id)) == 1)
+    with pytest.raises(Illegal, match="no fan-out stage with approve"):
+        runner.review_items(parent.id, approve=["p1"])
+
+
+def test_a_sent_back_child_that_ends_before_its_stage_runs_again_still_settles(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 2))
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    at(runner, parent.id, "waiting_gate")
+    runner.pause(parent.id)
+    at(runner, parent.id, "paused")
+    runner.review_items(parent.id, approve=["p1"], send_back={"p2": "Warmer"})
+    wait_for(lambda: len(translate.seen.get("Paragraph 2", [])) == 2)
+    p2 = {i.key: i for i in fetch(runner, parent.id).stages[STAGE].items}["p2"]
+    assert p2.child is not None
+    redo = p2.child.id
+    wait_for(lambda: fetch(runner, redo).status == "done")
+    runner.resume(parent.id)
+    again = at(runner, parent.id, "waiting_gate")
+    items = {i.key: i for i in again.stages[STAGE].items}
+    assert items["p2"].status == "done" and out(tmp_path, again, "p2") == redo

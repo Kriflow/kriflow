@@ -320,6 +320,86 @@ class RunControl:
         self._enqueue(run)
         return run
 
+    def review_items(
+        self,
+        run_id: str,
+        approve: list[str] | None = None,
+        send_back: dict[str, str] | None = None,
+        by: str | None = None,
+    ) -> Run:
+        """Review the Items of the run's fan-out stage with `approve` (issue 502), at its items
+        gate or while some still run. Each Item in `approve` is approved; each in `send_back`
+        goes again with its note: its child is forked from the child's first unfinished stage,
+        as `retry_item` does, with the note as a Rerun of that stage, so the stage reads it as
+        a send-back note; its new output replaces the old once it settles. At the gate, a
+        send-back runs the stage again and the gate opens anew once every Item settled; once
+        every Item is approved the gate is answered and the stage finishes. Returns the run.
+
+        Raises KeyError for an unknown run or Item, Illegal when no fan-out stage with
+        `approve` is running or waiting, when an Item to approve has not finished or one to
+        send back has not settled, and ValueError for a send-back with no note or an Item both
+        approved and sent back."""
+        run = self._run(run_id)
+        index = next((s.index for s in run.stages if s.status in ("running", "waiting")), None)
+        config = self.storage.stage_def(run_id, index)[1].config if index is not None else {}
+        if index is None or not config.get("for_each") or not config.get("approve"):
+            raise Illegal("no fan-out stage with approve is running or waiting at its gate")
+        approve, send_back = approve or [], send_back or {}
+        if both := sorted(set(approve) & set(send_back)):
+            raise ValueError(f"{', '.join(both)} cannot be approved and sent back at once")
+        if empty := sorted(k for k, note in send_back.items() if not note.strip()):
+            raise ValueError(f"a send-back needs a note: {', '.join(empty)}")
+        visit = run.send_backs
+        views = {v.key: v for _, v in self.storage.items(run_id, index, visit)}
+        for key in [*approve, *send_back]:
+            if key not in views:
+                raise KeyError(f"no Item {key!r} in stage {run.stages[index].name}")
+        for key in approve:
+            if views[key].status != "done":
+                raise Illegal(
+                    f"Item {key!r} is {views[key].status}; only a finished one is approved"
+                )
+        for key in send_back:
+            if views[key].status not in ("done", "failed", "aborted") or views[key].child is None:
+                raise Illegal(
+                    f"Item {key!r} is {views[key].status}; it is sent back once it settles"
+                )
+        self.storage.approve_items(run_id, index, visit, approve)
+        children = [
+            self._refork(run, index, visit, key, note.strip(), by)
+            for key, note in send_back.items()
+        ]
+        waiting = run.stages[index].status == "waiting"
+        if waiting and children:
+            self._send(run_id, {"action": "decide", "index": index, "retry": True})
+        for child in children:  # after the message, so the stage runs again before they end
+            self._enqueue(child)
+        left = [v for _, v in self.storage.items(run_id, index, visit) if not v.approved]
+        if waiting and not children and not left:
+            return self.decide(run_id, choice="approve", by=by)
+        return self._run(run_id)
+
+    def _refork(self, run: Run, index: int, visit: int, key: str, note: str, by: str | None) -> Run:
+        """Fork the Item's child from its first unfinished stage (its first, when it finished),
+        in the family, with `note` as a Rerun of that stage, and make the fork the Item's
+        child. The caller enqueues it."""
+        view = {v.key: v for _, v in self.storage.items(run.id, index, visit)}[key]
+        assert view.child is not None
+        source = self._any(view.child.id)
+        at = next((s.index for s in source.stages if s.status not in ("done", "skipped")), 0)
+        stage = source.stages[at]
+        change = AppliedChange(
+            new_id("change"), source.id, "rerun", stage.id, at, stage.name, {"note": note},
+            {}, by or "operator", _now(), source.revision + 1,
+        )  # fmt: skip
+        fork = replace(self._new_fork(source), parent_run_id=run.id, budget_usd=None)
+        child = self.storage.fork_change(fork, source, at, defs(source), change)
+        if child is None:
+            raise Illegal(moved(self._any(source.id), source.revision))
+        copy_run_files(self.data_dir, source, child, at)
+        self.storage.set_item(run.id, index, visit, key, "running", child.id)
+        return child
+
     def retry_item(self, run_id: str, key: str) -> Run:
         """Retry one failed Item of a fan-out stage now, while its siblings still run: its
         child is forked from the child's first unfinished stage (what it finished is kept),
@@ -455,9 +535,15 @@ class RunControl:
         if index is None:
             raise Illegal("the run is not waiting at a gate")
         _, stage = self.storage.stage_def(run_id, index)
-        kind = "items" if stage.type == "workflow" else stage.config.get("kind") or "approve"
+        kind = stage.config.get("kind") or "approve"
+        if stage.type == "workflow":
+            kind = "approve_items" if stage.config.get("approve") else "items"
         if kind == "items" and choice not in ITEMS_CHOICES:
             raise ValueError("a fan-out stage's items gate takes choice retry or continue")
+        if kind == "approve_items" and any(
+            not v.approved for _, v in self.storage.items(run_id, index, run.send_backs)
+        ):
+            raise Illegal("approve every item first, or send some back, with review_items")
         if kind == "skill" and not proposal:
             raise Illegal("a skill gate is answered by deciding its proposal")
         note = note.strip()

@@ -102,6 +102,46 @@ def test_a_json_list_fans_out_each_child_reads_its_given_input_and_the_join_land
     assert running.post("/api/runs/run_nope/items/intro/retry").status_code == 404
 
 
+def test_an_approve_stage_shows_each_items_output_and_takes_approvals_and_send_backs(
+    running: TestClient, read: list[Any]
+) -> None:
+    world = running.post("/api/worlds", json={"name": "Books"}).json()["id"]
+    assert running.post(f"/api/worlds/{world}/connectors", json=PARA).status_code == 201
+    child = running.post(f"/api/worlds/{world}/workflows", json={"yaml": CHILD}).json()
+    parent_yaml = PARENT.format(child=child["workflow_id"]) + "    approve: true\n"
+    parent = running.post(f"/api/worlds/{world}/workflows", json={"yaml": parent_yaml})
+    assert parent.status_code == 201, parent.json()
+    run = running.post(f"/api/workflows/{parent.json()['workflow_id']}/runs", json={}).json()
+    url = f"/api/runs/{run['id']}"
+    until(lambda: running.get(url).json()["status"] == "waiting_gate")
+    (gate,) = running.get("/api/gates").json()
+    assert (gate["kind"], gate["stage_name"]) == ("approve_items", "translate each")
+    stage = running.get(url).json()["stages"][1]
+    assert [(i["key"], i["approved"]) for i in stage["items"]] == [
+        ("intro", False), ("1", False), ("2", False),
+    ]  # fmt: skip
+    files = running.get(f"{url}/stages/{stage['id']}/artifacts", params={"folder": "intro"})
+    assert [(f["name"], f["path"].endswith("/artifacts/intro/out.md")) for f in files.json()] == [
+        ("out.md", True)
+    ]
+    outside = running.get(f"{url}/stages/{stage['id']}/artifacts", params={"folder": "../x"})
+    assert outside.status_code == 422
+
+    review = f"{url}/items/review"
+    assert running.post(review, json={"send_back": {"1": " "}}).status_code == 422
+    assert running.post(review, json={"approve": ["nope"]}).status_code == 404
+    sent = running.post(review, json={"approve": ["intro", "2"], "send_back": {"1": "Shorter"}})
+    assert sent.status_code == 200, sent.json()
+    until(lambda: len(read) == 4 and running.get(url).json()["status"] == "waiting_gate")
+    again = running.get(url).json()["stages"][1]["items"]
+    assert [(i["key"], i["approved"]) for i in again] == [
+        ("intro", True), ("1", False), ("2", True),
+    ]  # fmt: skip
+    assert again[1]["child"]["id"] != stage["items"][1]["child"]["id"]
+    assert running.post(review, json={"approve": ["1"]}).status_code == 200
+    until(lambda: running.get(url).json()["status"] == "done")
+
+
 def test_a_child_workflow_must_declare_its_given_input(client: TestClient) -> None:
     world = client.post("/api/worlds", json={"name": "Books"}).json()["id"]
     assert client.post(f"/api/worlds/{world}/connectors", json=PARA).status_code == 201

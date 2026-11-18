@@ -128,7 +128,9 @@ def server(
         " earlier stage produces, at most `max_parallel` (1 to 8, default 2) at once, each given"
         " its item as file `as` (default item.md, item.json for JSON; the child workflow names it"
         " under top-level `given`). Each child's `take` lands in <stage>/artifacts/<item key>/"
-        " with an items.json index; when items fail the stage waits at an `items` gate."
+        " with an items.json index; when items fail the stage waits at an `items` gate. With"
+        " `approve: true` it waits at an `approve_items` gate instead until review_items has"
+        " approved every item."
     )
     def save_workflow(world_id: str, yaml: str, workflow_id: str | None = None) -> dict[str, Any]:
         reach(world_id)
@@ -352,7 +354,8 @@ def server(
         " an approve gate may name `send_back_to`, an earlier stage that runs again"
         " with `note` in its context (at most twice per run); a confirm gate takes neither;"
         " a fan-out stage's `items` gate takes choice `retry` (the failed items run again) or"
-        " `continue` (finish without them). Writes a decision artifact."
+        " `continue` (finish without them); an `approve_items` gate is answered with"
+        " review_items. Writes a decision artifact."
     )
     def decide_gate(
         run_id: str,
@@ -375,6 +378,22 @@ def server(
                 rejects=rejects,
             )  # fmt: skip
         )
+
+    @mcp.tool(
+        description="Review the Items of a run's fan-out stage that has `approve: true`, at its"
+        " `approve_items` gate or while some still run. `approve` lists Item keys to approve;"
+        " `send_back` maps Item keys to a note: that Item's child run is forked from its first"
+        " unfinished stage (its first when it finished) with the note as that stage's send-back"
+        " note, and its new output replaces the old. Each Item's files are under"
+        " <stage>/artifacts/<item key>/. The stage finishes once every Item is approved."
+    )
+    def review_items(
+        run_id: str, approve: list[str] | None = None, send_back: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        run_of(run_id)
+        token = CALLER.get()
+        by = token.name if token else OPERATOR
+        return run_or_fail(lambda: control.review_items(run_id, approve, send_back, by))
 
     @mcp.tool(
         description="Set a run's Budget in US dollars, the total, not an increment. It covers the"

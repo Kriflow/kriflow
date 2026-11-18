@@ -731,6 +731,7 @@ export function StagePanel(p: PanelProps) {
                 item.title
               )}{" "}
               <span className={item.status === "failed" || item.status === "aborted" ? "chip warn" : "chip"}>{item.status}</span>
+              {item.approved && <span className="chip ok">approved</span>}
               {item.error && <span className="faint"> {item.error}</span>}
             </li>
           ))}

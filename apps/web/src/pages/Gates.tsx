@@ -34,6 +34,7 @@ import { piedPiper } from "../skin";
 import { Loading, Skeleton } from "../Skeleton";
 import { notify } from "../Toast";
 import { ArtifactCards, ArtifactView, type MultiPick } from "./Artifacts";
+import { ReviewItems, type Verdicts } from "./ReviewItems";
 import { RunRef } from "./Runs";
 import { PublishValue } from "./Connectors";
 import { GateAsk } from "./GateAsk";
@@ -557,6 +558,10 @@ export function GateCard({
   const formId = useId();
   // The pick so far (a card's path, or the typed name), so a phone's primary can name it.
   const [chosen, setChosen] = useState("");
+  // At an approve items gate: the verdict picked on each Item still to review.
+  const [verdicts, setVerdicts] = useState<Verdicts>({});
+  // Bumped once a review is taken, so the Items load again with fresh verdicts.
+  const [round, setRound] = useState(0);
   // The budget's top-up, from a preset chip or typed.
   const [add, setAdd] = useState(() => topUpSuggestion(gate));
   // Ask this run mounts the first time its disclosure opens, then stays with its turns.
@@ -615,8 +620,15 @@ export function GateCard({
     sendBack.current = null;
     const one = cards.find((c) => c.path === fields.get("artifact"));
     const retry = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "retry";
+    const given = (verdict: string) => Object.keys(verdicts).filter((k) => verdicts[k] === verdict);
     const choice: Choice =
-      gate.kind === "items"
+      gate.kind === "approve_items"
+        ? {
+            kind: "review_items",
+            approve: given("approve"),
+            sendBack: Object.fromEntries(given("back").map((k) => [k, String(fields.get(`back:${k}`) ?? "").trim()])),
+          }
+        : gate.kind === "items"
         ? { kind: "items", retry }
         : gate.kind === "budget"
         ? { kind: "budget", add: Number(fields.get("add")) }
@@ -639,8 +651,17 @@ export function GateCard({
       [...fields].flatMap(([k, v]) => (k.startsWith("edit:") ? [[k.slice(5), String(v)]] : [])),
     );
     const { send, said } = decision(gate, choice, { note: String(fields.get("note") ?? "").trim(), edits, reviewed });
+    // A partial review keeps the gate open: show the Items as they now stand.
+    const sent = async () => {
+      const why = await send();
+      if (!why && gate.kind === "approve_items") {
+        setVerdicts({});
+        setRound((r) => r + 1);
+      }
+      return why;
+    };
     setBusy(true);
-    await onAnswer(gate, send, said);
+    await onAnswer(gate, sent, said);
     setBusy(false);
   }
 
@@ -654,10 +675,12 @@ export function GateCard({
 
   // The note and Ask this run, folded under the work so the decision stays in the first screen.
   // The note belongs to the gate's form through its `form` attribute.
-  const more = (gate.kind !== "budget" || !bare) && (
+  // A budget gate takes no note, nor an approve items gate: each send-back has its own.
+  const noteless = gate.kind === "budget" || gate.kind === "approve_items";
+  const more = (!noteless || !bare) && (
     <details className="gate-more" onToggle={(e) => e.currentTarget.open && setAsking(true)}>
-      <summary>{gate.kind === "budget" ? "Ask before you answer" : bare ? "Add a note" : "Add a note or ask"}</summary>
-      {gate.kind !== "budget" && (
+      <summary>{noteless ? "Ask before you answer" : bare ? "Add a note" : "Add a note or ask"}</summary>
+      {!noteless && (
         <label>
           {gate.kind === "approve"
             ? "Note (sent back with it, or kept with the approval)"
@@ -761,6 +784,9 @@ export function GateCard({
                 </p>
               </div>
             )}
+            {gate.kind === "approve_items" && (
+              <ReviewItems key={round} gate={gate} formId={formId} verdicts={verdicts} onVerdict={(key, v) => setVerdicts((all) => ({ ...all, [key]: v }))} />
+            )}
             {gate.kind === "pick" && cards.length > 0 && <ArtifactCards cards={cards} worldId={gate.world_id} multi={multi} />}
             {gate.kind === "pick" && artifacts && cards.length === 0 && (
               <>
@@ -804,6 +830,14 @@ export function GateCard({
                     {pickLabel}
                   </button>
                   {cards.length > 0 && <span className="faint">The ones you pass on stay in the library.</span>}
+                </>
+              )}
+              {gate.kind === "approve_items" && (
+                <>
+                  <button type="submit" form={formId} className="primary" disabled={busy || Object.keys(verdicts).length === 0}>
+                    Send the verdicts
+                  </button>
+                  <span className="faint">The step finishes once every item is approved; a sent-back item comes back here remade.</span>
                 </>
               )}
               {gate.kind === "items" && (

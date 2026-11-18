@@ -24,7 +24,7 @@ STAGE_FIELDS: dict[str, set[str]] = {
     "swarm": {"goal", "done_when", "tools", "graphs", "output_type", "produces", "model", "agents"},
     "gate": {"ask", "kind", "max_send_backs", "picks"},
     "connector": {"calls", "input", "inputs", "output", "params"},
-    "workflow": {"runs", "take", "for_each", "as", "max_parallel"},
+    "workflow": {"runs", "take", "for_each", "as", "max_parallel", "approve"},
 }
 
 
@@ -198,8 +198,13 @@ def _parse_stage(
         take = f.names("take")
         for_each, given = f.text("for_each"), f.text("as")
         most = f.number("max_parallel", integer=True)
+        approve = raw.get("approve", False)
         if for_each is None and (given is not None or most is not None):
             f.fail("as and max_parallel belong to a fan-out stage: give for_each")
+        if not isinstance(approve, bool):
+            f.fail("approve must be true or false")
+        elif approve and for_each is None:
+            f.fail("approve belongs to a fan-out stage: give for_each")
         if given is not None and not _plain(given):
             f.fail(f"as names the file each child is given, not a path: '{given}'")
         if most is not None and most > MAX_PARALLEL:
@@ -209,7 +214,13 @@ def _parse_stage(
             most = most or 2
         if runs:
             stage = WorkflowStage(
-                stage_name, runs, take, for_each, given, None if most is None else int(most)
+                stage_name,
+                runs,
+                take,
+                for_each,
+                given,
+                None if most is None else int(most),
+                approve is True,
             )
     return stage_name, (stage if len(out) == before else None)
 
