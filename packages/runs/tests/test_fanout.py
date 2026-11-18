@@ -328,7 +328,6 @@ def test_a_send_back_reruns_only_the_items_its_note_does_not_say_to_keep(
     }  # fmt: skip
 
 
-
 def test_a_sentence_asking_for_a_redo_reruns_its_item_even_with_a_keep_word(
     runner: Runner, translate: Translate, tmp_path: Path
 ) -> None:
@@ -345,6 +344,7 @@ def test_a_sentence_asking_for_a_redo_reruns_its_item_even_with_a_keep_word(
     assert {t: len(s) for t, s in translate.seen.items()} == {
         "Paragraph 1": 1, "Paragraph 2": 2, "Paragraph 3": 1,
     }  # fmt: skip
+
 
 class Spender:
     """A child's one swarm stage: spends $1 per call for `calls` calls and asks the Budget
