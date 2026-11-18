@@ -736,7 +736,8 @@ def _plan(
         items.append(Item(key, item.title, item.file, item.data))
     note = run.send_back_note(stage.name)
     named = {i.key for i in items if any(_says(note, w) for w in (i.key, i.title))}
-    asks = [c for c in re.split(r"[.!?](?:\s|$)|[;\n]", note) if not _KEEP.search(c)]
+    sentences = re.split(r"[.!?](?:\s|$)|[;\n]", note)
+    asks = [c for c in sentences if _REDO.search(c) or not _KEEP.search(c)]
     redo = {i.key for i in items if any(_says(c, w) for c in asks for w in (i.key, i.title))}
     before = {v.key: v for _, v in runner.storage.items(run.id, index)} if visit else {}
     rows = [
@@ -751,8 +752,10 @@ def _fresh(item: Item) -> ItemView:
     return ItemView(item.key, item.title, "pending")
 
 
-# A note's sentence with one of these words names Items to keep, not to run again.
-_KEEP = re.compile(r"\b(keeps?|kept|pass|passes|fine|leave|unchanged|as is|as they are)\b", re.I)
+# A note's sentence with one of these words names Items to keep, not to run again, unless it
+# also asks for a redo (`_REDO`): "X came back unchanged, still wrong" reruns X.
+_KEEP = re.compile(r"\b(keeps?|kept|pass|passes|leave|as is|as they are)\b", re.I)
+_REDO = re.compile(r"\b(redo|remake|again|still|fix|change|wrong|instead)\b", re.I)
 
 
 def _says(note: str, word: str) -> bool:

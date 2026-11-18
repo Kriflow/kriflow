@@ -271,8 +271,9 @@ stage with a plain error.
   child. A send-back to a fan-out stage whose note names Items (key or title, whole words, any
   case) reruns only those and keeps the others' last results; a note naming none reruns them all.
   An Item named only in a sentence (split at `.`, `!`, `?`, `;` or a new line) holding keep,
-  pass, fine, leave, unchanged, as is or as they are is kept, so "Paragraph 2: redo it.
-  Paragraphs 1 and 3 pass; keep them." reruns only paragraph 2.
+  pass, leave, as is or as they are is kept, so "Paragraph 2: redo it. Paragraphs 1 and 3 pass;
+  keep them." reruns only paragraph 2. A sentence that also asks for a redo (redo, remake,
+  again, still, fix, change, wrong, instead) is never a keep sentence.
 - The runs page shows `child of <parent>` on each child, the run timeline links a workflow stage
   to its child and a child to its parent, and the gates inbox labels a child's gate with its
   parent.
