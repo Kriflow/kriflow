@@ -77,7 +77,8 @@ services:
     command: ["python", "-m", "swarmify_connectors.runner", "serve", "/run/swarmify/sandbox.sock"]
     security_opt:
       - seccomp=./docker/seccomp-sandbox.json
-      - apparmor=unconfined
+      # swarmify-sandbox on an Ubuntu 23.10+ host (tools/allow-bwrap-userns.sh), else unconfined
+      - apparmor=${SWARMIFY_SANDBOX_APPARMOR:-unconfined}
       - systempaths=unconfined
     volumes:
       - sandbox-socket:/run/swarmify
