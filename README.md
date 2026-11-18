@@ -156,8 +156,10 @@ overview marks a workflow that fails the check.
 Each run is one DBOS workflow (ADR 0014) with the run id as
 its workflow id and one DBOS step per side effect: load the run, save each new state, execute a
 stage. A crash or restart resumes at the last completed step, so a finished stage never runs again.
-Runs wait on their world's own DBOS queue, at most the world's run cap running at once (two by
-default, a world setting that takes effect live).
+Each stage at work holds one of its world's run slots, at most the world's run cap at once (two by
+default, a world setting that takes effect live). A run waiting at a gate, paused or waiting on a
+child run holds none, so runs left at gates never keep a new run from starting; a queued run reads
+queued until its first stage gets a slot.
 
 Run status is one of queued, running, waiting_gate, paused, done, failed, aborted; stage status one
 of pending, running, waiting, done, failed, skipped. The rules live in `swarmify_runs.machine`, a
@@ -251,8 +253,8 @@ stage with a plain error.
   `RunControl.family` names the runs a Budget (T15) adds up.
 - Aborting a run aborts every run below it; the parent ends aborted, not failed. Aborting only
   a child fails the parent's stage.
-- Children wait on their own unpartitioned queue (`child-runs`), so a parent holding one of its
-  world's two slots never starves its own child.
+- Children wait on their own unpartitioned queue (`child-runs`); their stages take run slots of
+  their world like any run's, and a parent waiting on its child holds none.
 - Cycles and nesting deeper than two are refused when a workflow is saved; a run whose pinned
   workflows were edited since also stops a third level with an error.
 - A send-back to a workflow stage starts a fresh child; a restart resumes the wait on the same
@@ -1213,7 +1215,7 @@ changed with `PATCH /api/worlds/<id>` (any subset of `monthly_budget_usd` (null 
 `run_cap` (1 to 8), `retention_days` (0 to 3650, 0 keeps binaries forever), `agent_count` (1 to
 8), `model` (a model id, null for the global default), and the per-role `<role>_model` the cast
 page sets); every change is a `world.updated` event. The monthly budget caps each new run's Budget (see
-Budget and baseline), the run cap is the world's DBOS queue concurrency and applies at once, the
+Budget and baseline), the run cap is how many of the world's stages are at work at once and applies at once, the
 retention is read by the retention job, and the agent count is how many workers the cast has.
 
 The Cast is the world's agents: `planner`, `worker-1` to `worker-<agent_count>` and `judge`

@@ -84,19 +84,12 @@ def test_a_swarm_stage_runs_through_the_swarm_it_was_given(runner: Runner) -> No
     assert swarm.calls == [(ended.stages[0].id, "research"), (ended.stages[1].id, "explode")]
 
 
-def test_each_world_runs_at_most_two_at_once(runner: Runner) -> None:
+def test_runs_waiting_at_gates_go_past_the_run_cap(runner: Runner) -> None:
+    """The run cap of two counts stages at work, never runs waiting for a person (#486)."""
     a = [runner.start("world_a", "wf_a", 1, f"A{i}", [PICK]) for i in range(3)]
-    b = runner.start("world_b", "wf_b", 1, "B", [PICK])
-
-    wait_for(lambda: status(runner, b.id) == "waiting_gate")
-    wait_for(lambda: sum(status(runner, r.id) == "waiting_gate" for r in a) == 2)
-    statuses = sorted(status(runner, r.id) for r in a)
-    assert statuses == ["queued", "waiting_gate", "waiting_gate"]
-
-    first = next(r for r in a if status(runner, r.id) == "waiting_gate")
-    runner.decide(first.id, choice="A")
-    wait_for(lambda: all(status(runner, r.id) != "queued" for r in a))
-    assert status(runner, first.id) == "done"
+    wait_for(lambda: all(status(runner, r.id) == "waiting_gate" for r in a))
+    runner.decide(a[0].id, choice="A")
+    wait_for(lambda: status(runner, a[0].id) == "done")
 
 
 def test_runs_list_newest_first_and_go_with_their_world(runner: Runner) -> None:

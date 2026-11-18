@@ -14,7 +14,7 @@ from fake_graph import fake_extract
 from swarmify_api.main import create_app, world_service
 from swarmify_connectors import FakeTransport
 from swarmify_memory import FakeGraphIndex
-from swarmify_runs import queue_name
+from swarmify_runs import slot_queue
 from swarmify_swarm import SdkRuntime, tool_id
 from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
 
@@ -107,8 +107,8 @@ def test_settings_have_defaults_change_one_at_a_time_and_reach_the_run_queue(
     assert changed.status_code == 200
     assert (changed.json()["monthly_budget_usd"], changed.json()["run_cap"]) == (25.0, 1)
     assert changed.json()["agent_count"] == 4  # untouched
-    queue = DBOS.retrieve_queue(queue_name(world))
-    assert queue is not None and queue._concurrency == 1  # the cap reached DBOS's queue
+    queue = DBOS.retrieve_queue(slot_queue(world))
+    assert queue is not None and queue._concurrency == 1  # the cap reached DBOS's slot queue
 
     cleared = running.patch(
         f"/api/worlds/{world}", json={"monthly_budget_usd": None, "retention_days": 0}

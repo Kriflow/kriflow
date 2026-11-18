@@ -2,7 +2,8 @@
 
 start: launches, starts a run of [a, slow, pick], prints its id; the `slow` connector hangs so
 the parent can kill this process mid-stage. resume: launches (DBOS recovers the run), answers
-the gate once the run waits there, waits for done, prints the run's DBOS step names, exits.
+the gate once the run waits there, waits for done, prints the DBOS step names of the run and
+its stages, exits.
 """
 
 import json
@@ -39,5 +40,12 @@ else:
     wait_for(lambda: storage.get_run(run_id).status == "waiting_gate")  # type: ignore[union-attr]
     runner.decide(run_id)
     wait_for(lambda: storage.get_run(run_id).status == "done")  # type: ignore[union-attr]
-    print(json.dumps([s["function_name"] for s in DBOS.list_workflow_steps(run_id)]), flush=True)
+    steps = DBOS.list_workflow_steps(run_id)  # each stage's own steps too: it holds a run slot
+    steps += [
+        c
+        for s in steps
+        if s["child_workflow_id"]
+        for c in DBOS.list_workflow_steps(s["child_workflow_id"])
+    ]
+    print(json.dumps([s["function_name"] for s in steps]), flush=True)
     runner.shutdown()

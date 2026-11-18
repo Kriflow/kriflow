@@ -1,17 +1,18 @@
 """The DBOS shell around the stage state machine (ADR 0014).
 
-One DBOS workflow per run, id equal to the run id, enqueued on the world's own queue so each
-world runs at most its run cap at once (`cap_for`, a World setting read through the composition
-root; `cap` when none is given). Queue configs live in DBOS's system database and reload live,
-so a changed cap takes effect without a restart. Every side effect is a DBOS step: loading the run,
-saving each new state, executing a stage. A crash resumes from the last completed step, so a
-finished stage never runs twice. DBOS is a process singleton, hence one module-level Runner.
+One DBOS workflow per run, id equal to the run id, enqueued on the world's own queue. Each stage
+it executes is a workflow of its own on the world's slot queue, so each world has at most its run
+cap of stages at work at once (`cap_for`, a World setting read through the composition root; `cap`
+when none is given), while a run waiting at a gate, paused or on a child run holds no slot (#486).
+A queued run reads queued until its first stage holds a slot. Queue configs live in DBOS's
+system database and reload live, so a changed cap takes effect without a restart. Every side
+effect is a DBOS step: loading the run, saving each new state, executing a stage. A crash
+resumes from the last completed step, so a finished stage never runs twice. DBOS is a process
+singleton, hence one module-level Runner.
 
 A workflow stage starts a child run of another workflow's current version (ADR 0013), links it
 to the stage and waits, like a gate, on the run's control topic: the child's workflow sends its
-end there. Children wait on their own unpartitioned queue, so a parent holding one of its
-world's slots never starves its own child; each parent has at most one live child, which bounds
-them.
+end there. Children wait on their own unpartitioned queue; their stages take slots like any.
 
 The workflow is the only writer of run state. People act through RunControl, whose messages
 (decide, pause, resume, abort) arrive on the run's control topic: at a gate or while paused the
@@ -50,6 +51,7 @@ from swarmify_runs.control import (
     no_spend,
     queue_name,
     run_folder,
+    slot_queue,
     stage_folder,
     with_sidecar,
 )
@@ -68,6 +70,7 @@ from swarmify_runs.machine import (
     Rerun,
     Resumed,
     RunEvent,
+    RunStage,
     RunState,
     SentBack,
     Skip,
@@ -206,12 +209,15 @@ class Runner(RunControl):
             "notification_listener_polling_interval_sec": min(self.poll_seconds, 1.0),
             "scheduler_polling_interval_sec": max(self.poll_seconds, 1.0),
             "log_level": "WARNING",
+            "enable_patching": True,  # runs that ran before stage slots replay without them
         }
         DBOS(config=config)
         DBOS.launch()
         self._caps.clear()
         if self.worlds is not None:
             self._drop_leaked_queues(self.worlds)
+            for world_id in self.worlds():  # a run queue that capped runs before #486 caps none
+                self.set_cap(world_id)
         DBOS.register_queue(
             CHILD_QUEUE, polling_interval_sec=self.poll_seconds, on_conflict="always_update"
         )
@@ -247,9 +253,9 @@ class Runner(RunControl):
         still polled by its own thread. Queues are listed before worlds: a world created in
         between has no queue yet, so every queue whose world is missing after is a leak."""
         names = [q.name for q in DBOS.list_queues()]
-        live = {queue_name(w) for w in worlds()}
+        live = {q(w) for w in worlds() for q in (queue_name, slot_queue)}
         for name in names:
-            if name.startswith(queue_name("")) and name not in live:
+            if name.startswith((queue_name(""), slot_queue(""))) and name not in live:
                 DBOS.delete_queue(name)
 
     def promote(self, pinned: Pinned, index: int, artifact: Path, promoted_from: str) -> Run:
@@ -298,15 +304,16 @@ class Runner(RunControl):
         return self.storage.list_runs(world_id)
 
     def set_cap(self, world_id: str) -> None:
-        """Register (or update) the world's queue with its current cap. Call it when the cap
-        setting changes; `_enqueue` calls it for a world it has not seen since launch."""
+        """Register (or update) the world's queues, its slots with its current cap. Call it when
+        the cap setting changes; `_enqueue` calls it for a world it has not seen since launch."""
         cap = self.cap_for(world_id)
-        DBOS.register_queue(
-            queue_name(world_id),
-            global_concurrency=cap,
-            polling_interval_sec=self.poll_seconds,
-            on_conflict="always_update",
-        )
+        for name, most in ((queue_name(world_id), None), (slot_queue(world_id), cap)):
+            DBOS.register_queue(
+                name,
+                global_concurrency=most,
+                polling_interval_sec=self.poll_seconds,
+                on_conflict="always_update",
+            )
         self._caps[world_id] = cap
 
     def adopt(self) -> None:
@@ -397,6 +404,8 @@ def execute_run(run_id: str) -> str:
     if status in TERMINAL:  # aborted between dequeue and load: nothing to run or wait for
         return status
     state = RunState(status, tuple(stages), send_backs, over_budget)  # type: ignore[arg-type]
+    # A run that waited at a gate before stage slots existed replays without them (#486).
+    world = _world_of(run_id) if DBOS.patch("stage-slots") else None
     events: list[RunEvent | _ChildEnded] = [*_drain(run_id), Started()]
     error: str | None = None
     while True:
@@ -416,6 +425,7 @@ def execute_run(run_id: str) -> str:
                 event = settled
             else:
                 event = StageFinished(index) if error is None else StageFailed(index)
+        prior = state.status
         try:
             state, commands = transition(tuple(kinds), state, event)
         except Illegal as exc:
@@ -428,7 +438,10 @@ def execute_run(run_id: str) -> str:
         )
         if outcome_next and not gate_opened and state.status not in TERMINAL:
             continue  # a pause sent mid-stage is saved with the stage's outcome, never before it
-        _save(run_id, state, error, gate_opened)
+        # A queued run starting reads queued until its first stage holds a slot: the slot saves it.
+        start = world is not None and prior == "queued" and not events and _starts(kinds, commands)
+        if not start:
+            _save(run_id, state, error, gate_opened)
         if state.status in TERMINAL:
             if parent is not None:
                 # ponytail: a parent already ended (aborted first) never reads this, so it stays
@@ -460,19 +473,91 @@ def execute_run(run_id: str) -> str:
                 DBOS.enqueue_workflow(CHILD_QUEUE, execute_run, child)
             events = list(_drain(run_id))  # then wait for the child's end on the control topic
             continue
-        try:
-            raised = _execute(run_id, index)
-            outcome: RunEvent = GateRaised(index) if raised else StageFinished(index)
-        except _Halted:  # a pause or abort stopped the agents; its message drains below
-            outcome = StageStopped(index)
-        except OverBudget:  # the agents stopped; the stage waits at a budget gate
-            outcome = BudgetSpent(index)
-        except Exception as exc:  # a failed stage fails the run; the error lands on the stage
-            outcome, error = StageFailed(index), f"{type(exc).__name__}: {exc}"
+        got: list[RunEvent | _ChildEnded] = []
+        if world is None:
+            result, error = _run_stage(run_id, index)
+        else:
+            runner = _current()
+            if world not in runner._caps:  # a run recovered at launch, before any enqueue
+                runner.set_cap(world)
+            DBOS.enqueue_workflow(
+                slot_queue(world), stage_in_slot, run_id, index, state if start else None
+            )
+            result, error, got = _await_stage(run_id)
+        outcome = OUTCOMES_OF[result](index)
         # ponytail: a connector stage or a running child run is not stopped midway; a pause or
         # abort reaches it once it ends (abort still cascades to the child, and cancels a
         # connector stage's long job).
-        events = [*_drain(run_id), outcome]
+        events = [*got, *_drain(run_id), outcome]
+
+
+OUTCOMES_OF: dict[str, Callable[[int], RunEvent]] = {
+    "finished": StageFinished,
+    "raised": GateRaised,
+    "stopped": StageStopped,  # a pause or abort stopped the agents; its message drains too
+    "over": BudgetSpent,  # the agents stopped; the stage waits at a budget gate
+    "failed": StageFailed,  # a failed stage fails the run; the error lands on the stage
+}
+
+
+def _starts(kinds: list[str], commands: list[Any]) -> bool:
+    return (
+        bool(commands)
+        and isinstance(commands[0], RunStage)
+        and kinds[commands[0].index] != "workflow"
+    )
+
+
+def _run_stage(run_id: str, index: int) -> tuple[str, str | None]:
+    """Execute the stage at `index`: its outcome (an OUTCOMES_OF key) and error."""
+    try:
+        return ("raised" if _execute(run_id, index) else "finished"), None
+    except _Halted:
+        return "stopped", None
+    except OverBudget:
+        return "over", None
+    except Exception as exc:
+        return "failed", f"{type(exc).__name__}: {exc}"
+
+
+@DBOS.workflow(name="swarmify.stage")
+def stage_in_slot(run_id: str, index: int, start: RunState | None) -> None:
+    """One stage of a run at work, holding one of its world's run slots until it ends (#486).
+    `start` is the state a queued run starts in, saved once it holds the slot. Sends the outcome
+    to the run's control topic."""
+    result, error = _run_stage(run_id, index) if _ready(run_id, start) else ("stopped", None)
+    DBOS.send(run_id, {"action": "stage", "result": result, "error": error}, topic=CONTROL_TOPIC)
+
+
+@DBOS.step(name="swarmify.ready")
+def _ready(run_id: str, start: RunState | None) -> bool:
+    """False when a pause or abort came while the stage waited for its slot."""
+    runner = _current()
+    if runner.storage.stop_of(run_id):
+        return False
+    if start is not None:
+        run = runner.storage.get_run(run_id)
+        if run is None or run.status != "queued":  # aborted while queued
+            return False
+        runner.storage.save_state(run_id, start)
+    return True
+
+
+def _await_stage(run_id: str) -> tuple[str, str | None, list[RunEvent | _ChildEnded]]:
+    """Wait for the stage's outcome, keeping the control messages that came first, in order."""
+    got: list[RunEvent | _ChildEnded] = []
+    while (message := _wait(run_id))["action"] != "stage":
+        if (event := _as_event(message)) is not None:
+            got.append(event)
+    return message["result"], message["error"], got
+
+
+@DBOS.step(name="swarmify.world_of")
+def _world_of(run_id: str) -> str:
+    run = _current().storage.get_run(run_id)
+    if run is None:
+        raise KeyError(f"run not found: {run_id}")
+    return run.world_id
 
 
 def _as_event(message: dict[str, Any]) -> RunEvent | _ChildEnded | None:
