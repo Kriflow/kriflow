@@ -656,9 +656,12 @@ install step fails with `apply-seccomp: write /proc/self/setgroups (nested usern
 capability-restricted ...)` or `bwrap: setting up uid map: Permission denied`. Run
 `sudo tools/allow-bwrap-userns.sh` once: it replaces `bwrap-userns-restrict` with an AppArmor
 profile granting `userns` to `/usr/bin/bwrap` alone (it persists across reboots) and leaves the
-restriction on for every other program. A Docker host on such an Ubuntu needs it too: the
-`sandbox` service's bwrap takes the host's profile for `/usr/bin/bwrap` (its own
-`apparmor=unconfined` and seccomp profile do not lift the host's restriction). CI runs it on
+restriction on for every other program. A Docker host on such an Ubuntu needs it too, plus one
+line in `.env`: a path profile cannot attach to the `bwrap` inside a container (the kernel logs
+"disconnected path" and the namespace is still refused), so the script also loads
+`swarmify-sandbox`, a container profile that is unconfined as before plus `userns`, and
+`SWARMIFY_SANDBOX_APPARMOR=swarmify-sandbox` in `.env` gives it to the `sandbox` service (its
+default `apparmor=unconfined` and seccomp profile do not lift the host's restriction). CI runs it on
 GitHub's Ubuntu runners. Inside the sandbox nothing changes: the seccomp helper still refuses a
 sandboxed command any user namespace of its own.
 
@@ -1616,7 +1619,8 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   `sandbox`, which the one-shot `folders` service makes first),
   each process bringing the values it is given. A folder a `path` Setting names must be one of
   those to exist there. It needs Docker Engine 26 or later for volume subpaths, and on an Ubuntu
-  23.10 or later host `sudo tools/allow-bwrap-userns.sh` once (see The connector sandbox).
+  23.10 or later host `sudo tools/allow-bwrap-userns.sh` once and
+  `SWARMIFY_SANDBOX_APPARMOR=swarmify-sandbox` in `.env` (see The connector sandbox).
 - A Template is uploaded on its world's Assets page as a zip, so nothing needs copying into the
   container for it.
 - GPU renders: in Docker a render's browser draws 3D in software unless the `sandbox` service has
