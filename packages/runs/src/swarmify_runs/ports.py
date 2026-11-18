@@ -59,7 +59,7 @@ class Storage(Protocol):
         ...
 
     def mark_warned(self, run_id: str, budget_usd: float) -> bool:
-        """Record that the 80 percent warning went out for this budget. False when it already
+        """Record that the budget warning went out for this budget. False when it already
         had, so of any number of concurrent callers exactly one warns."""
         ...
 
@@ -153,7 +153,7 @@ class Storage(Protocol):
 class Notifier(Protocol):
     def notify(self, event: Event) -> None:
         """Tell a person: `gate.opened` (kind `budget` at 100 percent of the Budget),
-        `budget.warning` (80 percent) or `run.ended`. Payloads carry run id and name.
+        `budget.warning` (the warn amount) or `run.ended`. Payloads carry run id and name.
         `gate.closed` says how an open gate ended, for a Remote Approval to update its message.
         May raise (Slack is down); callers log it and go on."""
         ...

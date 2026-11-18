@@ -107,6 +107,25 @@ def test_eighty_percent_warns_and_a_hundred_stops_the_agents_at_a_budget_gate(
     assert running.get("/api/gates").json() == []
 
 
+def test_a_workflows_budget_warn_usd_sets_when_the_warning_fires(
+    running: TestClient, script: Script, notifier: FakeNotifier
+) -> None:
+    script.scripts = [PLAN, [GRAPH, CLAIM, NOTE, IDEAS, Say("Done.")], [IDEAS, FINISH], PASS]
+    script.usage, script.cost = DOLLAR, 0.25
+    wf = _workflow(
+        running, RESEARCH.replace("budget_usd: 3.5\n", "budget_usd: 3.5\nbudget_warn_usd: 2\n")
+    )
+    for body in ({"budget_warn_usd": 3.5}, {"budget_usd": 9, "budget_warn_usd": 9}):
+        refused = running.post(f"/api/workflows/{wf}/runs", json=body)
+        assert refused.status_code == 422 and "budget_warn_usd" in refused.json()["detail"]
+    run = running.post(f"/api/workflows/{wf}/runs", json={}).json()
+    assert run["budget_usd"] == 3.5 and run["budget_warn_usd"] == 2
+    until(lambda: [e.type for e in notifier.events] == ["budget.warning", "gate.opened"])
+    assert notifier.events[0].payload["spent_usd"] == 2.25  # crossed $2, not 80 percent's $2.80
+    running.post(f"/api/runs/{run['id']}/abort")
+    until(lambda: _run(running, run["id"])["status"] == "aborted")
+
+
 def test_a_start_may_override_the_budget(running: TestClient, script: Script) -> None:
     script.scripts = [PLAN, [GRAPH, CLAIM, Say("Done.")]]
     script.usage, script.cost = DOLLAR, 2.0  # the planner alone spends it

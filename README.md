@@ -52,6 +52,7 @@ they started with. Stages are one of four types, each written as `- <type>: <sta
 name: Weekly brief
 schedule: "0 8 * * 1"      # optional cron
 budget_usd: 5              # optional
+budget_warn_usd: 4         # optional, below budget_usd; 80 percent when left out
 agents: 4                  # optional
 stages:
   - swarm: research        # goal, done_when; optional tools, graphs, output_type, produces, model
@@ -217,7 +218,10 @@ parent's. Spend is the Agent SDK's estimate, not your bill.
   After each estimate the hooks ask the Budget, which refreshes the run's `spent_usd` (the run and
   every child run below it, ADR 0013) and streams it as `run.updated`.
 - At 80 percent a `budget.warning` event goes to the world's stream and the Notifier, once per
-  budget value. At 100 percent the agents stop: the session ends where it is (its id kept), further
+  budget value. A workflow may set its own warn amount with `budget_warn_usd` (below its
+  `budget_usd`, which it then needs), and the start body may override it with `budget_warn_usd`
+  (below the run's Budget, else 422). A fork, promote or scheduled run keeps the warn amount; a
+  Budget cut below it by the Monthly Budget warns at 80 percent again. At 100 percent the agents stop: the session ends where it is (its id kept), further
   tool calls are denied, and the stage waits at a budget gate (`gate.opened` with kind `budget`,
   run status `waiting_gate`, `over_budget` true). An agent (planner, worker or judge) whose session
   would start over budget does not start.

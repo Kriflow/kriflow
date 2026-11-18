@@ -19,7 +19,7 @@ from swarmify_workflows.model import (
 )
 from swarmify_workflows.schedule import CRON_RULE, cron_problem
 
-TOP_FIELDS = {"name", "schedule", "budget_usd", "agents", "given", "stages"}
+TOP_FIELDS = {"name", "schedule", "budget_usd", "budget_warn_usd", "agents", "given", "stages"}
 STAGE_FIELDS: dict[str, set[str]] = {
     "swarm": {"goal", "done_when", "tools", "graphs", "output_type", "produces", "model", "agents"},
     "gate": {"ask", "kind", "max_send_backs", "picks"},
@@ -97,6 +97,9 @@ def parse_workflow(text: str) -> tuple[WorkflowModel | None, list[Violation]]:
     if schedule is not None and (problem := cron_problem(schedule)) is not None:
         out.append(Violation(CRON_RULE, problem))
     budget = top.number("budget_usd")
+    warn = top.number("budget_warn_usd")
+    if warn is not None and (budget is None or warn >= budget):
+        top.fail("budget_warn_usd must be below budget_usd")
     agents = top.number("agents", integer=True)
     given = top.names("given")
     for bad in [g for g in given if not _plain(g)]:
@@ -120,7 +123,7 @@ def parse_workflow(text: str) -> tuple[WorkflowModel | None, list[Violation]]:
     if name is None:
         return None, out
     model = WorkflowModel(
-        name, stages, schedule, budget, int(agents) if agents is not None else None, given
+        name, stages, schedule, budget, int(agents) if agents is not None else None, given, warn
     )
     return model, out
 

@@ -250,16 +250,24 @@ class RunControl:
         budget_usd: float | None = None,
         baseline: bool = False,
         workflow_budget_usd: float | None = None,
+        budget_warn_usd: float | None = None,
+        workflow_budget_warn_usd: float | None = None,
     ) -> Run:
         """Record a queued run pinned to `version` and enqueue it. Its Budget follows
         `budget_for`: `budget_usd` typed at the start, else the workflow's
-        `workflow_budget_usd`. `baseline` runs every swarm stage with one agent and no graph. An
-        Ad Hoc Run has no workflow: `workflow_id` and `version` are None."""
+        `workflow_budget_usd`; its warn amount is `budget_warn_usd`, else the workflow's. Raises
+        ValueError when the typed warn amount is not below that Budget. `baseline` runs every
+        swarm stage with one agent and no graph. An Ad Hoc Run has no workflow: `workflow_id`
+        and `version` are None."""
+        asked = budget_usd or workflow_budget_usd or budget.DEFAULT_USD
+        if budget_warn_usd is not None and budget_warn_usd >= asked:
+            raise ValueError(f"budget_warn_usd must be below the budget of ${asked:.2f}")
         budget_usd = self.budget_for(world_id, budget_usd, workflow_budget_usd, parent_run_id)
         now = datetime.now(UTC).isoformat()
         run = Run(
             new_id("run"), world_id, workflow_id, version, name, "queued", now, now, [],
             parent_run_id=parent_run_id, budget_usd=budget_usd, baseline=baseline,
+            budget_warn_usd=budget_warn_usd or workflow_budget_warn_usd,
         )  # fmt: skip
         run = self.storage.add_run(run, stages)
         self._enqueue(run)
@@ -349,6 +357,7 @@ class RunControl:
         return Run(
             new_id("run"), source.world_id, source.workflow_id, source.workflow_version,
             source.name, "queued", now, now, [], budget_usd=budget_usd,
+            budget_warn_usd=source.budget_warn_usd,
         )  # fmt: skip
 
     def _enqueue(self, run: Run) -> None:
@@ -956,9 +965,9 @@ class RunControl:
 
     def check_stop(self, run_id: str) -> str | None:
         """The cost hook calls this after every estimate. Refreshes the spend of the run and of
-        each run above it, warns once at 80 percent of the Budget (`budget.warning`) and returns
-        why every agent must stop: the run was paused or aborted, or the Budget is spent. None
-        while they may go on."""
+        each run above it, warns once at the run's warn amount, else 80 percent of the Budget
+        (`budget.warning`), and returns why every agent must stop: the run was paused or
+        aborted, or the Budget is spent. None while they may go on."""
         reason = self._over_budget(run_id)
         match self.storage.stop_of(run_id):
             case "pause":
@@ -974,7 +983,7 @@ class RunControl:
             run = self.storage.get_run(run.parent_run_id) if run.parent_run_id else None
         if top is None or top.budget_usd is None:
             return None
-        level = budget.level(top.spent_usd, top.budget_usd)
+        level = budget.level(top.spent_usd, top.budget_usd, top.budget_warn_usd)
         if level == "ok":
             return None
         if self.storage.mark_warned(top.id, top.budget_usd):

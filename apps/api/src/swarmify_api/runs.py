@@ -56,6 +56,8 @@ class StartRun(BaseModel):
     """The workflow version to pin. The current one when left out."""
     budget_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     """The run's Budget, overriding the workflow's `budget_usd`; 5 USD when neither is set."""
+    budget_warn_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    """The spend at which `budget.warning` fires, overriding the workflow's; below the Budget."""
     agents: int | None = Field(default=None, ge=1, le=MAX_AGENTS)
     """Workers per swarm stage, overriding each stage's own `agents`."""
     baseline: bool = False
@@ -217,6 +219,7 @@ def pinner(workflows: Workflows) -> Callable[..., Pinned]:
             stages,
             version.model.budget_usd,
             version.model.schedule,
+            version.model.budget_warn_usd,
         )
 
     return pin
@@ -274,6 +277,7 @@ def start_pinned(
     budget_usd: float | None = None,
     agents: int | None = None,
     baseline: bool = False,
+    budget_warn_usd: float | None = None,
 ) -> Run:
     """Start a run of the pinned version as `POST /workflows/{id}/runs` does, for HTTP and MCP:
     `agents` workers per swarm stage, ending with the Retro when `retro` and not `baseline`."""
@@ -287,6 +291,8 @@ def start_pinned(
         budget_usd=budget_usd,
         workflow_budget_usd=p.budget_usd,
         baseline=baseline,
+        budget_warn_usd=budget_warn_usd,
+        workflow_budget_warn_usd=p.budget_warn_usd,
     )
 
 
@@ -382,6 +388,7 @@ def router(
                 body.budget_usd,
                 body.agents,
                 body.baseline,
+                body.budget_warn_usd,
             )
         )
 

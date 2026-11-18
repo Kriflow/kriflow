@@ -84,6 +84,20 @@ def test_non_mapping_documents_are_one_schema_violation() -> None:
         assert model is None and [v.rule for v in violations] == ["schema"], text
 
 
+def test_budget_warn_usd_is_optional_and_must_sit_below_the_budget() -> None:
+    stages = "stages:\n  - gate: ok\n    ask: Go?\n"
+    model, violations = parse_workflow(f"name: W\nbudget_usd: 80\nbudget_warn_usd: 60\n{stages}")
+    assert violations == [] and model is not None and model.budget_warn_usd == 60
+    model, _ = parse_workflow(f"name: W\n{stages}")
+    assert model is not None and model.budget_warn_usd is None
+    below = "budget_warn_usd must be below budget_usd"
+    assert ("schema", None, below) in rules(f"name: W\nbudget_usd: 5\nbudget_warn_usd: 5\n{stages}")
+    assert ("schema", None, below) in rules(f"name: W\nbudget_warn_usd: 1\n{stages}")
+    assert ("schema", None, "budget_warn_usd must be a positive number") in rules(
+        f"name: W\nbudget_usd: 5\nbudget_warn_usd: 0\n{stages}"
+    )
+
+
 def test_every_schema_problem_is_reported_not_just_the_first() -> None:
     found = rules(
         "name: ''\nbudget_usd: -1\nagents: 2.5\nextra: 1\nstages:\n"

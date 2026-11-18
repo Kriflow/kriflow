@@ -285,6 +285,7 @@ class Runner(RunControl):
         run = Run(
             new_id("run"), pinned.world_id, pinned.workflow_id, pinned.version, pinned.name,
             "queued", now, now, [], promoted_from=promoted_from, budget_usd=budget_usd,
+            budget_warn_usd=pinned.budget_warn_usd,
         )  # fmt: skip
         run = self.storage.add_run(run, pinned.stages, skipped=index)
         folder = run_folder(self.data_dir, run) / run.stages[index - 1].id / "artifacts"
@@ -392,7 +393,7 @@ def _start_scheduled(workflow_id: str, fired_at: str) -> tuple[str, str] | None:
     now = datetime.now(UTC).isoformat()
     run = Run(
         new_id("run"), pinned.world_id, pinned.workflow_id, pinned.version, pinned.name,
-        "queued", now, now, [], budget_usd=budget_usd,
+        "queued", now, now, [], budget_usd=budget_usd, budget_warn_usd=pinned.budget_warn_usd,
     )  # fmt: skip
     run = runner.storage.add_run(run, pinned.stages)
     return run.id, run.world_id
