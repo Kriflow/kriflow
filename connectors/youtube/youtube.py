@@ -370,7 +370,15 @@ def comment_on(
 ) -> str:
     """Post `text` as a comment on the video, its id. A retried publish first looks for the
     same text among the video's comments, so it is never posted twice."""
-    auth = _headers(env)
+    try:
+        return _comment_on(http, _headers(env), video_id, text, retried)
+    except httpx.HTTPError as exc:
+        raise ToolError("posting the comment failed: YouTube could not be reached") from exc
+
+
+def _comment_on(
+    http: httpx.Client, auth: dict[str, str], video_id: str, text: str, retried: bool
+) -> str:
     if retried:
         # ponytail: the newest 100 comments; a retry comes soon after the call it repeats.
         listed = http.get(

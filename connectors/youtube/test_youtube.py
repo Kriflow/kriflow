@@ -196,16 +196,20 @@ class FakeGoogle:
         uploads: list[dict] | None = None,
         comment_error: tuple[int, dict[str, Any]] | None = None,
         comments: list[str] | None = None,
+        comment_unreachable: bool = False,
     ) -> None:
         self.requests: list[httpx.Request] = []
         self.upload_status = upload_status
         self.uploads = uploads or []
         self.comment_error = comment_error  # (status, Google's error) commentThreads answers
         self.comments = comments or []  # the texts of comments already on the video
+        self.comment_unreachable = comment_unreachable  # commentThreads drops the connection
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         if request.url.path.endswith("/commentThreads"):
+            if self.comment_unreachable:
+                raise httpx.ConnectError("connection dropped", request=request)
             if self.comment_error:
                 status, error = self.comment_error
                 return httpx.Response(status, json={"error": error})
@@ -667,6 +671,14 @@ def test_any_other_comment_failure_is_recorded_beside_the_post(video: Path) -> N
     assert out["id"] == "vid1"
     assert out["comment_failed"] == {
         "youtube": "posting the comment failed (403): Comments are disabled"
+    }
+
+
+def test_a_dropped_connection_on_the_comment_is_recorded_beside_the_post(video: Path) -> None:
+    out = post(FakeGoogle(comment_unreachable=True), video, comment="Hi")
+    assert (out["id"], out["comments"]) == ("vid1", {})
+    assert out["comment_failed"] == {
+        "youtube": "posting the comment failed: YouTube could not be reached"
     }
 
 
