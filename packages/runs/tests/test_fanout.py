@@ -328,6 +328,24 @@ def test_a_send_back_reruns_only_the_items_its_note_does_not_say_to_keep(
     }  # fmt: skip
 
 
+def test_a_sentence_asking_for_a_redo_reruns_its_item_even_with_a_keep_word(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 3))
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(), REVIEW])
+    at(runner, parent.id, "waiting_gate")
+    note = (
+        "Paragraph 2: the remake came back unchanged and still reads stiff."
+        " Paragraph 1 and paragraph 3 pass as they are; keep them."
+    )
+    runner.decide(parent.id, send_back_to="translate each", note=note)
+    wait_for(lambda: fetch(runner, parent.id).send_backs == 1)
+    at(runner, parent.id, "waiting_gate")
+    assert {t: len(s) for t, s in translate.seen.items()} == {
+        "Paragraph 1": 1, "Paragraph 2": 2, "Paragraph 3": 1,
+    }  # fmt: skip
+
+
 class Spender:
     """A child's one swarm stage: spends $1 per call for `calls` calls and asks the Budget
     after each, as the worker's cost hook does."""
