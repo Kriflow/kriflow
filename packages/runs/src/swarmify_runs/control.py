@@ -143,8 +143,14 @@ def _now() -> str:
 
 
 def queue_name(world_id: str) -> str:
-    """The world's DBOS queue, which caps how many of its runs hold a slot."""
+    """The world's DBOS queue of runs. Unbounded: the run cap is on `slot_queue` (#486)."""
     return f"runs:{world_id}"
+
+
+def slot_queue(world_id: str) -> str:
+    """The world's DBOS queue of stages at work, which caps how many run at once: a run waiting
+    at a gate, paused or on a child run holds no slot (#486)."""
+    return f"slots:{world_id}"
 
 
 def run_folder(data_dir: Path, run: Run) -> Path:
@@ -925,6 +931,7 @@ class RunControl:
         # for as long as the app runs; deleting its row stops that thread.
         try:
             self.client.delete_queue(queue_name(world_id))
+            self.client.delete_queue(slot_queue(world_id))
         except OperationalError as exc:
             if "no such table" not in str(exc):  # DBOS never launched here, so no queue either
                 raise

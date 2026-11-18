@@ -10,7 +10,7 @@ import pytest
 from dbos import DBOS
 
 from runs_fakes import FakeConnector, FakeNotifier, wait_for
-from swarmify_runs import MonthSpent, Run, Runner, SqliteStorage, StageDef, queue_name
+from swarmify_runs import MonthSpent, Run, Runner, SqliteStorage, StageDef, queue_name, slot_queue
 
 RENDER = StageDef("render", "connector", {"calls": "remotion_render"})
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})
@@ -100,13 +100,15 @@ def test_the_run_cap_is_per_world_and_a_raised_cap_takes_effect_live(
     first = runner.start("world_1", "wf_1", 1, "Weekly", [RENDER])
     second = runner.start("world_1", "wf_1", 1, "Weekly", [RENDER])
     other = runner.start("world_2", "wf_2", 1, "Weekly", [RENDER])
-    wait_for(lambda: set(blocking.started) == {first.id, other.id})
-    waiting = runner.get(second.id)
+    # Started in one breath, either of world_1's runs may take its one slot first.
+    wait_for(lambda: len(blocking.started) == 2 and other.id in blocking.started)
+    (late,) = {first.id, second.id} - set(blocking.started)
+    waiting = runner.get(late)
     assert waiting is not None and waiting.status == "queued"
 
     settings["caps"]["world_1"] = 2
     runner.set_cap("world_1")
-    wait_for(lambda: second.id in blocking.started)
+    wait_for(lambda: late in blocking.started)
     blocking.release.set()
 
     def ended(run_id: str) -> bool:
@@ -115,6 +117,30 @@ def test_the_run_cap_is_per_world_and_a_raised_cap_takes_effect_live(
 
     for run in (first, second, other):
         wait_for(lambda run_id=run.id: ended(run_id))
+
+
+def test_runs_waiting_at_gates_hold_no_run_slot(tmp_path: Path, storage: SqliteStorage) -> None:
+    """#486: the run cap counts runs with a stage at work. Runs waiting for a person never keep
+    a new run of their world from starting."""
+    runner = Runner(
+        storage, tmp_path / "dbos.sqlite", FakeConnector(), tmp_path, poll_seconds=0.05,
+        cap_for=lambda _w: 1,
+    )  # fmt: skip
+    runner.launch()
+
+    def status(run_id: str) -> str | None:
+        return getattr(runner.get(run_id), "status", None)
+
+    try:
+        held = [runner.start("world_1", "wf_1", 1, "Review", [RENDER, PICK]) for _ in range(2)]
+        for run in held:
+            wait_for(lambda run_id=run.id: status(run_id) == "waiting_gate")
+        fresh = runner.start("world_1", "wf_2", 1, "Summarize", [RENDER])
+        wait_for(lambda: status(fresh.id) == "done")
+        runner.decide(held[0].id, "a")
+        wait_for(lambda: status(held[0].id) == "done")
+    finally:
+        runner.shutdown()
 
 
 def test_launch_drops_the_queues_of_deleted_worlds_and_keeps_the_live_ones(
@@ -137,7 +163,7 @@ def test_launch_drops_the_queues_of_deleted_worlds_and_keeps_the_live_ones(
     old.launch()
     held = old.start("world_1", "wf_1", 1, "Held", [RENDER, PICK])
     wait_for(lambda: status(held.id) == "waiting_gate")
-    queued = old.start("world_1", "wf_1", 1, "Queued", [RENDER])  # behind the cap of 1
+    queued = old.start("world_1", "wf_1", 1, "Queued", [RENDER])  # a gate holds no slot
     ran = [old.start(w, "wf", 1, "Done", [RENDER]) for w in ("world_2", "world_3")]
     for run in ran:
         wait_for(lambda run_id=run.id: status(run_id) == "done")
@@ -148,9 +174,11 @@ def test_launch_drops_the_queues_of_deleted_worlds_and_keeps_the_live_ones(
     new.launch()
     try:
         assert DBOS.retrieve_queue(queue_name("world_2")) is None
+        assert DBOS.retrieve_queue(slot_queue("world_2")) is None
         assert DBOS.retrieve_queue(queue_name("world_3")) is not None  # live, nothing queued
-        assert status(queued.id) == "queued"
+        assert DBOS.retrieve_queue(slot_queue("world_3")) is not None
+        wait_for(lambda: status(queued.id) == "done")
         new.decide(held.id, "a")
-        wait_for(lambda: status(queued.id) == "done")  # its queued work survived the sweep
+        wait_for(lambda: status(held.id) == "done")  # its waiting run survived the sweep
     finally:
         new.shutdown()

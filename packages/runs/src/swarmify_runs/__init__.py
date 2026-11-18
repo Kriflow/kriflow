@@ -58,6 +58,7 @@ from swarmify_runs.runner import (
     Swarm,
     Take,
     queue_name,
+    slot_queue,
 )
 from swarmify_runs.sqlite import MIGRATIONS, SqliteStorage
 
@@ -107,6 +108,7 @@ __all__ = [
     "Swarm",
     "Take",
     "queue_name",
+    "slot_queue",
     "artifact_type",
     "run_folder",
     "stage_folder",
