@@ -88,7 +88,7 @@ def test_youtube_is_a_package_whose_account_is_signed_in_from_the_connectors_pag
 ) -> None:
     world = running.post("/api/worlds", json={"name": "Video"}).json()["id"]
     listed = {c["name"]: c for c in running.get(f"/api/worlds/{world}/connectors").json()}
-    assert listed["youtube"]["version"] == "1.3.1"
+    assert listed["youtube"]["version"] == "1.4.0"
     assert listed["youtube"]["missing"] == ["youtube"]  # the account, not keys
     assert listed["upload_post"]["missing"] == ["api_key"]
 
@@ -111,6 +111,7 @@ def test_youtube_is_a_package_whose_account_is_signed_in_from_the_connectors_pag
         "https://www.googleapis.com/auth/youtube.upload",
         "https://www.googleapis.com/auth/youtube.readonly",
         "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
     ]
     assert (q["access_type"], q["prompt"], q["code_challenge_method"]) == (
         "offline", "consent", "S256"
@@ -147,6 +148,7 @@ def test_the_confirm_gate_shows_what_goes_out_and_confirming_posts_exactly_that(
         "description": "",
         "hashtags": "",
         "tags": "",
+        "comment": "",
         "visibility": "public",
         "made_for_kids": False,
         "schedule": "2099-01-01T09:00:00Z",
@@ -157,6 +159,7 @@ def test_the_confirm_gate_shows_what_goes_out_and_confirming_posts_exactly_that(
         "description",
         "hashtags",
         "tags",
+        "comment",
     ]
     # its own preview, over the transport: when the workflow was saved, then at the gate
     assert [c[:2] for c in transport.calls if c[1] != "preview"] == [("maker", "maker")]
