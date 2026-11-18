@@ -637,7 +637,8 @@ def _plan(
     runner: Runner, run: Run, index: int, stage: StageDef, visit: int
 ) -> list[tuple[Item, ItemView]]:
     """Record the Items of a new visit. A revisit whose note names Items (by key or title,
-    whole words, any case) runs only those; the others keep what their last visit gathered."""
+    whole words, any case) runs only those, except ones named only in a sentence that says to
+    keep them (`_KEEP`); the others keep what their last visit gathered."""
     if runner.items is None:
         raise NotImplementedError("fan-out stages need items to read their source")
     items, keys = [], set()
@@ -649,9 +650,11 @@ def _plan(
         items.append(Item(key, item.title, item.file, item.data))
     note = run.send_back_note(stage.name)
     named = {i.key for i in items if any(_says(note, w) for w in (i.key, i.title))}
+    asks = [c for c in re.split(r"[.!?](?:\s|$)|[;\n]", note) if not _KEEP.search(c)]
+    redo = {i.key for i in items if any(_says(c, w) for c in asks for w in (i.key, i.title))}
     before = {v.key: v for _, v in runner.storage.items(run.id, index)} if visit else {}
     rows = [
-        (i, before[i.key] if named and i.key not in named and i.key in before else _fresh(i))
+        (i, before[i.key] if named and i.key not in redo and i.key in before else _fresh(i))
         for i in items
     ]
     runner.storage.add_items(run.id, index, visit, rows)
@@ -660,6 +663,10 @@ def _plan(
 
 def _fresh(item: Item) -> ItemView:
     return ItemView(item.key, item.title, "pending")
+
+
+# A note's sentence with one of these words names Items to keep, not to run again.
+_KEEP = re.compile(r"\b(keeps?|kept|pass|passes|fine|leave|unchanged|as is|as they are)\b", re.I)
 
 
 def _says(note: str, word: str) -> bool:
