@@ -46,6 +46,26 @@ class ItemView:
     """pending, running, done, failed or aborted."""
     child: RunLink | None = None
     error: str | None = None
+    approved: bool = False
+    """Approved at its stage's `approve` items gate; a stage with `approve` finishes only once
+    every Item is."""
+
+
+def items_gate(config: dict[str, Any], items: list[ItemView]) -> tuple[str, str]:
+    """The kind and ask of the gate a fan-out stage raised once every Item settled: `items`
+    when some failed, or `approve_items` on a stage with `approve` until every Item is approved
+    (failed ones are sent back with a note there, not retried)."""
+    if not config.get("approve"):
+        return "items", items_ask(items)
+    left = [i for i in items if not i.approved]
+    lines = [f"- {i.title} ({i.key}): {i.error or i.status}" for i in left if i.status != "done"]
+    return "approve_items", "\n".join(
+        [
+            f"{len(left)} of {len(items)} items wait for review:",
+            *lines,
+            "Approve each item, or send it back with a note to make it again.",
+        ]
+    )
 
 
 def items_ask(items: list[ItemView]) -> str:

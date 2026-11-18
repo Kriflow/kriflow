@@ -96,6 +96,14 @@ class Reject(BaseModel):
     reason: str = Field(default="", max_length=2_000)
 
 
+class ReviewItems(BaseModel):
+    """At a fan-out stage with `approve`: the Items approved, and those sent back, each with
+    the note its child run makes it again with."""
+
+    approve: list[str] = Field(default_factory=list, max_length=1_000)
+    send_back: dict[str, str] = Field(default_factory=dict, max_length=1_000)
+
+
 class Decide(BaseModel):
     """A gate answer. Pick gates need `choice` or `artifact`, or `artifacts` at a gate that
     takes several picks; approve gates may name `send_back_to`, an earlier stage that then runs
@@ -594,6 +602,15 @@ def router(
         run: its child is forked from where it failed, in the same family. Answers the new child.
         409 when no fan-out stage runs or the Item has not failed, 404 for an unknown Item."""
         return act(lambda: runner.retry_item(run_id, key))
+
+    @api.post("/runs/{run_id}/items/review", responses=ACTION_ERRORS)
+    def review_items(run_id: str, body: ReviewItems) -> Run:
+        """Approve or send back Items of the run's fan-out stage with `approve`, at its items
+        gate or while some still run. A sent-back Item's child is forked with the note as a
+        Rerun and its new output replaces the old; once every Item is approved the stage
+        finishes. 409 when no such stage is running or waiting, or an Item is not ready for
+        it, 404 for an unknown Item, 422 for a send-back without a note."""
+        return act(lambda: runner.review_items(run_id, body.approve, body.send_back, OPERATOR))
 
     @api.post("/runs/{run_id}/pause", responses=ACTION_ERRORS)
     def pause(run_id: str) -> Run:

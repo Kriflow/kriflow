@@ -26,6 +26,7 @@ export const GATE_KIND: Record<Gate["kind"], string> = {
   confirm: "Confirm before it goes out",
   budget: "Budget ran out",
   skill: "Review a skill change",
+  approve_items: "Review each item",
 };
 
 /** What the run wrote about itself, not something to choose or review. */
@@ -126,6 +127,7 @@ export type Choice =
   | { kind: "send_back"; to: string }
   | { kind: "confirm" }
   | { kind: "items"; retry: boolean }
+  | { kind: "review_items"; approve: string[]; sendBack: Record<string, string> }
   | { kind: "budget"; add: number }
   | { kind: "abort" }
   | { kind: "skill"; proposal: Proposal; approve: boolean; content: string; applyWorkflow: boolean };
@@ -161,6 +163,21 @@ export function decision(gate: Gate, choice: Choice, { note = "", edits = {}, re
         return refusal(error, response, "The decision was refused");
       },
       said: approve ? "You approved the proposal" : "You rejected the proposal",
+    };
+  }
+  if (choice.kind === "review_items") {
+    const { approve, sendBack } = choice;
+    const back = Object.keys(sendBack).length;
+    const said = [approve.length && `approved ${approve.length}`, back && `sent back ${back}`].filter(Boolean).join(" and ");
+    return {
+      send: async () => {
+        const { error, response } = await api.POST("/api/runs/{run_id}/items/review", {
+          params: { path: { run_id: gate.run_id } },
+          body: { approve, send_back: sendBack },
+        });
+        return refusal(error, response, "The review was refused");
+      },
+      said: `You ${said}`,
     };
   }
   const body: Decide = { note };

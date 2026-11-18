@@ -65,7 +65,9 @@ class WorkflowStage:
     """Runs workflow `runs` as a child run and takes the named artifacts from it. With
     `for_each` it is a Fan-out Stage (ADR 0031): one child run per Item of an earlier stage's
     cards, the cards picked at a pick gate, or the elements of a JSON list file, each given its
-    Item as file `as_` (`as` in YAML), at most `max_parallel` at once."""
+    Item as file `as_` (`as` in YAML), at most `max_parallel` at once. With `approve` the stage
+    ends at an items gate once every Item settled: a person approves or sends back each Item
+    with a note, and the stage finishes only when every Item is approved."""
 
     name: str
     runs: str
@@ -73,6 +75,7 @@ class WorkflowStage:
     for_each: str | None = None
     as_: str | None = None
     max_parallel: int | None = None
+    approve: bool = False
     type: Literal["workflow"] = "workflow"
 
 

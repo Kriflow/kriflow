@@ -22,7 +22,7 @@ from swarmify_runs.model import (
     RunLink,
     RunStageView,
     StageDef,
-    items_ask,
+    items_gate,
 )
 
 MIGRATIONS = Path(__file__).parent / "migrations"
@@ -398,12 +398,12 @@ class SqliteStorage:
                 source = {"file": item.file} if item.file else {"data": item.data}
                 conn.execute(
                     "INSERT OR IGNORE INTO fanout_items (run_id, stage_index, visit, item_key,"
-                    " item_title, position, source, child_run_id, status, error)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " item_title, position, source, child_run_id, status, error, approved)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         run_id, index, visit, item.key, item.title, position,
                         json.dumps(source), view.child.id if view.child else None, view.status,
-                        view.error,
+                        view.error, view.approved,
                     ),
                 )  # fmt: skip
             saved = self._read(conn, run_id)
@@ -431,10 +431,24 @@ class SqliteStorage:
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
-                "UPDATE fanout_items SET status = ?, child_run_id = ?, error = ?"
+                "UPDATE fanout_items SET status = ?, child_run_id = ?, error = ?, approved = 0"
                 " WHERE run_id = ? AND stage_index = ? AND visit = ? AND item_key = ?",
                 (status, child_run_id, error, run_id, index, visit, key),
             )
+            saved = self._read(conn, run_id)
+            if saved is not None:
+                append(conn, _updated(saved))
+            conn.execute("COMMIT")
+
+    def approve_items(self, run_id: str, index: int, visit: int, keys: list[str]) -> None:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            for key in keys:
+                conn.execute(
+                    "UPDATE fanout_items SET approved = 1"
+                    " WHERE run_id = ? AND stage_index = ? AND visit = ? AND item_key = ?",
+                    (run_id, index, visit, key),
+                )
             saved = self._read(conn, run_id)
             if saved is not None:
                 append(conn, _updated(saved))
@@ -504,9 +518,9 @@ class SqliteStorage:
                 limit = int(config.get("max_send_backs") or MAX_SEND_BACKS)
                 kind = config.get("kind") or "approve"
                 ask = config.get("ask") or ""
-                if g["type"] == "workflow":  # a fan-out stage raised its gate: items failed
-                    kind = "items"
-                    ask = items_ask([v for _, v in _items(conn, g["run_id"], g["idx"], None)])
+                if g["type"] == "workflow":  # a fan-out stage raised its items gate
+                    views = [v for _, v in _items(conn, g["run_id"], g["idx"], None)]
+                    kind, ask = items_gate(config, views)
                 (sent,) = conn.execute(
                     "SELECT count(*) FROM gate_decisions WHERE run_id = ? AND stage_index = ?"
                     " AND send_back_to IS NOT NULL",
@@ -743,8 +757,9 @@ def _items(
         source = json.loads(r["source"])
         item = Item(r["item_key"], r["item_title"], source.get("file"), source.get("data"))
         view = ItemView(
-            r["item_key"], r["item_title"], r["status"], _link(conn, r["child_run_id"]), r["error"]
-        )
+            r["item_key"], r["item_title"], r["status"], _link(conn, r["child_run_id"]),
+            r["error"], bool(r["approved"]),
+        )  # fmt: skip
         out.append((item, view))
     return out
 

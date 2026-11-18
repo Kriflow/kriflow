@@ -75,7 +75,9 @@ each stage is `- <type>: <stage name>` plus its fields:
   cards; a pick gate's picked cards) or a .json list file an earlier stage produces. Each
   child's take lands in <stage>/artifacts/<item key>/, and items.json indexes every item with
   its status (a later stage may name items.json as an input). Use it when the same work
-  repeats per item (each picked idea, each needed asset).
+  repeats per item (each picked idea, each needed asset). With approve: true the stage ends at
+  one gate where a person approves or sends back each item with a note (only that item's
+  child runs again); it finishes once every item is approved.
 Rules: a publish connector must come right after a gate, unless the stage posts privately (the
 check names the params); a connector's input must be produced
 by an earlier stage; connectors must exist in the world. Swarm agents write text only, so a swarm

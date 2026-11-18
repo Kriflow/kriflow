@@ -106,3 +106,23 @@ def test_a_later_stage_may_read_the_items_json_a_fan_out_stage_writes() -> None:
     assert rules(WorkflowModel("w", [made, fan, read])) == []
     plain = WorkflowStage("each", "wf_t")
     assert rules(WorkflowModel("w", [made, plain, read])) == [("input_not_produced", "read")]
+
+
+def test_a_fan_out_stage_may_end_with_an_approve_items_gate_and_it_round_trips() -> None:
+    fan = "  - workflow: each\n    runs: wf_t\n    for_each: paragraphs\n    approve: true\n"
+    model = parsed(fan)
+    assert model.stages[1] == WorkflowStage(
+        "each", "wf_t", [], "paragraphs", "item.md", 2, approve=True
+    )
+    stages = []
+    for stage in model.stages:
+        fields = asdict(stage)
+        stages.append((fields.pop("type"), fields.pop("name"), fields))
+    assert "approve: true" in dump_workflow(model.name, stages)
+    assert parse_workflow(dump_workflow(model.name, stages)) == (model, [])
+    (plain,) = schema("  - workflow: each\n    runs: wf_t\n    approve: true\n")
+    assert plain.startswith("approve belongs to a fan-out stage")
+    (bad,) = schema(
+        "  - workflow: each\n    runs: wf_t\n    for_each: paragraphs\n    approve: 1\n"
+    )
+    assert bad.startswith("approve must be true or false")

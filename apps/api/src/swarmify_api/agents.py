@@ -69,10 +69,15 @@ def router(
         return run_artifacts(memory, run, before)
 
     @api.get("/runs/{run_id}/stages/{stage_id}/artifacts")
-    def get_artifacts(run_id: str, stage_id: str) -> list[ArtifactFile]:
+    def get_artifacts(run_id: str, stage_id: str, folder: str = "") -> list[ArtifactFile]:
         """The stage's artifact files as they are on disk: projected ones carry their type and
-        fields (an idea's rank and source references) in `fields`."""
+        fields (an idea's rank and source references) in `fields`. With `folder`, those of
+        that subfolder: a fan-out stage gathers each Item's files under its key. 422 for a
+        folder that is not a plain name."""
         run = stage_of(run_id, stage_id)
-        return memory.stage_artifacts(run.world_id, run_id, stage_id)
+        try:
+            return memory.stage_artifacts(run.world_id, run_id, stage_id, folder)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     return api

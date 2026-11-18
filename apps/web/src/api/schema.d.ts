@@ -664,6 +664,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/items/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Items
+         * @description Approve or send back Items of the run's fan-out stage with `approve`, at its items
+         *     gate or while some still run. A sent-back Item's child is forked with the note as a
+         *     Rerun and its new output replaces the old; once every Item is approved the stage
+         *     finishes. 409 when no such stage is running or waiting, or an Item is not ready for
+         *     it, 404 for an unknown Item, 422 for a send-back without a note.
+         */
+        post: operations["review_items_api_runs__run_id__items_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/pause": {
         parameters: {
             query?: never;
@@ -1290,7 +1314,9 @@ export interface paths {
         /**
          * Get Artifacts
          * @description The stage's artifact files as they are on disk: projected ones carry their type and
-         *     fields (an idea's rank and source references) in `fields`.
+         *     fields (an idea's rank and source references) in `fields`. With `folder`, those of
+         *     that subfolder: a fan-out stage gathers each Item's files under its key. 422 for a
+         *     folder that is not a plain name.
          */
         get: operations["get_artifacts_api_runs__run_id__stages__stage_id__artifacts_get"];
         put?: never;
@@ -3011,6 +3037,11 @@ export interface components {
             child?: components["schemas"]["RunLink"] | null;
             /** Error */
             error?: string | null;
+            /**
+             * Approved
+             * @default false
+             */
+            approved: boolean;
         };
         /**
          * Judgement
@@ -3777,6 +3808,19 @@ export interface components {
             model?: components["schemas"]["WorkflowModel"] | null;
             /** Next Run At */
             next_run_at?: string | null;
+        };
+        /**
+         * ReviewItems
+         * @description At a fan-out stage with `approve`: the Items approved, and those sent back, each with
+         *     the note its child run makes it again with.
+         */
+        ReviewItems: {
+            /** Approve */
+            approve?: string[];
+            /** Send Back */
+            send_back?: {
+                [key: string]: string;
+            };
         };
         /**
          * Room
@@ -4708,7 +4752,9 @@ export interface components {
          * @description Runs workflow `runs` as a child run and takes the named artifacts from it. With
          *     `for_each` it is a Fan-out Stage (ADR 0031): one child run per Item of an earlier stage's
          *     cards, the cards picked at a pick gate, or the elements of a JSON list file, each given its
-         *     Item as file `as_` (`as` in YAML), at most `max_parallel` at once.
+         *     Item as file `as_` (`as` in YAML), at most `max_parallel` at once. With `approve` the stage
+         *     ends at an items gate once every Item settled: a person approves or sends back each Item
+         *     with a note, and the stage finishes only when every Item is approved.
          */
         WorkflowStage: {
             /** Name */
@@ -4723,6 +4769,11 @@ export interface components {
             as_?: string | null;
             /** Max Parallel */
             max_parallel?: number | null;
+            /**
+             * Approve
+             * @default false
+             */
+            approve: boolean;
             /**
              * Type
              * @default workflow
@@ -6212,6 +6263,55 @@ export interface operations {
             };
         };
     };
+    review_items_api_runs__run_id__items_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewItems"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description No such run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The run is not in a state where this action applies */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     pause_api_runs__run_id__pause_post: {
         parameters: {
             query?: never;
@@ -7331,7 +7431,9 @@ export interface operations {
     };
     get_artifacts_api_runs__run_id__stages__stage_id__artifacts_get: {
         parameters: {
-            query?: never;
+            query?: {
+                folder?: string;
+            };
             header?: never;
             path: {
                 run_id: string;
