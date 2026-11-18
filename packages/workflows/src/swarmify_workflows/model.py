@@ -90,6 +90,8 @@ class WorkflowModel:
     given: list[str] = field(default_factory=list)
     """The files a run of it is given before its first stage (a Fan-out Stage's Item), which
     its stages may name as inputs."""
+    budget_warn_usd: float | None = None
+    """Spend at which `budget.warning` fires, below `budget_usd`; 80 percent of it when left out."""
 
 
 @dataclass(frozen=True)

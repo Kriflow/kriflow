@@ -3864,6 +3864,8 @@ export interface components {
             /** Changes */
             changes?: components["schemas"]["AppliedChange"][];
             forked_by?: components["schemas"]["AppliedChange"] | null;
+            /** Budget Warn Usd */
+            budget_warn_usd?: number | null;
         };
         /**
          * RunChange
@@ -4344,6 +4346,8 @@ export interface components {
             version?: number | null;
             /** Budget Usd */
             budget_usd?: number | null;
+            /** Budget Warn Usd */
+            budget_warn_usd?: number | null;
             /** Agents */
             agents?: number | null;
             /**
@@ -4696,6 +4700,8 @@ export interface components {
             agents?: number | null;
             /** Given */
             given?: string[];
+            /** Budget Warn Usd */
+            budget_warn_usd?: number | null;
         };
         /**
          * WorkflowStage

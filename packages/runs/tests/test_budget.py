@@ -17,6 +17,14 @@ def test_the_thresholds() -> None:
     assert level(1e9, None) == "ok"
 
 
+def test_a_warn_amount_moves_the_warning_and_one_at_or_above_the_budget_is_ignored() -> None:
+    assert level(59.99, 80, 60) == "ok"
+    assert level(60.0, 80, 60) == "warning"
+    assert level(80.0, 80, 60) == "spent"
+    assert level(3.99, 5, 9) == "ok"  # a Budget cut below the warn amount warns at 80 percent
+    assert level(4.0, 5, 9) == "warning"
+
+
 @given(MONEY, MONEY, st.floats(min_value=0.01, max_value=1e6))
 def test_more_spend_never_lowers_the_level(a: float, b: float, budget: float) -> None:
     order = ["ok", "warning", "spent"]

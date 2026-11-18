@@ -194,6 +194,41 @@ def test_a_child_run_spends_its_parents_budget(
     assert types(notifier) == ["budget.warning"]  # once per budget
 
 
+def test_a_warn_amount_sets_when_the_warning_fires(
+    storage: SqliteStorage, tmp_path: Path, notifier: FakeNotifier
+) -> None:
+    cost = {"run_w": 0.0}
+    control = RunControl(
+        storage, tmp_path / "dbos.sqlite", tmp_path, notifier,
+        spend=lambda ids: sum(cost.get(i, 0.0) for i in ids),
+    )  # fmt: skip
+    run = control.start("world_1", "wf_1", 1, "W", [RESEARCH], workflow_budget_usd=80,
+                        workflow_budget_warn_usd=60)  # fmt: skip
+    assert (run.budget_usd, run.budget_warn_usd) == (80, 60)
+    cost[run.id] = 59.0
+    assert control.check_stop(run.id) is None and types(notifier) == []  # 80 percent is $64
+    cost[run.id] = 60.0
+    assert control.check_stop(run.id) is None and types(notifier) == ["budget.warning"]
+    assert fetch(control, run.id).budget_warn_usd == 60  # read back from storage
+
+
+def test_a_start_may_set_its_own_warn_amount_below_its_budget(
+    storage: SqliteStorage, tmp_path: Path, notifier: FakeNotifier
+) -> None:
+    control = RunControl(storage, tmp_path / "dbos.sqlite", tmp_path, notifier)
+    run = control.start("world_1", "wf_1", 1, "W", [RESEARCH], budget_usd=10, budget_warn_usd=2,
+                        workflow_budget_usd=80, workflow_budget_warn_usd=60)  # fmt: skip
+    assert (run.budget_usd, run.budget_warn_usd) == (10, 2)
+    kept = control.start("world_1", "wf_1", 1, "W", [RESEARCH], budget_usd=100,
+                         workflow_budget_usd=80, workflow_budget_warn_usd=60)  # fmt: skip
+    assert kept.budget_warn_usd == 60
+    with pytest.raises(ValueError, match="budget_warn_usd must be below the budget of \\$80.00"):
+        control.start("world_1", "wf_1", 1, "W", [RESEARCH], budget_warn_usd=80,
+                      workflow_budget_usd=80)  # fmt: skip
+    with pytest.raises(ValueError, match="below the budget of \\$5.00"):
+        control.start("world_1", None, None, "W", [RESEARCH], budget_warn_usd=5)
+
+
 def held_mid_stage(runner: Runner, swarm: FakeSwarm) -> Run:
     swarm.hold_at = 1
     run = runner.start("world_1", "wf_1", 1, "Research", [RESEARCH, PICK], budget_usd=100)

@@ -1,7 +1,8 @@
 """Budget arithmetic: the spend ceiling of a run and every child run below it (ADR 0013).
 
-Spend is the Agent SDK's estimate, not billing (V1 spec). At 80 percent a warning goes out, at
-100 percent every agent of the run stops and a budget gate asks for more money or an abort.
+Spend is the Agent SDK's estimate, not billing (V1 spec). At 80 percent (or the run's own warn
+amount) a warning goes out, at 100 percent every agent of the run stops and a budget gate asks
+for more money or an abort.
 """
 
 from typing import Literal
@@ -12,9 +13,13 @@ DEFAULT_USD = 5.0
 Level = Literal["ok", "warning", "spent"]
 
 
-def level(spent: float, budget: float | None) -> Level:
-    """Where `spent` stands against `budget`; no budget never warns or stops."""
-    if budget is None or spent < WARN_AT * budget:
+def level(spent: float, budget: float | None, warn: float | None = None) -> Level:
+    """Where `spent` stands against `budget`; no budget never warns or stops. `warn` is the
+    spend that warns, used while it is below `budget` (a monthly cut may push the Budget under
+    it); else 80 percent of the Budget."""
+    if budget is None:
+        return "ok"
+    if spent < (warn if warn is not None and warn < budget else WARN_AT * budget):
         return "ok"
     return "spent" if spent >= budget else "warning"
 

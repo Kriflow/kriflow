@@ -192,8 +192,8 @@ class SqliteStorage:
         conn.execute(
             "INSERT INTO runs (id, world_id, workflow_id, workflow_version, name, status,"
             " created_at, updated_at, parent_run_id, forked_from_run_id, fork_stage_index,"
-            " promoted_from, budget_usd, baseline)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " promoted_from, budget_usd, baseline, budget_warn_usd)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 run.id,
                 run.world_id,
@@ -209,6 +209,7 @@ class SqliteStorage:
                 run.promoted_from,
                 run.budget_usd,
                 run.baseline,
+                run.budget_warn_usd,
             ),
         )
 
@@ -679,6 +680,7 @@ class SqliteStorage:
             row["revision"],
             changes,
             forked_by,
+            row["budget_warn_usd"],
         )
 
 

@@ -74,6 +74,8 @@ class Pinned:
     """The workflow's default Budget."""
     schedule: str | None = None
     """The version's cron, if any: a tick that fires after the schedule was dropped finds None."""
+    budget_warn_usd: float | None = None
+    """The workflow's warn amount: the spend at which `budget.warning` fires."""
 
 
 @dataclass(frozen=True)
@@ -249,6 +251,8 @@ class Run:
     """Every Run Change applied to the run, oldest first."""
     forked_by: AppliedChange | None = None
     """The Run Change, applied to `forked_from`, that made this Fork."""
+    budget_warn_usd: float | None = None
+    """The spend at which `budget.warning` fires, on the top run only; None warns at 80 percent."""
 
     def send_back_note(self, stage_name: str) -> str:
         """The note of the send-back or Rerun that caused this visit, when it named
