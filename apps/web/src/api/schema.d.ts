@@ -396,7 +396,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Runs */
+        /**
+         * List Runs
+         * @description Every run, newest first. With `limit`, one page of them: `X-Next-Before` names the
+         *     last run when more follow, and `?before=<it>` lists the next page.
+         */
         get: operations["list_runs_api_worlds__world_id__runs_get"];
         put?: never;
         /**
@@ -5651,7 +5655,10 @@ export interface operations {
     };
     list_runs_api_worlds__world_id__runs_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+            };
             header?: never;
             path: {
                 world_id: string;

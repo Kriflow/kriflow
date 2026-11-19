@@ -572,12 +572,18 @@ class SqliteStorage:
                 raise KeyError(f"{run_id} stage {index}")
             return row["id"], StageDef(row["name"], row["type"], json.loads(row["config"]))
 
-    def list_runs(self, world_id: str) -> list[Run]:
+    def list_runs(
+        self, world_id: str, limit: int | None = None, before: str | None = None
+    ) -> list[Run]:
+        sql, args = "SELECT id FROM runs WHERE world_id = ?", [world_id]
+        if before:  # keyset on the sort key: runs started meanwhile never shift later pages
+            sql += " AND (created_at, id) < (SELECT created_at, id FROM runs WHERE id = ?)"
+            args.append(before)
+        sql += " ORDER BY created_at DESC, id DESC"
+        if limit:
+            sql += f" LIMIT {int(limit)}"
         with self._conn() as conn:
-            ids = conn.execute(
-                "SELECT id FROM runs WHERE world_id = ? ORDER BY created_at DESC, id DESC",
-                (world_id,),
-            ).fetchall()
+            ids = conn.execute(sql, args).fetchall()
             return [r for (run_id,) in ids if (r := self._read(conn, run_id))]
 
     def queued_run_ids(self) -> list[str]:

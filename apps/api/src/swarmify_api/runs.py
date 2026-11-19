@@ -10,7 +10,7 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StringConstraints, model_validator
@@ -514,10 +514,21 @@ def router(
             return JSONResponse(status_code=422, content=jsonable_encoder(report))
 
     @api.get("/worlds/{world_id}/runs")
-    def list_runs(world_id: str) -> list[Run]:
+    def list_runs(
+        world_id: str,
+        response: Response,
+        limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+        before: str | None = None,
+    ) -> list[Run]:
+        """Every run, newest first. With `limit`, one page of them: `X-Next-Before` names the
+        last run when more follow, and `?before=<it>` lists the next page."""
         if worlds.get(world_id) is None:
             raise HTTPException(404, "world not found")
-        return runner.list_all(world_id)
+        runs = runner.list_all(world_id, limit and limit + 1, before)
+        if limit and len(runs) > limit:
+            runs = runs[:limit]
+            response.headers["X-Next-Before"] = runs[-1].id
+        return runs
 
     @api.get("/runs/{run_id}")
     def get_run(run_id: str) -> Run:

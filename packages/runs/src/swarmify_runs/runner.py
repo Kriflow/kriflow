@@ -301,8 +301,10 @@ class Runner(RunControl):
         self._enqueue(run)
         return run
 
-    def list_all(self, world_id: str) -> list[Run]:
-        return self.storage.list_runs(world_id)
+    def list_all(
+        self, world_id: str, limit: int | None = None, before: str | None = None
+    ) -> list[Run]:
+        return self.storage.list_runs(world_id, limit, before)
 
     def set_cap(self, world_id: str) -> None:
         """Register (or update) the world's queues, its slots with its current cap. Call it when

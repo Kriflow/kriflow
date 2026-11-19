@@ -5,6 +5,7 @@ import "../index.css";
 
 import { FakeEventSource, fakeFetch, run, stage as shared } from "../test/fakes";
 import { mountAt } from "../test/mount";
+import { refresh } from "../refresh";
 
 const ts = "2026-10-26T10:00:00+00:00";
 const video = { id: "world_1", name: "Video", purpose: "", created_at: ts };
@@ -255,4 +256,54 @@ test("on a phone, while the runs load, the chips are real and five run rows wait
   await expect.element(screen.getByTestId("run-list")).toMatchTextContent(/Goes/);
   expect(document.querySelector("main [aria-busy='true']")).toBeNull();
   await expect.element(chips.getByRole("link", { name: "Running 1" })).toBeVisible();
+});
+
+/** Runs as pages of the API: newest first, `?before=` lists after that run, X-Next-Before when more follow. */
+function paged(names: string[]) {
+  const all = names.map((name, i) => run("done", [], { id: `run_${names.length - i}`, name }));
+  const asked: string[] = [];
+  const answer = (req: Request) => {
+    const q = new URL(req.url).searchParams;
+    asked.push(q.toString());
+    const from = q.has("before") ? all.findIndex((r) => r.id === q.get("before")) + 1 : 0;
+    const page = all.slice(from, from + Number(q.get("limit")));
+    const more = from + page.length < all.length;
+    return Response.json(page, { headers: more ? { "X-Next-Before": page.at(-1)!.id } : {} });
+  };
+  return { all, asked, answer };
+}
+
+test("loads the first page, then the next as the end of the list comes into view", async () => {
+  const names = Array.from({ length: 35 }, (_, i) => `Run ${35 - i}`);
+  const runs = paged(names);
+  fakeFetch({ "GET /api/worlds/world_1": () => Response.json(video), "GET /api/worlds/world_1/runs": runs.answer });
+  const { screen } = await mountAt("/worlds/world_1/runs");
+  const rows = () => document.querySelectorAll("[data-testid=run-list] tbody tr").length;
+  await expect.poll(rows).toBe(30);
+  const sub = () => document.querySelector("header .sub")?.textContent;
+  await expect.poll(sub).toMatch(/^Latest 30 runs/);
+  screen.getByRole("button", { name: "Load more" }).element().scrollIntoView();
+  await expect.poll(rows).toBe(35);
+  expect(runs.asked).toEqual(["limit=30", "limit=30&before=run_6"]);
+  await expect.element(screen.getByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  await expect.poll(sub).toMatch(/^35 runs/);
+});
+
+test("without scrolling, Load more fetches the next page, and a refresh keeps it", async () => {
+  vi.stubGlobal("IntersectionObserver", class { observe() {} disconnect() {} });
+  const names = Array.from({ length: 31 }, (_, i) => `Run ${31 - i}`);
+  const runs = paged(names);
+  fakeFetch({ "GET /api/worlds/world_1": () => Response.json(video), "GET /api/worlds/world_1/runs": runs.answer });
+  const { screen } = await mountAt("/worlds/world_1/runs");
+  const rows = () => document.querySelectorAll("[data-testid=run-list] tbody tr").length;
+  await expect.poll(rows).toBe(30);
+  await screen.getByRole("button", { name: "Load more" }).click();
+  await expect.poll(rows).toBe(31);
+
+  // A new run arrives; the refresh reloads only the first page and the older one stays.
+  runs.all.unshift(run("running", [], { id: "run_32", name: "Run 32" }));
+  await refresh();
+  await expect.element(screen.getByTestId("run-list")).toMatchTextContent(/^Run.*Run 32\b/);
+  await expect.poll(rows).toBe(32);
+  expect(runs.asked.at(-1)).toBe("limit=30");
 });

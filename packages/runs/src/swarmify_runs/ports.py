@@ -137,8 +137,11 @@ class Storage(Protocol):
         """The stage id and its definition."""
         ...
 
-    def list_runs(self, world_id: str) -> list[Run]:
-        """Newest first."""
+    def list_runs(
+        self, world_id: str, limit: int | None = None, before: str | None = None
+    ) -> list[Run]:
+        """Newest first; with `limit`, at most that many, and with `before`, only the runs listed
+        after that run id."""
         ...
 
     def open_gates(self) -> list[Gate]:
