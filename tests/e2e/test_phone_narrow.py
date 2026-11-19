@@ -1,13 +1,16 @@
 """The pages most likely to run wide, at the narrowest common phone (360 x 740), and Needs you
 holding still while it loads: what it shows first is where it stays (Mobile UX Spec, T6)."""
 
+import shlex
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import Browser, Page, ViewportSize, expect
 
 # The phone suite's fixtures: its seeded world, and a signed-in 390 x 844 page.
-from test_phone import PASSWORD
+from test_phone import PASSWORD, signed_in
 from test_phone import ids as ids  # noqa: F401
 from test_phone import phone as phone  # noqa: F401
 
@@ -28,8 +31,27 @@ def small(browser: Browser, locked_url: str) -> Iterator[Page]:
     context.close()
 
 
-@pytest.mark.parametrize("path", ["graph", "cast", "assets"])
-def test_fits_a_small_phone(small: Page, ids: dict[str, str], path: str) -> None:
+ECHO = Path(__file__).parents[2] / "packages/connectors/tests/echo_server.py"
+# A Tool connector whose command is one long unbreakable path, as an MCP server added on the
+# Connectors page shows it (the Connectors page once ran 250px too wide on a phone with one).
+LONG = (
+    "/data/worlds/world_01M65QPFJ3QWXWQWQG4NKP96HG/assets/" + "a_long_folder_name_" * 4 + "tool.py"
+)
+
+
+@pytest.fixture(scope="module")
+def long_command(locked_url: str, ids: dict[str, str]) -> None:
+    server = shlex.join([sys.executable, str(ECHO), LONG])
+    body = {"name": "long_path", "kind": "tool", "server": server, "stage_types": ["swarm"]}
+    api = signed_in(locked_url)
+    api.post(f"/worlds/{ids['world']}/connectors", json=body).raise_for_status()
+    api.close()
+
+
+@pytest.mark.parametrize("path", ["graph", "cast", "assets", "connectors"])
+def test_fits_a_small_phone(
+    small: Page, ids: dict[str, str], long_command: None, path: str
+) -> None:
     small.goto(f"/worlds/{ids['world']}/{path}")
     expect(small.locator("h1").first).to_be_visible()
     expect(small.locator("[aria-busy='true']")).to_have_count(0)
