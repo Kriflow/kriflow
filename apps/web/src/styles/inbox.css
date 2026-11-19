@@ -8,7 +8,9 @@
 .gate-ctx > :not(:last-child)::after { content: "·"; margin: 0 6px; color: var(--faint); }
 .gate-ctx a { color: var(--muted); font-weight: 600; text-decoration: none; }
 .gate-ctx a:hover { color: var(--text); text-decoration: underline; }
-p.ask { margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em; max-width: 44rem; text-wrap: pretty; }
+p.ask { margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em; max-width: 44rem; text-wrap: pretty; white-space: pre-line; overflow-wrap: anywhere; }
+p.ask.folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; line-clamp: 6; overflow: hidden; }
+p.ask + .ask-all { justify-self: start; font-size: 0.75rem; }
 /* The note and Ask this run, folded under the work. */
 .gate-more { max-width: 44rem; color: var(--muted); }
 .gate-more > summary { cursor: pointer; width: fit-content; font-weight: 500; }

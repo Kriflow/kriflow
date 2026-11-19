@@ -58,7 +58,7 @@ def items_gate(config: dict[str, Any], items: list[ItemView]) -> tuple[str, str]
     if not config.get("approve"):
         return "items", items_ask(items)
     left = [i for i in items if not i.approved]
-    lines = [f"- {i.title} ({i.key}): {i.error or i.status}" for i in left if i.status != "done"]
+    lines = [item_line(i) for i in left if i.status != "done"]
     return "approve_items", "\n".join(
         [
             f"{len(left)} of {len(items)} items wait for review:",
@@ -68,10 +68,19 @@ def items_gate(config: dict[str, Any], items: list[ItemView]) -> tuple[str, str]
     )
 
 
+def item_line(item: ItemView) -> str:
+    """An Item as a gate's ask lists it: its name and only the first line of its error, cut to
+    about 120 characters. The full error, often a whole traceback, stays on the Item."""
+    reason = (item.error or "").strip().split("\n", 1)[0].strip() or item.status
+    if len(reason) > 120:
+        reason = reason[:119].rstrip() + "…"
+    return f"- {item.title} ({item.key}): {reason}"
+
+
 def items_ask(items: list[ItemView]) -> str:
     """What a fan-out stage's `items` gate asks once every Item settled and some failed."""
     failed = [i for i in items if i.status in ("failed", "aborted")]
-    lines = [f"- {i.title} ({i.key}): {i.error or i.status}" for i in failed]
+    lines = [item_line(i) for i in failed]
     return "\n".join(
         [
             f"{len(failed)} of {len(items)} items did not finish:",

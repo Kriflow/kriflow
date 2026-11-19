@@ -724,7 +724,7 @@ export function GateCard({
           {gate.item && <span data-testid="gate-item">item {gate.item}</span>}
         </p>
       )}
-      <p className="ask">{gate.ask}</p>
+      <GateQuestion ask={gate.ask} />
       {/* Holds the evidence's place while it loads, so the form below does not jump down. */}
       {shows && artifacts === null && (
         <Loading>
@@ -1094,5 +1094,24 @@ function WhatGoesOut({ preview, worldId }: { preview: PublishPreview; worldId: s
         </div>
       )}
     </section>
+  );
+}
+
+/** A gate's question, one line per line of it; a long one (an items gate listing many Items)
+ * is folded to a few lines until Show all, like a long Item error. */
+function GateQuestion({ ask }: { ask: string }) {
+  const [all, setAll] = useState(false);
+  const long = ask.length > 480 || ask.split("\n").length > 6;
+  return (
+    <>
+      <p className={long && !all ? "ask folded" : "ask"} data-testid="gate-ask">
+        {ask}
+      </p>
+      {long && !all && (
+        <button type="button" className="link ask-all" onClick={() => setAll(true)}>
+          Show all
+        </button>
+      )}
+    </>
   );
 }
