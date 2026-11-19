@@ -1,5 +1,6 @@
 /* Runs: status tabs over a table with a small strip per row, then where the time went and spend */
 .runs-panel { margin-bottom: var(--gap); }
+.load-more { display: flex; justify-content: center; padding-top: var(--gap); }
 .runs-table { width: 100%; border-collapse: collapse; }
 .runs-table th { text-align: left; font-size: 0.75rem; font-weight: 400; color: var(--faint); padding: 0 12px 8px 0; }
 .runs-table td { padding: 10px 12px 10px 0; border-top: 1px solid var(--rule); vertical-align: middle; }

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../api/client";
 import { clock, duration, money, type Run, type RunLink, STATUS_LABEL, useRunUpdates } from "../api/runs";
@@ -16,6 +16,8 @@ import { PullToRefresh } from "../PullToRefresh";
 type Workflow = components["schemas"]["Workflow"];
 
 const AD_HOC = "ad-hoc";
+/** Runs per page: the list loads this many, then the next page as its end scrolls into view. */
+export const PAGE = 30;
 
 /** The status tabs: the value kept in the address, its name, and which runs it holds. */
 type Tab = [string, string, (r: Run) => boolean];
@@ -55,6 +57,11 @@ export function Runs() {
   const [workflow, setWorkflow] = useState("");
   // Runs that started while the list was open: they slide in at the top.
   const [arrived, setArrived] = useState<Set<string>>(() => new Set());
+  // The last loaded run when older ones follow (the API's X-Next-Before), else null.
+  const [next, setNext] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const shownWorld = useRef<string | null>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
 
   // The stream starts where the run list's snapshot does, once it has loaded.
   const saw = useRunUpdates(worldId, (run) =>
@@ -72,17 +79,48 @@ export function Runs() {
       .then(({ data }) => setWorkflows(data ?? []))
       .catch(() => undefined);
     api
-      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId } } })
+      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId }, query: { limit: PAGE } } })
       .then(({ data, error, response }) => {
         if (error || !data) throw new Error("load failed");
-        setRuns(data);
+        // A refresh reloads only the first page and keeps the older pages already loaded.
+        const fresh = shownWorld.current !== worldId;
+        shownWorld.current = worldId;
+        const ids = new Set(data.map((r) => r.id));
+        setRuns((prev) => (fresh || !prev ? data : [...data, ...prev.filter((r) => !ids.has(r.id))]));
+        if (fresh) setNext(response.headers.get("X-Next-Before"));
         saw(response);
       })
       .catch(() => setError("Could not load runs. Is the API running?"));
   }, [worldId, saw]);
 
-  // ponytail: filtered here, not by the API, so live updates land in the same filter. Add query
-  // params to GET /runs when a world's run list grows past what one response carries.
+  const loadMore = useCallback(() => {
+    if (!next || more) return;
+    setMore(true);
+    api
+      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId }, query: { limit: PAGE, before: next } } })
+      .then(({ data, error, response }) => {
+        if (error || !data) throw new Error("load failed");
+        setRuns((prev) => {
+          const have = new Set(prev?.map((r) => r.id));
+          return [...(prev ?? []), ...data.filter((r) => !have.has(r.id))];
+        });
+        setNext(response.headers.get("X-Next-Before"));
+      })
+      .catch(() => setError("Could not load older runs. Is the API running?"))
+      .finally(() => setMore(false));
+  }, [worldId, next, more]);
+
+  // The next page loads as the end of the list nears the screen; the button is there for the rest.
+  useEffect(() => {
+    const end = sentinel.current;
+    if (!end || !next || more || error) return; // after a failed page, only the button retries
+    const seen = new IntersectionObserver(([e]) => e?.isIntersecting && loadMore(), { rootMargin: "400px" });
+    seen.observe(end);
+    return () => seen.disconnect();
+  }, [next, more, error, loadMore]);
+
+  // ponytail: filtered here, not by the API, so live updates land in the same filter; the tabs
+  // count the loaded pages only. Filter in the API if a tab must count every run.
   const all = runs ?? [];
   const ofWorkflow = all.filter(
     (r) => !workflow || (workflow === AD_HOC ? r.workflow_id === null : r.workflow_id === workflow),
@@ -106,7 +144,7 @@ export function Runs() {
           <h1>Runs</h1>
           <p className="sub">
             {runs && runs.length > 0
-              ? `${runs.length} ${runs.length === 1 ? "run" : "runs"}, ${money(spentOf(runs))} spent. ${
+              ? `${next ? "Latest " : ""}${runs.length} ${runs.length === 1 ? "run" : "runs"}, ${money(spentOf(runs))} spent. ${
                   steps[0] ? `Most of the time went to ${steps[0][0]}: ${clock(steps[0][1].secs)} across these runs.` : ""
                 }`
               : "Every run of this world, newest first. Statuses update live."}
@@ -229,13 +267,20 @@ export function Runs() {
                 </tfoot>
               </table>
             )}
+            {next && (
+              <div ref={sentinel} className="load-more">
+                <button type="button" onClick={loadMore} disabled={more}>
+                  {more ? "Loading older runs" : "Load more"}
+                </button>
+              </div>
+            )}
           </section>
           {runs && (
             <div className="mem-cols">
               <section className="panel" aria-labelledby="time-went">
                 <div className="panel-head">
                   <h2 id="time-went">Where the time went</h2>
-                  <span className="faint">All {all.length} runs</span>
+                  <span className="faint">{next ? "Latest" : "All"} {all.length} runs</span>
                 </div>
                 <ol className="mem-rows" data-testid="time-went">
                   {steps.slice(0, 4).map(([name, { secs, gate }]) => (
@@ -255,7 +300,7 @@ export function Runs() {
               <section className="panel" aria-labelledby="by-version">
                 <div className="panel-head">
                   <h2 id="by-version">Spend by workflow version</h2>
-                  <span className="faint">All {all.length} runs</span>
+                  <span className="faint">{next ? "Latest" : "All"} {all.length} runs</span>
                 </div>
                 <table className="runs-table versions-table" data-testid="spend-by-version">
                   <thead>

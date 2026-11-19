@@ -157,3 +157,27 @@ def test_a_done_run_is_saved_as_a_workflow_from_the_stages_it_ran(running: TestC
     names = [w["name"] for w in running.get(f"/api/worlds/{world}/workflows").json()]
     assert names == ["Quick check", "Checked again"]
     assert running.post("/api/runs/run_nope/workflow", json={}).status_code == 404
+
+
+def test_runs_list_in_pages_that_hold_still_as_new_runs_start(running: TestClient) -> None:
+    world, workflow = _setup(running)
+    for _ in range(5):
+        assert running.post(f"/api/workflows/{workflow}/runs", json={}).status_code == 201
+    url = f"/api/worlds/{world}/runs"
+    every = running.get(url)
+    assert "x-next-before" not in every.headers  # no limit, no paging: the whole list as before
+    ids = [r["id"] for r in every.json()]
+    assert len(ids) == 5
+
+    first = running.get(url, params={"limit": 2})
+    assert [r["id"] for r in first.json()] == ids[:2]
+    assert first.headers["x-next-before"] == ids[1]
+    # A run starting between pages lands on top, never in the pages after the cursor.
+    newer = running.post(f"/api/workflows/{workflow}/runs", json={}).json()["id"]
+    second = running.get(url, params={"limit": 2, "before": ids[1]})
+    assert [r["id"] for r in second.json()] == ids[2:4]
+    last = running.get(url, params={"limit": 2, "before": second.headers["x-next-before"]})
+    assert [r["id"] for r in last.json()] == ids[4:]
+    assert "x-next-before" not in last.headers
+    assert [r["id"] for r in running.get(url, params={"limit": 1}).json()] == [newer]
+    assert running.get(url, params={"limit": 0}).status_code == 422
