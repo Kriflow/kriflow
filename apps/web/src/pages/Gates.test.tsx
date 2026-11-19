@@ -891,3 +891,21 @@ test("on a phone a failed item's long traceback is folded to a few lines and nev
   fits();
   await page.viewport(1280, 800);
 });
+
+test("a long gate question is folded to a few lines, one per item, until Show all", async () => {
+  const lines = Array.from({ length: 12 }, (_, i) => `- Shot ${i} (s${i}): ConnectorError: blender_render: shot ${i}: Blender exited with 1`);
+  const ask = ["12 of 12 items wait for review:", ...lines, "Approve each item, or send it back with a note to make it again."].join("\n");
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([gate("approve_items", { run_id: "run_top", ask })]),
+    "GET /api/runs/run_top": () => Response.json(run("waiting_gate", [stage(0, "split", "connector", "done"), stage(1, "render each", "workflow", "waiting", { items: [] })], { id: "run_top" })),
+  });
+  const { screen } = await mountAt("/gates");
+  const shown = screen.getByTestId("gate-ask");
+  await expect.element(shown).toBeVisible();
+  const folded = shown.element().getBoundingClientRect().height;
+  await screen.getByRole("button", { name: "Show all" }).click();
+  await expect.element(screen.getByRole("button", { name: "Show all" })).not.toBeInTheDocument();
+  expect(shown.element().getBoundingClientRect().height).toBeGreaterThan(folded * 2);
+  expect((shown.element() as HTMLElement).innerText.split("\n")).toHaveLength(14);
+});

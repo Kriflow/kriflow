@@ -538,3 +538,20 @@ def test_a_sent_back_child_that_ends_before_its_stage_runs_again_still_settles(
     again = at(runner, parent.id, "waiting_gate")
     items = {i.key: i for i in again.stages[STAGE].items}
     assert items["p2"].status == "done" and out(tmp_path, again, "p2") == redo
+
+
+def test_an_items_gate_ask_names_each_item_with_only_the_first_line_of_its_error() -> None:
+    from swarmify_runs.model import ItemView, items_gate
+
+    trace = "ConnectorError: blender_render: shot demo_angles: Blender exited with 1 " + "x" * 300
+    error = trace + '\nTraceback (most recent call last):\n  File "/data/worlds/w/build/s.py"'
+    items = [
+        ItemView("dog", "Dog sneeze", "failed", error=error),
+        ItemView("cat", "Cat nap", "done"),
+    ]
+    for config in ({}, {"approve": True}):
+        _, ask = items_gate(config, items)
+        (line,) = [x for x in ask.splitlines() if x.startswith("- ")]
+        assert line.startswith("- Dog sneeze (dog): ConnectorError: blender_render")
+        assert line.endswith("…") and len(line) < 160
+        assert "Traceback" not in ask and "/data/worlds" not in ask
