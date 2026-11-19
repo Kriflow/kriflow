@@ -6,7 +6,7 @@ import type { ArtifactFile } from "../api/events";
 import type { Gate } from "../api/runs";
 import type { components } from "../api/schema";
 import { Loading, Skeleton } from "../Skeleton";
-import { Made } from "./StagePanel";
+import { ItemError, Made } from "./StagePanel";
 
 type Item = components["schemas"]["ItemView"];
 
@@ -54,13 +54,13 @@ export function ReviewItems({ gate, formId, verdicts, onVerdict }: { gate: Gate;
           <p className="review-item-head">
             <b>{item.title}</b>{" "}
             <span className={item.approved ? "chip ok" : item.status === "done" ? "chip" : "chip warn"}>{item.approved ? "approved" : item.status}</span>
-            {item.error && <span className="faint"> {item.error}</span>}
             {item.child && (
               <Link to="/worlds/$worldId/runs/$runId" params={{ worldId: item.child.world_id, runId: item.child.id }}>
                 Its run
               </Link>
             )}
           </p>
+          {item.error && <ItemError error={item.error} />}
           {(files[item.key] ?? []).map((a) => (
             <Made key={a.path} a={a} worldId={gate.world_id} />
           ))}

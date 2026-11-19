@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { onRefresh } from "../refresh";
-import { api } from "./client";
+import { quiet } from "./client";
 import { seqOf } from "./events";
 import type { Gate } from "./runs";
 
@@ -24,10 +24,19 @@ function publish(next: Open) {
   for (const listener of listeners) listener();
 }
 
-/** Refetch the open gates; every subscriber sees the result. */
+// The generation whose read is in flight: a resync starts a new read at once.
+let loading: number | null = null;
+let again = false;
+
+/** Refetch the open gates; every subscriber sees the result. A background read: it never shows
+ * the progress line, and a call while one is in flight reads once more after it, not alongside. */
 export function reloadGates() {
-  const asked = generation;
-  api
+  if (loading === generation) {
+    again = true;
+    return;
+  }
+  const asked = (loading = generation);
+  quiet
     .GET("/api/gates")
     .then(({ data, error, response }) => {
       if (error || !data) throw new Error("load failed");
@@ -39,6 +48,13 @@ export function reloadGates() {
       if (asked !== generation) return;
       publish({ ...open, failed: true });
       follow("now"); // its next run.updated retries the load
+    })
+    .finally(() => {
+      if (loading === asked) loading = null;
+      if (again && asked === generation) {
+        again = false;
+        reloadGates();
+      }
     });
 }
 

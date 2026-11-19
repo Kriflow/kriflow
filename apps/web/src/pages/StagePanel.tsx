@@ -99,6 +99,25 @@ function firstLines(text: string, blocks = 5): string {
 }
 
 /** One artifact, shown in place: a player, the picture, the first lines of a document. */
+/** A failed Item's error, a Blender traceback full of long paths as often as not: folded to a
+ * few wrapped lines, with Show all, so it never widens the page on a phone. */
+export function ItemError({ error }: { error: string }) {
+  const [all, setAll] = useState(false);
+  const long = error.length > 240 || error.split("\n").length > 4;
+  return (
+    <>
+      <pre className={long && !all ? "item-error folded" : "item-error"} data-testid="item-error">
+        {error}
+      </pre>
+      {long && !all && (
+        <button type="button" className="link" onClick={() => setAll(true)}>
+          Show all
+        </button>
+      )}
+    </>
+  );
+}
+
 export function Made({ a, worldId }: { a: ArtifactFile; worldId: string }) {
   const url = rawUrl(worldId, a);
   if (a.type === "video" || VIDEO.test(a.name)) {
@@ -732,7 +751,7 @@ export function StagePanel(p: PanelProps) {
               )}{" "}
               <span className={item.status === "failed" || item.status === "aborted" ? "chip warn" : "chip"}>{item.status}</span>
               {item.approved && <span className="chip ok">approved</span>}
-              {item.error && <span className="faint"> {item.error}</span>}
+              {item.error && <ItemError error={item.error} />}
             </li>
           ))}
         </ul>
