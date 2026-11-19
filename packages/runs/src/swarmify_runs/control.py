@@ -12,6 +12,7 @@ import json
 import logging
 import shutil
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -457,11 +458,17 @@ class RunControl:
 
     def gates(self) -> list[Gate]:
         """Each with the publish preview of the stage after it, when that stage publishes, or
-        with the Budget and spend of its top run when it waits for money."""
-        return [
-            self._with_budget(g) if g.kind == "budget" else replace(g, publish=self._preview(g))
-            for g in self.storage.open_gates()
-        ]
+        with the Budget and spend of its top run when it waits for money. A preview starts a
+        connector process, so the gates preview at once, not one after another."""
+        gates = self.storage.open_gates()
+        # ponytail: up to 16 previews at once; a cache keyed by run revision if inboxes grow.
+        with ThreadPoolExecutor(min(16, max(1, len(gates)))) as pool:
+            return list(pool.map(self._shown, gates))
+
+    def _shown(self, gate: Gate) -> Gate:
+        if gate.kind == "budget":
+            return self._with_budget(gate)
+        return replace(gate, publish=self._preview(gate))
 
     def _preview(self, gate: Gate) -> PublishPreview | None:
         run = self.storage.get_run(gate.run_id)  # None only if deleted since the listing

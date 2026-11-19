@@ -652,7 +652,8 @@ class Connectors:
                 try:
                     now = oauth.fresh(f, client, tokens)
                 except oauth.SignInNeeded as exc:
-                    log.warning("%s needs sign-in again: %s", connector.name, exc)
+                    if not tokens.get("needs_sign_in"):  # said once, when the mark is stored
+                        log.warning("%s needs sign-in again: %s", connector.name, exc)
                     now = {**tokens, "needs_sign_in": True}
                 except ValueError as exc:
                     raise ConnectorError(str(exc)) from None

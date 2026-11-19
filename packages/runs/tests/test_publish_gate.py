@@ -1,6 +1,7 @@
 """Publish stages at the runner's seam (ADR 0007): the gate before one shows what will go out,
 and the runner refuses to execute one that no answered gate precedes. Real DBOS on SQLite."""
 
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -194,3 +195,21 @@ def test_a_gate_before_a_broken_publish_stage_refuses_to_go_on(
         runner.decide(run.id, send_back_to="render")
         wait_for(lambda: status(runner, run.id) == "waiting_gate")
     assert "publish" not in [name for _, name in connector.calls]
+
+
+def test_the_inbox_previews_its_gates_at_once_not_one_after_another(
+    runner: Runner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each preview starts a connector process; the inbox lists every open gate's."""
+    runs = [runner.start("world_1", "wf_1", 1, f"Short {i}", [CONFIRM, PUBLISH]) for i in range(4)]
+    wait_for(lambda: all(status(runner, r.id) == "waiting_gate" for r in runs))
+
+    def slow(run: Run, stage: StageDef, edits: dict[str, Any]) -> PublishPreview | None:
+        time.sleep(0.5)
+        return previews(run, stage, edits)
+
+    monkeypatch.setattr(runner, "previews", slow)
+    began = time.monotonic()
+    gates = runner.gates()
+    assert time.monotonic() - began < 1.5
+    assert [g.publish is not None for g in gates] == [True] * 4

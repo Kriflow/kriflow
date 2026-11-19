@@ -223,7 +223,10 @@ def test_a_token_near_expiry_is_refreshed_before_the_process_gets_it(
 
 
 def test_a_revoked_sign_in_is_marked_and_signing_in_again_clears_it(
-    probe: Connectors, transport: FakeTransport, provider: FakeProvider
+    probe: Connectors,
+    transport: FakeTransport,
+    provider: FakeProvider,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     provider.lifetime = 0
     sign_in(probe)
@@ -233,6 +236,12 @@ def test_a_revoked_sign_in_is_marked_and_signing_in_again_clears_it(
     connector = probe.find("w1", "probe")
     assert connector is not None and probe.sign_in_needed(connector) == ["account"]
     assert probe.missing(connector) == ["account"]
+    refused = provider.grants.count("refresh_token")
+    caplog.clear()
+    with pytest.raises(ConnectorError):
+        env(probe, transport)
+    assert provider.grants.count("refresh_token") == refused  # the refusal is stored, not retried
+    assert "needs sign-in again" not in caplog.text  # and said once, not on every call
     provider.lifetime = 3600
     sign_in(probe)
     assert probe.sign_in_needed(connector) == [] and env(probe, transport)["PROBE_TOKEN"]

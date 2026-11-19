@@ -127,7 +127,7 @@ test("an approve items gate shows each item's output and sends approvals and sen
   });
   const { screen } = await mountAt("/gates");
   const list = screen.getByTestId("review-items");
-  await expect.element(list).toMatchTextContent(/Paragraph 1\s*approved.*Paragraph 2\s*done.*Paragraph 3\s*failed\s*could not translate/);
+  await expect.element(list).toMatchTextContent(/Paragraph 1\s*approved.*Paragraph 2\s*done.*Paragraph 3\s*failed.*could not translate/);
   await expect.element(list.getByRole("img", { name: "p2.png" })).toBeVisible();
   await expect.element(list.getByRole("img", { name: "p1.png" })).toBeVisible();
   const send = screen.getByRole("button", { name: "Send the verdicts" });

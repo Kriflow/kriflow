@@ -856,3 +856,38 @@ test("a budget gate offers preset top-ups with the total in the button, and name
   await vi.waitFor(() => expect(bodies).toHaveLength(1));
   await expect.element(screen.getByText("You raised the budget to $7.00.")).toBeVisible();
 });
+
+test("on a phone a failed item's long traceback is folded to a few lines and never widens the card or the page", async () => {
+  await page.viewport(390, 844);
+  const path = "/data/worlds/world_1/runs/run_p2/stage_3/artifacts/blender_scene_with_a_very_long_name_that_never_breaks.blend";
+  const error = `Traceback (most recent call last):\n${Array.from({ length: 30 }, (_, i) => `  File "${path}", line ${i}, in render_frame_${i}`).join("\n")}\nRuntimeError: ${path}`;
+  const child = (id: string) => ({ id, world_id: "world_1", name: `Make: ${id}` });
+  const items = [
+    { key: "p1", title: "Shot 1", status: "done", approved: false, child: child("run_p1") },
+    { key: "p2", title: "Shot 2", status: "failed", approved: false, error, child: child("run_p2") },
+  ];
+  const parent = run("waiting_gate", [stage(0, "split", "connector", "done"), stage(1, "render each", "workflow", "waiting", { items })], { id: "run_top" });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([gate("approve_items", { run_id: "run_top", stage_name: "render each", ask: `Review ${path}` })]),
+    "GET /api/runs/run_top": () => Response.json(parent),
+    "GET /api/runs/run_top/stages/stage_1/artifacts": () => Response.json([]),
+  });
+  const { screen } = await mountAt("/gates");
+  const shown = screen.getByTestId("item-error");
+  await expect.element(shown).toBeVisible();
+  const fits = () => {
+    const card = screen.getByTestId("gate-run_top").element();
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    expect(shown.element().getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  };
+  const folded = shown.element().getBoundingClientRect().height;
+  expect(folded).toBeLessThan(120);
+  fits();
+  await screen.getByRole("button", { name: "Show all" }).click();
+  await expect.element(screen.getByRole("button", { name: "Show all" })).not.toBeInTheDocument();
+  expect(shown.element().getBoundingClientRect().height).toBeGreaterThan(folded * 3);
+  fits();
+  await page.viewport(1280, 800);
+});

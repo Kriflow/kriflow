@@ -135,6 +135,9 @@ svg.glyph { color: var(--accent); }
 .run-page:has(.stage-failure) p.status-line.state-failed { display: none; }
 .failure-line { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9375rem; line-height: 1.45; }
 .failure-line .icon { flex: none; color: var(--negative); margin-top: 1px; }
+.item-error { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+.item-error.folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.item-error + .link { justify-self: start; font-size: 0.75rem; }
 .stage-failure .stage-log { margin-top: 8px; white-space: pre; word-break: normal; overflow-wrap: normal; }
 .failure-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .stage-log { max-height: 20rem; overflow: auto; color: var(--text); }
