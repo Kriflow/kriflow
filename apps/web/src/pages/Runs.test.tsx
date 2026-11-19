@@ -274,6 +274,18 @@ function paged(names: string[]) {
 }
 
 test("loads the first page, then the next as the end of the list comes into view", async () => {
+  // A fake observer the test fires: a real one does not fire reliably in CI's headless test frames.
+  let seen: ((e: { isIntersecting: boolean }[]) => void) | null = null;
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(cb: typeof seen) {
+        seen = cb;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
   const names = Array.from({ length: 35 }, (_, i) => `Run ${35 - i}`);
   const runs = paged(names);
   fakeFetch({ "GET /api/worlds/world_1": () => Response.json(video), "GET /api/worlds/world_1/runs": runs.answer });
@@ -282,7 +294,9 @@ test("loads the first page, then the next as the end of the list comes into view
   await expect.poll(rows).toBe(30);
   const sub = () => document.querySelector("header .sub")?.textContent;
   await expect.poll(sub).toMatch(/^Latest 30 runs/);
-  screen.getByRole("button", { name: "Load more" }).element().scrollIntoView();
+  await expect.element(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
+  expect(runs.asked).toEqual(["limit=30"]); // nothing more until the end comes into view
+  seen!([{ isIntersecting: true }]);
   await expect.poll(rows).toBe(35);
   expect(runs.asked).toEqual(["limit=30", "limit=30&before=run_6"]);
   await expect.element(screen.getByRole("button", { name: "Load more" })).not.toBeInTheDocument();
