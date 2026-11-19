@@ -32,6 +32,8 @@ button.icon.play svg { margin-left: 2px; }
 .con-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 42px; padding: 8px 0; }
 .con-row + .con-row { border-top: 1px solid var(--rule); }
 .con-main { display: grid; gap: 2px; flex: 1 1 16rem; min-width: 0; }
+/* a long MCP command or path has no break points: let it wrap inside the row instead of widening the page */
+.con-main > * { min-width: 0; overflow-wrap: anywhere; }
 .con-main b { font-weight: 500; }
 /* A package's logo, else its first letter on a tile tinted by its kind (Connectors.tsx Logo). */
 .con-logo { flex: none; width: 24px; height: 24px; border-radius: 5px; object-fit: contain; }
