@@ -6,6 +6,7 @@ refused `ls .` in the build folder while bubblewrap allowed it."""
 import json
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -54,3 +55,43 @@ def test_the_build_sessions_bash_reads_and_writes_its_build_folder_and_nothing_e
     assert bash(f"cat {data / '.env'}").returncode != 0
     assert bash(f"echo y > {script}").returncode != 0
     assert script.read_text() == "# Script\n"
+
+
+@pytest.mark.skipif(
+    not (SANDBOX and shutil.which("node") and shutil.which("pnpm")), reason="no sandbox or pnpm"
+)
+def test_two_builds_install_with_pnpm_from_one_shared_store(tmp_path: Path) -> None:
+    """Each build's pnpm, in its session's sandbox, links its packages from the one store: a
+    package file is the same inode in both build folders, not a copy per build."""
+    data = tmp_path / "data"
+    world = data / "worlds/w"
+    store = data / "pnpm-store"
+    dep = tmp_path / "dep"
+    dep.mkdir()
+    (dep / "package.json").write_text('{"name": "dep", "version": "1.0.0"}')
+    (dep / "index.js").write_text("module.exports = 1;\n")
+    tarball = tmp_path / "dep-1.0.0.tgz"  # a local tarball: the store takes it, no network
+    with tarfile.open(tarball, "w:gz") as tar:
+        tar.add(dep, "package")
+    store.mkdir(parents=True)
+    env = " ".join(f"{k}={v}" for k, v in build.pnpm_env(store).items())
+    files = []
+    for name in ("a", "b"):
+        folder = world / f"runs/{name}/video/build"
+        folder.mkdir(parents=True)
+        (folder / "package.json").write_text(
+            json.dumps({"name": name, "private": True, "dependencies": {"dep": f"file:{tarball}"}})
+        )
+        rules = build.sandbox(folder, world, data, data / "npm-cache", [], (), store)
+        rules = rules["filesystem"]
+        rules["allowRead"].append(str(tarball.resolve()))
+        build.PNPM_LOCKS.mkdir(mode=0o700, exist_ok=True)
+        command = f"env {env} pnpm install --offline 2>&1"
+        args = json.dumps([rules, str(folder.resolve()), command])
+        node = ["node", "--input-type=module", "-e", RUN % RUNTIME, args]
+        done = subprocess.run(node, capture_output=True, text=True, timeout=120)
+        assert done.returncode == 0, done.stdout + done.stderr
+        files.append(folder / "node_modules/dep/index.js")
+    a, b = (f.stat() for f in files)
+    assert (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
+    assert files[0].resolve().is_relative_to(store.resolve())

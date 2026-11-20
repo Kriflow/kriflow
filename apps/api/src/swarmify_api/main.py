@@ -681,7 +681,9 @@ def create_app(
                 guide = (adder or package).manifest["templates"].get("guide", "")
             inputs = [Path(p) for p in [first, *others] if p]
             world = world_svc.get(run.world_id)
-            cache = root / "npm-cache"
+            cache, store = root / "npm-cache", root / "pnpm-store"
+            for made_here in (store, build.PNPM_LOCKS):
+                made_here.mkdir(mode=0o700, exist_ok=True)
             secrets = registry.secret_names(run.world_id) + ["SWARMIFY_PASSWORD"]
             domains = package.manifest.get("permissions", {}).get("network", [])
             revises = [previous] if previous else []
@@ -720,10 +722,14 @@ def create_app(
                     ),
                     inputs=[Path(p) for p in others],
                     brief=str(params.get("brief") or ""),
-                    sandbox=build.sandbox(project, folder, root, cache, secrets, domains),
+                    sandbox=build.sandbox(project, folder, root, cache, secrets, domains, store),
                     servers=servers,
                     tools=tools,
-                    env={**dict.fromkeys(secrets, ""), "npm_config_cache": str(cache)},
+                    env={
+                        **dict.fromkeys(secrets, ""),
+                        "npm_config_cache": str(cache),
+                        **build.pnpm_env(store),
+                    },
                     data_dir=root,
                     model=params.get("model") or (world.model_for("worker") if world else None),
                     max_turns=int(limits.get("max_turns", build.MAX_TURNS)),
