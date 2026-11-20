@@ -4,8 +4,8 @@ network domains; the core knows nothing of what it builds.
 
 Swarm agents have no shell. A build session does, inside its build folder only: the Agent SDK's OS
 sandbox (Seatbelt on macOS, bubblewrap on Linux) runs every Bash command with no way out
-(`allowUnsandboxedCommands: false`, `failIfUnavailable`), writes limited to the build folder and the
-npm cache, reads of the data directory denied except the build folder, the npm cache and the stage's
+(`allowUnsandboxedCommands: false`, `failIfUnavailable`), writes limited to the build folder, the
+npm cache and the pnpm store, reads of the data directory denied except those and the stage's
 own world (its read-only `assets/` included), and network limited to the domains the package
 declares (`permissions.network`). The PreToolUse hooks enforce the same path rules on the file
 tools, so a sandbox that is off or misconfigured still cannot write outside the folder or read the
@@ -15,6 +15,7 @@ composition root blanks them, and the sandbox unsets them and the model credenti
 command.
 """
 
+import os
 import re
 from collections import Counter
 from collections.abc import Sequence
@@ -61,6 +62,26 @@ def readable(build: Path, world_folder: Path) -> list[Path]:
     return ([assets] if assets.is_dir() else []) + others
 
 
+PNPM_LOCKS = Path(f"/tmp/pnpm-store-operation-locks-{os.getuid()}")
+"""Where pnpm locks its store while it writes to it, a fixed path no setting moves: writable in the
+session, and made before it, since bubblewrap cannot bind a folder that is not there."""
+
+
+def pnpm_env(store: Path) -> dict[str, str]:
+    """What points the session's pnpm at the one shared store: with the global virtual store a
+    build's node_modules holds links into it rather than copies, so builds share one copy of each
+    package. Links, not hardlinks: the sandbox mounts the build folder and the store apart, and a
+    hardlink cannot cross mounts."""
+    return {
+        "pnpm_config_store_dir": str(store),
+        "pnpm_config_enable_global_virtual_store": "true",
+        "pnpm_config_cache_dir": str(store / "cache"),
+        "pnpm_config_state_dir": str(store / "state"),
+        # packages' build scripts stay skipped, as `npm ci --ignore-scripts`, without failing
+        "pnpm_config_strict_dep_builds": "false",
+    }
+
+
 def sandbox(
     build: Path,
     world_folder: Path,
@@ -68,12 +89,15 @@ def sandbox(
     cache: Path,
     secrets: list[str],
     domains: Sequence[str] = (),
+    store: Path | None = None,
 ) -> dict[str, Any]:
     """The session's SandboxSettings. `secrets` are the connector key names to unset, `domains`
-    the only hosts its Bash may reach (the package's `permissions.network`)."""
+    the only hosts its Bash may reach (the package's `permissions.network`), `store` the shared
+    pnpm store (`pnpm_env`)."""
     build, world_folder, data_dir, cache = (
         p.resolve() for p in (build, world_folder, data_dir, cache)
     )
+    shared = [str(cache), *([str(store.resolve()), str(PNPM_LOCKS.resolve())] if store else [])]
     return {
         "enabled": True,
         "failIfUnavailable": True,
@@ -81,9 +105,9 @@ def sandbox(
         "allowUnsandboxedCommands": False,
         "network": {"allowedDomains": list(domains)},
         "filesystem": {
-            "allowWrite": [str(build), str(cache)],
+            "allowWrite": [str(build), *shared],
             "denyRead": [str(data_dir)],
-            "allowRead": [str(build), str(cache), *map(str, readable(build, world_folder))],
+            "allowRead": [str(build), *shared, *map(str, readable(build, world_folder))],
         },
         "credentials": {
             "envVars": [{"name": n, "mode": "deny"} for n in [*secrets, *MODEL_CREDENTIALS]]

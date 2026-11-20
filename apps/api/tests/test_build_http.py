@@ -32,7 +32,7 @@ FAKE_HYPERFRAMES = HERE.parents[2] / "connectors/hyperframes_render/fake_hyperfr
 BLENDER_RENDER = HERE.parents[2] / "connectors/blender_render"
 OFF_BY_DEFAULT = {
     "hyperframes_build": {"hyperframes_build": "1.0.2", "hyperframes_render": "1.0.2"},
-    "blender_build": {"blender_build": "1.1.2", "blender_render": "1.0.6"},
+    "blender_build": {"blender_build": "1.1.2", "blender_render": "1.0.7"},
 }
 """Installed with Swarmify but not defaults: a world enables the pair to build with it."""
 SANDBOX = shutil.which("sandbox-exec") or shutil.which("bwrap")
@@ -188,6 +188,10 @@ def test_the_builder_writes_the_project_and_the_render_makes_the_video(
     assert options.cwd == project
     assert (options.sandbox or {}).get("allowUnsandboxedCommands") is False
     assert options.env["UPLOAD_POST_API_KEY"] == "" and options.env["SWARMIFY_PASSWORD"] == ""
+    store = str((tmp_path / "data/pnpm-store").resolve())  # one pnpm store for every build
+    assert options.env["pnpm_config_store_dir"].endswith("/data/pnpm-store")
+    filesystem: Any = (options.sandbox or {}).get("filesystem") or {}
+    assert store in filesystem["allowWrite"]
     assert [o.is_error for o in script.outcomes] == [False, False, True]
     assert (tmp_path / "data/.env").read_text() == "UPLOAD_POST_API_KEY=k3y\n"
     assert "Loud." in script.prompts[0]

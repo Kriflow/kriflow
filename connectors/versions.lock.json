@@ -4,8 +4,8 @@
     "files": "bc2f057c9894f93439abdb556ea900cf018ea7d82dface3a4f0f5b029a596c86"
   },
   "blender_render": {
-    "version": "1.0.6",
-    "files": "40548e6c9b59a2c3debf44b94a6307fcd391120e1d18579eeef59e58f20c067c"
+    "version": "1.0.7",
+    "files": "b104dc93b953fedb40ed283445a92a6b295f9ab36941e2643fc5bb6a8547654b"
   },
   "hyperframes_build": {
     "version": "1.0.2",
@@ -20,12 +20,12 @@
     "files": "ec754b3162a678d1a78d4e601cd725978788bab1a8cf8ec0daddf8410a2b0e01"
   },
   "remotion_build": {
-    "version": "1.0.3",
-    "files": "b9434f1ab322f22450066a84e2730a823540638beb47aadc741880d9195a03c1"
+    "version": "1.0.4",
+    "files": "3e17537c14b17f0c5c2cbbb4b4c6c7b10965920d2651695f22f0673f21df8021"
   },
   "remotion_render": {
-    "version": "1.0.8",
-    "files": "fdcb8d066ed5021eb77aaa4f9abd9f9438fb93062e1a202e821171081359ff5d"
+    "version": "1.0.9",
+    "files": "9afe72d7b26003db6b862779127264ebb95f5c4eb890ee4b2449e943960e2f21"
   },
   "slack": {
     "version": "1.1.1",

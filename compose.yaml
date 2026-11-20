@@ -88,6 +88,8 @@ services:
       - { type: volume, source: data, target: /data/packages, volume: { subpath: packages } }
       - { type: volume, source: data, target: /data/worlds, volume: { subpath: worlds } }
       - { type: volume, source: data, target: /data/npm-cache, volume: { subpath: npm-cache } }
+      # The pnpm store Build Sessions share: a build's node_modules links into it, the render reads it.
+      - { type: volume, source: data, target: /data/pnpm-store, volume: { subpath: pnpm-store } }
       - { type: volume, source: data, target: /data/sandbox, volume: { subpath: sandbox } }
       # A Build Session's Claude Code transcripts (HOME is the api's, /root), on the volume, so a
       # paused or interrupted build resumes its session after the container is recreated (issue
@@ -109,7 +111,7 @@ services:
     build: .
     volumes:
       - data:/data
-    entrypoint: ["mkdir", "-p", "/data/packages", "/data/worlds", "/data/npm-cache", "/data/sandbox", "/data/claude", "/data/claude-builds"]
+    entrypoint: ["mkdir", "-p", "/data/packages", "/data/worlds", "/data/npm-cache", "/data/pnpm-store", "/data/sandbox", "/data/claude", "/data/claude-builds"]
     command: []
     healthcheck:
       disable: true

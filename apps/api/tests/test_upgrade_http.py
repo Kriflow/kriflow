@@ -113,8 +113,8 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
     with TestClient(app) as client:
         assert client.get(f"/api/worlds/{world}/packages").json() == [
             {"name": "meta", "version": "1.1.0"},
-            {"name": "remotion_build", "version": "1.0.3"},
-            {"name": "remotion_render", "version": "1.0.8"},
+            {"name": "remotion_build", "version": "1.0.4"},
+            {"name": "remotion_render", "version": "1.0.9"},
             {"name": "script_writer", "version": "0.0.1"},  # the world's own, moved (#211)
             {"name": "speech", "version": "1.3.1"},
             {"name": "upload_post", "version": "1.0.1"},
@@ -163,8 +163,8 @@ def test_a_v1_workflow_with_a_speech_stage_runs_unchanged_after_upgrade(
     new = again.post("/api/worlds", json={"name": "New"}).json()["id"]
     assert again.get(f"/api/worlds/{new}/packages").json() == [
         {"name": "meta", "version": "1.1.0"},
-        {"name": "remotion_build", "version": "1.0.3"},
-        {"name": "remotion_render", "version": "1.0.8"},
+        {"name": "remotion_build", "version": "1.0.4"},
+        {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
         {"name": "upload_post", "version": "1.0.1"},
         {"name": "youtube", "version": "1.4.0"},

@@ -55,7 +55,9 @@ COPY --from=node:22.23.4-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22.23.4-bookworm-slim /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
   && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-  && node --version && npm --version
+  && npm install -g --no-fund --no-audit pnpm@12.15.0 \
+  && mkdir -m 700 /tmp/pnpm-store-operation-locks-0 \
+  && node --version && npm --version && pnpm --version
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY packages packages
