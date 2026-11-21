@@ -227,7 +227,7 @@ legend { font-size: 0.8125rem; font-weight: 500; margin-bottom: 6px; padding: 0;
 .check input { accent-color: var(--accent); }
 
 /* Panels and lists: a 1px line, no shadow, one radius */
-.card, .empty, .agents, .call, .gate, .stage-card, .stage, .task, .workflow-list li, .run-list li, .connector-list li, .skill-list li, .kind, .chat-log li { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.card, .empty, .agents, .call, .gate, .stage-card, .stage, .task, .workflow-list li, .run-list li, .connector-list li, .skill-list li, .kind { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
 .card { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .card h3 a { text-decoration: none; }
 .card h3 a:hover { text-decoration: underline; }

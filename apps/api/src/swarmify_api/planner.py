@@ -46,6 +46,28 @@ ANSWER_SCHEMA: dict[str, Any] = {
             "type": ["string", "null"],
             "description": "The whole workflow YAML after your changes, or null if unchanged",
         },
+        "question": {
+            "type": ["object", "null"],
+            "description": "One question to ask, with 2 to 4 short choices; null if none",
+            "properties": {
+                "text": {"type": "string"},
+                "choices": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string", "description": "The answer, as said"},
+                            "hint": {
+                                "type": "string",
+                                "description": "A few words of what it means",
+                            },
+                        },
+                        "required": ["label"],
+                    },
+                },
+            },
+            "required": ["text", "choices"],
+        },
     },
     "required": ["reply"],
 }
@@ -90,7 +112,9 @@ connector stage:
 
 How you work: draft the whole YAML, call check_workflow with it and fix what it reports before
 you answer, then return the full YAML in `yaml` with a short reply. Ask about a detail only when
-it changes the shape of the workflow. Call save_workflow only when the operator asks you to
+it changes the shape of the workflow, one question a turn: put it in `question` with 2 to 4
+choices the operator can tap (they can always type something else), not in the reply.
+Call save_workflow only when the operator asks you to
 save; pass workflow_id when editing an existing workflow. Call start_run only when the operator
 asks you to run a saved workflow.""".replace(
     "{agent_tools}", "\n".join(f"- {name}: {about}." for name, about in AGENT_TOOLS.items())
@@ -106,8 +130,21 @@ class Message(BaseModel):
     """Continues an earlier exchange; left out, the conversation starts fresh."""
 
 
+class Choice(BaseModel):
+    label: str
+    hint: str = ""
+
+
+class Question(BaseModel):
+    """A question the planner asks, with choices the operator can tap instead of typing."""
+
+    text: str
+    choices: list[Choice]
+
+
 class Reply(BaseModel):
     reply: str
+    question: Question | None = None
     yaml: str | None
     session_id: str
     saved: WorkflowVersion | None = None
@@ -183,6 +220,26 @@ def parse_answer(output: Any) -> tuple[str, str | None]:
     if yaml is not None and not isinstance(yaml, str):
         raise ValueError("the planner's yaml was not text")
     return str(output["reply"]).strip(), (yaml if yaml and yaml.strip() else None)
+
+
+MAX_CHOICES = 4
+
+
+def parse_question(output: Any) -> Question | None:
+    """The answer's question with its choices, or None when it has none or one not worth a tap
+    (no text, fewer than 2 usable choices): the reply's text stands alone then."""
+    asked = output.get("question") if isinstance(output, dict) else None
+    if not isinstance(asked, dict) or not str(asked.get("text") or "").strip():
+        return None
+    raw = asked.get("choices")
+    choices = [
+        Choice(label=str(c["label"]).strip(), hint=str(c.get("hint") or "").strip())
+        for c in (raw if isinstance(raw, list) else [])
+        if isinstance(c, dict) and str(c.get("label") or "").strip()
+    ][:MAX_CHOICES]
+    if len(choices) < 2:
+        return None
+    return Question(text=str(asked["text"]).strip(), choices=choices)
 
 
 def _files(files: list[dict[str, Any]]) -> str:
@@ -329,6 +386,14 @@ def router(
         if saved is not None and yaml is None:
             yaml = str(saved["yaml"])
         sid = hooks.session_id or end.session_id
-        return Reply.model_validate(dict(reply=reply, yaml=yaml, session_id=sid, saved=saved))
+        return Reply.model_validate(
+            dict(
+                reply=reply,
+                question=parse_question(end.output),
+                yaml=yaml,
+                session_id=sid,
+                saved=saved,
+            )
+        )
 
     return api

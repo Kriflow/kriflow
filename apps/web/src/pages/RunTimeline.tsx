@@ -1,8 +1,9 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { api } from "../api/client";
+import { useKeyboardInset } from "../Chat";
 import { CountTick } from "../CountTick";
 import { Elapsed } from "../Elapsed";
 import { Icon, type IconName } from "../Icon";
@@ -91,6 +92,9 @@ export function RunTimeline() {
   // An answer just sent: the gate's action bar slides out before the answered state takes its place.
   const [leaving, setLeaving] = useState(false);
   const phone = usePhone();
+  // The run's files `@` offers in Ask this run, and the phone keyboard the sheet docks above.
+  const files = useMemo(() => [...new Set(artifacts.map((a) => a.name))], [artifacts]);
+  useKeyboardInset(askOpen && phone);
   // The shell's top bar, where a phone shows the back link to Runs and the run menu.
   const [topbar, setTopbar] = useState<Element | null>(null);
   useEffect(() => setTopbar(document.getElementById("topbar-slot")), []);
@@ -571,8 +575,8 @@ export function RunTimeline() {
           select(id);
         })}
       </Sheet>
-      <Sheet open={askOpen && phone} onClose={() => setAskOpen(false)} label="Ask this run">
-        <RunAssistant run={run} onSpent={setAskedUsd} />
+      <Sheet open={askOpen && phone} onClose={() => setAskOpen(false)} label="Ask this run" className="chat-sheet" head={false}>
+        <RunAssistant run={run} onSpent={setAskedUsd} onClose={() => setAskOpen(false)} files={files} />
       </Sheet>
       <div className={askOpen && !phone ? "run-grid asking" : "run-grid"}>
         {side(select)}
@@ -628,7 +632,7 @@ export function RunTimeline() {
             resultShown={isResult}
           />
         )}
-        {askOpen && !phone && <RunAssistant run={run} onSpent={setAskedUsd} />}
+        {askOpen && !phone && <RunAssistant run={run} onSpent={setAskedUsd} onClose={() => setAskOpen(false)} files={files} />}
       </div>
     </main>
   );

@@ -434,7 +434,7 @@
 .office-app .talk-crew .office-actor { width: 66px; height: 88px; }
 .office-app .talk-crew .office-tag { font-size: 0.6875rem; }
 @media (max-width: 700px) {
-  .talk-scene { flex-direction: column; align-items: stretch; gap: 8px; }
+  .talk-scene { flex-direction: column; align-items: stretch; gap: 8px; height: 100%; }
   .talk-hero { width: 120px; }
   .talk-line { font-size: 1rem; }
 }
@@ -599,12 +599,57 @@
   .office-desks i::before { left: 5px; width: 18px; }
   .office-desks.office-on i::before { height: 11px; }
 }
-.talk-ask { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.talk-card { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding: 8px 10px; background: #fff; border: 2px solid var(--ink); border-radius: 10px; font-size: 0.8125rem; }
-.talk-card ul { margin: 0; padding: 0; list-style: none; font-family: monospace; white-space: pre-wrap; }
-.talk-card del { color: var(--muted); }
-.talk-card ins { text-decoration: none; background: #fff8d6; }
-.talk-card-actions { display: flex; gap: 8px; }
+/* Talk's chat: the shared chat (Chat.tsx) in the Office's colours, beside the gate on a wide
+   screen, under it on a phone. Same parts, the skin's ink, paper and sun. */
+.talk-note { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; font-size: 0.75rem; color: var(--muted); }
+.talk-note textarea { font: inherit; color: var(--ink); padding: 4px 8px; background: #fff; border: 2px solid var(--ink); border-radius: 8px; resize: vertical; }
+.office-app .talk-chat { --text: var(--ink); --faint: var(--muted); --raised: #efe9d6; --well: #f7f3e6; --control: var(--ink); --border: #e0d9c3; --rule: #e0d9c3; --accent: var(--sun); --surface: var(--paper);
+  flex: none; width: min(400px, 36vw); align-self: stretch; max-height: 100%; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); border-radius: 18px; box-shadow: 0 5px 0 var(--ink); overflow: hidden; font-weight: 600; }
+.office-app .talk-chat .chat-head, .office-app .talk-chat .composer { border-color: #e0d9c3; border-style: dashed; border-width: 0 0 2px; background: transparent; }
+.office-app .talk-chat .composer { border-width: 2px 0 0; }
+.office-app .talk-chat .chat-head h2 { font-size: 1rem; }
+.office-app .talk-chat .mark { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); background: var(--sun); color: var(--ink); font: 800 0.6875rem ui-rounded, system-ui, sans-serif; display: inline-grid; place-items: center; flex: none; }
+.office-app .talk-chat .chat-head .mark { width: 32px; height: 32px; font-size: 0.875rem; }
+.office-app .talk-chat .turn .msg { background: #efe9d6; border-radius: 12px 12px 3px 12px; }
+.office-app .talk-chat .turn .md code, .office-app .talk-chat .refs .ref { background: #fff; border-color: #e0d9c3; color: var(--ink); }
+.office-app .talk-chat .field { background: #fff; border: 3px solid var(--ink); border-radius: 14px; }
+.office-app .talk-chat .field:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px var(--sun); }
+.office-app .talk-chat textarea { color: var(--ink); background: transparent; border: 0; }
+.office-app .talk-chat button.send { background: var(--sun); border: 2px solid var(--ink); color: var(--ink); }
+.office-app .talk-chat button.send:disabled { background: #efe9d6; border-color: #d9d2bd; color: var(--muted); }
+.office-app .talk-chat button.add, .office-app .talk-chat .chat-close { color: var(--ink); }
+.office-app .talk-chat .live-dot { background: #1d7a4a; box-shadow: 0 0 0 3px rgb(29 122 74 / 0.2); }
+.office-app .talk-chat .change { background: #fff; border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink); border-radius: 12px; }
+.office-app .talk-chat .change.stale { border-color: #b07a00; }
+.office-app .talk-chat .change.bad { border-color: #b3261e; }
+.office-app .talk-chat .change-foot { border-top: 2px dashed #e0d9c3; }
+.office-app .talk-chat .change .diff { background: #f7f3e6; border: 0; font-weight: 500; }
+.office-app .talk-chat .change .diff .del { background: #fde3e6; color: #8a2e3d; }
+.office-app .talk-chat .change .diff .add { background: #dcf5e6; color: #1d5c3a; }
+.office-app .talk-chat .change .diff .del::before { color: #8a2e3d; }
+.office-app .talk-chat .change .diff .add::before { color: #1d5c3a; }
+.office-app .talk-chat .change .diff .k { color: var(--muted); }
+.office-app .talk-chat .change .what .ok svg { color: #1d7a4a; }
+.office-app .talk-chat .change .what .warn { color: #8a5a00; }
+.office-app .talk-chat .change .what .bad, .office-app .talk-chat .not-sent { color: #b3261e; }
+.office-app .talk-chat .change-foot .office-btn { margin: 0; min-height: 36px; }
+.office-app .talk-chat .line-done { background: #fff; border: 2px solid #e0d9c3; color: var(--muted); }
+.office-app .talk-chat .line-done > svg { color: #1d7a4a; }
+.office-app .talk-chat .line-done b { color: var(--ink); }
+.office-app .talk-chat .pill { background: #efe9d6; color: var(--ink); }
+.office-app .talk-chat .pill.warning { background: #fff1c2; color: #8a5a00; }
+.office-app .talk-chat .pill.negative { background: #fde3e6; color: #8a2e3d; }
+.office-app .talk-chat .chat-log { padding: 12px 14px; gap: 12px; }
+.office-app .talk-chat .chat-log ul, .office-app .talk-chat .chat-log ol { padding-left: 18px; list-style: disc; }
+.office-app .talk-chat .change .diff { padding: 6px 0; list-style: none; }
+.office-app .talk-chat .change .what .ok { color: var(--muted); }
+/* A phone: the gate's box, then the chat under it filling the room; the asker's art steps aside. */
+@media (max-width: 700px) {
+  .talk-scene:has(.talk-chat) .talk-hero { display: none; }
+  .talk-scene:has(.talk-chat) .talk-box { flex: 0 0 auto; max-height: 48%; }
+  .office-app .talk-chat { flex: 1 1 auto; width: auto; min-height: 240px; }
+}
+.office-app .talk-chat button:not(.office-btn):not(.send):not(.add):not(.choice) { color: var(--ink); border-color: var(--ink); }
 
 /* A phone: every control a 44px thumb tap. A cup keeps its size on the shelf; its button around
    it is the tap (the pixel view draws its own tiny cups). */

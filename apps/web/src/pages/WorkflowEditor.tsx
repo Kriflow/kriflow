@@ -1,11 +1,12 @@
 import { Link, useBlocker, useNavigate, useParams, useRouter, useSearch } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import YAML from "yaml";
 
 import { useConfirm } from "../Dialog";
 import { api } from "../api/client";
 import { useConnectors } from "../api/connectors";
 import type { components } from "../api/schema";
+import { Chat, type ChatQuestion, type ChatTurn, DoneLine } from "../Chat";
 import { Icon } from "../Icon";
 import { Sheet } from "../Sheet";
 import { moment, MOMENTS } from "../moments";
@@ -260,6 +261,8 @@ export function WorkflowEditor() {
   const clean = violations !== null && violations.length === 0;
   const canSave = text !== null && dirty && clean && !checking && !busy;
   const parsed = useMemo(() => (text === null ? null : parseDoc(text)), [text]);
+  // The saved version's stage names, so the planner's draft can mark what is new.
+  const savedStages = useMemo(() => (savedText ? (parseDoc(savedText)?.stages ?? []).map(stageName) : []), [savedText]);
   // An untouched starter is nothing to lose.
   const untouched = !text?.trim() || starters.some((s) => s.yaml === text);
   // Read when the router asks, so a save that navigates at once is not held by stale state.
@@ -554,11 +557,14 @@ export function WorkflowEditor() {
       <div className="editor">
         <section aria-label="Editor">
           {/* Kept mounted while another view is open, so the conversation and its session stay. */}
-          <div hidden={view !== "planner"}>
+          <div hidden={view !== "planner"} className="planner-view">
             <PlannerChat
               worldId={worldId}
               workflowId={workflowId}
               text={text}
+              stages={steps.map(stageName)}
+              onOpenStages={() => setView("stages")}
+              shown={view === "planner"}
               onDraft={(yaml) => {
                 setText(yaml);
                 setNotice(`${role("planner")} updated the draft. Review it in Stages or YAML, then save.`);
@@ -608,6 +614,13 @@ export function WorkflowEditor() {
           {view !== "scorecard" && <Warnings warnings={warnings} />}
         </section>
         <aside>
+          {!phone && view === "planner" && (
+            <DraftPanel
+              stages={steps.map((st, i) => ({ name: stageName(st, i), type: stageType(st) ?? "" }))}
+              saved={savedStages}
+              dirty={dirty}
+            />
+          )}
           {!phone && panel}
           <section aria-label="Versions">
             <h2>Versions</h2>
@@ -1063,89 +1076,211 @@ function TemplatePicker({
   );
 }
 
-type ChatLine = { who: "you" | "planner"; text: string };
+/** One line of the planner chat, kept per draft: yours, or the planner's with the stages its
+ * draft has (`drafted`, `added` beside the draft before) and the question it asks. */
+type ChatLine = {
+  id: string;
+  who: "you" | "planner";
+  text: string;
+  at: string;
+  failed?: string;
+  drafted?: number;
+  added?: number;
+  question?: ChatQuestion | null;
+};
+type Kept = { lines: ChatLine[]; sessionId: string | null };
 
-/** The planner: one message in, a reply and often a whole new draft out. */
+/** Where a draft's planner chat is kept for this tab: by world and workflow ("new" before the
+ * first save), so the tab does not reopen empty. ponytail: sessionStorage, not the API; move it
+ * server side when a chat should follow the operator across devices. */
+const plannerKey = (worldId: string, workflowId?: string) => `swarmify.planner.${worldId}.${workflowId ?? "new"}`;
+
+function readKept(key: string): Kept {
+  try {
+    const kept = JSON.parse(sessionStorage.getItem(key) ?? "null") as Kept | null;
+    if (kept && Array.isArray(kept.lines)) return { lines: kept.lines.filter((l) => l.who === "you" || l.who === "planner"), sessionId: kept.sessionId ?? null };
+  } catch {
+    // unreadable or blocked storage: start fresh
+  }
+  return { lines: [], sessionId: null };
+}
+
+function writeKept(key: string, kept: Kept | null) {
+  try {
+    if (kept) sessionStorage.setItem(key, JSON.stringify(kept));
+    else sessionStorage.removeItem(key);
+  } catch {
+    // full or blocked storage: the chat still works, it is only not kept
+  }
+}
+
+const stageCount = (yaml: string | null) => (yaml ? (parseDoc(yaml)?.stages.length ?? 0) : 0);
+
+/** The planner: one message in, a reply and often a whole new draft out, in the shared chat. A
+ * question comes as choices to tap; the conversation is kept per draft for the tab. */
 function PlannerChat({
   worldId,
   workflowId,
   text,
+  stages,
   onDraft,
   onSaved,
+  onOpenStages,
+  shown,
 }: {
+  /** The planner tab is open: the chat fits the window then (it stays mounted when hidden). */
+  shown: boolean;
   worldId: string;
   workflowId?: string;
   text: string | null;
+  stages: string[];
   onDraft: (yaml: string) => void;
   onSaved: (version: WorkflowVersion, yaml: string) => void;
+  onOpenStages: () => void;
 }) {
-  const [lines, setLines] = useState<ChatLine[]>([]);
-  const [message, setMessage] = useState("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [thinking, setThinking] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
+  const phone = usePhone();
+  const key = plannerKey(worldId, workflowId);
+  const [kept, setKept] = useState<Kept>(() => readKept(key));
+  const [since, setSince] = useState<number | null>(null);
+  const { lines, sessionId } = kept;
+  const planner = role("planner");
 
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const said = message.trim();
-    if (!said || thinking) return;
-    setMessage("");
-    setFailed(null);
-    setLines((prev) => [...prev, { who: "you", text: said }]);
-    setThinking(true);
-    const { data, error, response } = await api.POST("/api/worlds/{world_id}/planner", {
-      params: { path: { world_id: worldId } },
-      body: { message: said, yaml: text, workflow_id: workflowId ?? null, session_id: sessionId },
-    });
-    setThinking(false);
+  // A new draft's chat follows it to its id on the first save; another workflow reads its own.
+  const keyRef = useRef(key);
+  useEffect(() => {
+    if (keyRef.current === key) return;
+    const from = keyRef.current;
+    keyRef.current = key;
+    if (from.endsWith(".new") && workflowId) writeKept(from, null);
+    else setKept(readKept(key));
+  }, [key, workflowId]);
+  useEffect(() => writeKept(key, kept.lines.length ? kept : null), [key, kept]);
+
+  async function send(said: string, retry?: string) {
+    if (since !== null) return;
+    const id = retry ?? `you-${Date.now()}`;
+    setKept((k) => ({ ...k, lines: [...k.lines.filter((l) => l.id !== id), { id, who: "you", text: said, at: new Date().toISOString() }] }));
+    setSince(Date.now());
+    const before = stageCount(text);
+    const { data, error, response } = await api
+      .POST("/api/worlds/{world_id}/planner", {
+        params: { path: { world_id: worldId } },
+        body: { message: said, yaml: text, workflow_id: workflowId ?? null, session_id: sessionId },
+      })
+      .catch(() => ({ data: undefined, error: undefined, response: { status: 0 } as Response }));
+    setSince(null);
     if (error || !data) {
       const detail = (error as { detail?: unknown } | undefined)?.detail;
-      setFailed(typeof detail === "string" ? `${detail} Send it again.` : `${role("planner")} did not answer (${response.status}). Send it again.`);
-      setMessage(said);
+      const why = typeof detail === "string" ? detail : response.status ? `${planner} did not answer (${response.status})` : "the API could not be reached";
+      setKept((k) => ({ ...k, lines: k.lines.map((l) => (l.id === id ? { ...l, failed: why } : l)) }));
       return;
     }
-    setSessionId(data.session_id);
-    setLines((prev) => [...prev, { who: "planner", text: data.reply }]);
+    const yaml = data.saved?.yaml ?? data.yaml;
+    const drafted = yaml ? stageCount(yaml) : undefined;
+    setKept((k) => ({
+      sessionId: data.session_id,
+      lines: [
+        ...k.lines,
+        {
+          id: `planner-${Date.now()}`,
+          who: "planner",
+          text: data.reply,
+          at: new Date().toISOString(),
+          drafted,
+          added: drafted !== undefined ? drafted - before : undefined,
+          question: data.question ? { text: data.question.text, choices: data.question.choices } : null,
+        },
+      ],
+    }));
     if (data.saved) onSaved(data.saved, data.saved.yaml);
     else if (data.yaml) onDraft(data.yaml);
   }
 
+  function choose(turn: ChatTurn, label: string) {
+    setKept((k) => ({ ...k, lines: k.lines.map((l) => (l.id === turn.id && l.question ? { ...l, question: { ...l.question, chosen: label } } : l)) }));
+    void send(label);
+  }
+
+  const turns: ChatTurn[] = lines.map((l) =>
+    l.who === "you"
+      ? { id: l.id, mine: true, text: l.text, at: l.at, failed: l.failed }
+      : {
+          id: l.id,
+          text: l.text,
+          at: l.at,
+          question: l.question,
+          after:
+            l.drafted !== undefined ? (
+              <DoneLine
+                action={
+                  <button type="button" className="link" onClick={onOpenStages}>
+                    Open in Stages
+                  </button>
+                }
+              >
+                <b>
+                  Draft: {l.drafted} {l.drafted === 1 ? "stage" : "stages"}
+                </b>
+                {!!l.added && <> {l.added > 0 ? `+${l.added}` : l.added}</>}
+              </DoneLine>
+            ) : undefined,
+        },
+  );
   return (
-    <div className="chat" data-testid="planner-chat">
-      {lines.length === 0 && (
-        <p className="faint">
-          Tell {role("planner")} what the workflow should do, in plain words. You get back a stage
-          list in the editor, with questions only about what changes its shape. Ask for a save
-          when you are happy with it.
-        </p>
+    <Chat
+      label={`Chat with ${planner}`}
+      className="planner-chat"
+      testId="planner-chat"
+      fit={shown}
+      speaker={{ name: planner, role: planner === "Planner" ? undefined : "planner" }}
+      turns={turns}
+      waiting={since}
+      empty={{
+        line: `Tell ${planner} what the workflow should do, in plain words. ${planner} drafts the stages beside this chat and asks only about what changes their shape.`,
+        starters: [
+          "Every Monday, sum up what changed on a set of pages",
+          "Research a topic and draft a post I approve",
+          ...(workflowId ? ["Change this workflow: add an approval before publish"] : []),
+        ],
+      }}
+      placeholder={phone ? `Answer, or tell ${planner} what to change` : `Answer, or tell ${planner} what to change. @ to point at a stage.`}
+      meta={phone ? undefined : ["Enter sends, Shift+Enter for a new line", `${planner} drafts; you save.`]}
+      refs={stages}
+      onSend={(t) => void send(t)}
+      onRetry={(t) => void send(t.text, t.id)}
+      onEdit={(t) => setKept((k) => ({ ...k, lines: k.lines.filter((l) => l.id !== t.id) }))}
+      onChoose={choose}
+    />
+  );
+}
+
+/** Beside the planner on a desktop: the draft's stages as the planner left them, the ones not in
+ * the saved version marked new. Nothing is saved until Save. */
+function DraftPanel({ stages, saved, dirty }: { stages: { name: string; type: string }[]; saved: string[]; dirty: boolean }) {
+  return (
+    <section aria-label="Draft" className="draft-panel">
+      <header>
+        <h2>Draft</h2>
+        <span className="faint">
+          {stages.length} {stages.length === 1 ? "stage" : "stages"}
+          {dirty ? " · not saved" : ""}
+        </span>
+      </header>
+      {stages.length > 0 && (
+        <ul className="drafted">
+          {stages.map((s, i) => (
+            <li key={i} className={saved.includes(s.name) ? undefined : "new"}>
+              <span className="n">{i + 1}</span>
+              <span>
+                {s.name} <span className="faint">{s.type}</span>
+              </span>
+              {!saved.includes(s.name) && <span className="pill positive">new</span>}
+            </li>
+          ))}
+        </ul>
       )}
-      <ul className="chat-log" data-testid="chat-log">
-        {lines.map((l, i) => (
-          <li key={i} className={l.who}>
-            <b>{l.who === "you" ? "You" : role("planner")}</b>
-            {l.text}
-          </li>
-        ))}
-        {thinking && (
-          <li className="planner" role="status">
-            <b>{role("planner")}</b>Thinking...
-          </li>
-        )}
-      </ul>
-      {failed && <p role="alert">{failed}</p>}
-      <form onSubmit={send}>
-        <textarea
-          aria-label={`Message to ${role("planner")}`}
-          rows={2}
-          value={message}
-          placeholder="Every Monday: what changed in my field, five findings with sources, and I approve the summary."
-          onChange={(e) => setMessage(e.target.value)}
-        />
-        <button type="submit" className="primary" disabled={thinking || !message.trim()}>
-          Send
-        </button>
-      </form>
-    </div>
+      <p className="faint">Each reply from {role("planner")} updates this list. Nothing is saved until you press Save.</p>
+    </section>
   );
 }
 

@@ -75,6 +75,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -439,9 +440,9 @@ test("the planner drafts through its endpoint and its YAML becomes the editor's 
   });
   const { screen, router } = await mountAt("/worlds/world_1/workflows/new");
   await screen.getByRole("tab", { name: "Planner" }).click();
-  await screen.getByLabelText("Message to Planner").fill("A weekly short, I pick the idea.");
+  await screen.getByRole("textbox", { name: /^Answer, or tell Planner what to change/ }).fill("A weekly short, I pick the idea.");
   await screen.getByRole("button", { name: "Send" }).click();
-  await expect.element(screen.getByTestId("chat-log")).toMatchTextContent(/You.*A weekly short.*Planner.*Here is a draft\./);
+  await expect.element(screen.getByRole("log", { name: "Conversation" })).toMatchTextContent(/You.*A weekly short.*Planner.*Here is a draft\./);
   await expect.element(screen.getByTestId("check-status")).toMatchTextContent(/Planner updated the draft/);
   expect(sent[0]).toMatchObject({ message: "A weekly short, I pick the idea.", yaml: STARTER, workflow_id: null, session_id: null });
 
@@ -449,9 +450,9 @@ test("the planner drafts through its endpoint and its YAML becomes the editor's 
   await expect.element(screen.getByLabelText("Workflow YAML")).toHaveValue(planned);
 
   await screen.getByRole("tab", { name: "Planner" }).click();
-  await screen.getByLabelText("Message to Planner").fill("Save it.");
+  await screen.getByRole("textbox", { name: /^Answer, or tell Planner what to change/ }).fill("Save it.");
   await screen.getByRole("button", { name: "Send" }).click();
-  await expect.element(screen.getByTestId("chat-log")).toMatchTextContent(/Saved as version 1\./);
+  await expect.element(screen.getByRole("log", { name: "Conversation" })).toMatchTextContent(/Saved as version 1\./);
   expect(sent[1]).toMatchObject({ message: "Save it.", yaml: planned, session_id: "session-1" });
   await expect.element(screen.getByTestId("versions")).toMatchTextContent(/v1/);
   expect(router.state.location.pathname).toBe("/worlds/world_1/workflows/wf_1");
@@ -468,10 +469,15 @@ test("a planner that does not answer is an alert and the message stays to resend
   });
   const { screen } = await mountAt("/worlds/world_1/workflows/new");
   await screen.getByRole("tab", { name: "Planner" }).click();
-  await screen.getByLabelText("Message to Planner").fill("Hello");
+  const field = screen.getByRole("textbox", { name: /^Answer, or tell Planner what to change/ });
+  await field.fill("Hello");
   await screen.getByRole("button", { name: "Send" }).click();
-  await expect.element(screen.getByRole("alert")).toMatchTextContent(/did not answer.*Send it again\./);
-  await expect.element(screen.getByLabelText("Message to Planner")).toHaveValue("Hello");
+  // The message stays in the log, not lost: Retry sends it again, Edit puts it back to change.
+  await expect.element(screen.getByRole("alert")).toMatchTextContent(/Not sent: The planner did not answer: the claude process died\./);
+  await expect.element(field).toHaveValue("");
+  await screen.getByRole("button", { name: "Edit" }).click();
+  await expect.element(field).toHaveValue("Hello");
+  await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
 });
 
 test("copying puts the workflow in another world and keeps you here, with a link to the copy", async () => {
@@ -754,4 +760,63 @@ test("an existing workflow offers no starters, and the Pied Piper skin names the
   const { screen } = await mountAt("/worlds/world_1/workflows/wf_1");
   await expect.element(screen.getByRole("tab", { name: "Richard" })).toBeVisible();
   expect(screen.getByRole("region", { name: "Starter workflows" }).elements()).toHaveLength(0);
+});
+
+test("the planner asks with choices to tap, its draft shows beside the chat, and the chat is kept when the tab comes back", async () => {
+  const sent: string[] = [];
+  const routes = {
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "GET /api/worlds": () => Response.json([video]),
+    "POST /api/worlds/world_1/workflows/check": check,
+    "POST /api/worlds/world_1/planner": async (req: Request) => {
+      const body = (await req.json()) as { message: string };
+      sent.push(body.message);
+      const question = body.message.startsWith("Every")
+        ? { text: "Where should the approved summary go?", choices: [{ label: "Email it to me", hint: "email connector" }, { label: "Keep it in the library only", hint: "" }] }
+        : null;
+      return Response.json({ reply: body.message.startsWith("Every") ? "Drafted the **stages**." : "Done.", question, yaml: planned, session_id: "session-1", saved: null });
+    },
+  };
+  fake({ ...routes, "GET /api/worlds/world_1/workflows": () => Response.json([]) });
+  const { screen, router } = await mountAt("/worlds/world_1/workflows/new?tab=planner");
+  const chat = screen.getByTestId("planner-chat");
+  await expect.element(chat).toMatchTextContent(/Tell Planner what the workflow should do, in plain words\. Planner drafts the stages beside this chat and asks only about what changes their shape\./);
+  await chat.getByRole("button", { name: "Every Monday, sum up what changed on a set of pages" }).click();
+  await expect.element(chat.getByText("stages", { exact: true })).toHaveProperty("tagName", "B");
+  await expect.element(chat).toMatchTextContent(/Draft: \d+ stages/);
+  const draft = screen.getByRole("region", { name: "Draft" });
+  await expect.element(draft).toMatchTextContent(/not saved/);
+  await expect.element(draft.getByText("new").first()).toBeVisible();
+
+  const question = chat.getByRole("group", { name: "Where should the approved summary go?" });
+  await question.getByRole("button", { name: /Keep it in the library only/ }).click();
+  await expect.element(chat).toMatchTextContent(/Done\./);
+  expect(sent).toEqual(["Every Monday, sum up what changed on a set of pages", "Keep it in the library only"]);
+  await expect.element(question.getByRole("button", { name: /Keep it in the library only chosen/ })).toHaveAttribute("aria-pressed", "true");
+
+  // Leave and come back: the tab reopens with the conversation, not empty.
+  const leaving = router.navigate({ to: "/worlds/$worldId/workflows", params: { worldId: "world_1" } });
+  await answerConfirm(screen, "Leave");
+  await leaving;
+  await expect.element(screen.getByTestId("planner-chat")).not.toBeInTheDocument();
+  await router.navigate({ to: "/worlds/$worldId/workflows/new", params: { worldId: "world_1" }, search: { tab: "planner" } });
+  await expect.element(screen.getByTestId("planner-chat")).toMatchTextContent(/Drafted the stages\..*Keep it in the library only.*Done\./);
+});
+
+test("on a 390 px phone the planner chat fits with its composer and no horizontal scroll", async () => {
+  await page.viewport(390, 844);
+  fake({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "GET /api/worlds": () => Response.json([video]),
+    "POST /api/worlds/world_1/workflows/check": check,
+  });
+  const { screen } = await mountAt("/worlds/world_1/workflows/new?tab=planner");
+  const field = screen.getByRole("textbox", { name: /^Answer, or tell Planner what to change/ });
+  await expect.element(field).toBeVisible();
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  expect(screen.getByRole("region", { name: "Draft" }).elements()).toHaveLength(0);
+  // The composer ends above the pinned save bar and the tab bar, not under them.
+  const bar = document.querySelector<HTMLElement>(".action-bar");
+  const send = screen.getByRole("button", { name: "Send" });
+  await expect.poll(() => send.element().getBoundingClientRect().bottom <= (bar?.offsetTop ?? 844)).toBe(true);
 });

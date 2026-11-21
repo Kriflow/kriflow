@@ -54,12 +54,12 @@ test("Re-run from here shows what it resets and costs against the budget left, a
 
   const card = screen.getByTestId("change-card");
   await expect.element(card.getByRole("heading", { name: "Re-run from script" })).toBeVisible();
-  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent("script done pendingpick waiting pending");
-  await expect.element(card).toMatchTextContent(/Resets script and pick, about \$3\.10 more of the \$0\.82 left/);
+  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent("script donescript pendingpick waitingpick pending");
+  await expect.element(card).toMatchTextContent(/Resets script and pick\..*\$3\.10 of \$0\.82 left/);
   await card.getByLabelText("Note for script").fill("A stronger hook.");
   await card.getByRole("button", { name: "Apply" }).click();
   await vi.waitFor(() => expect(sent).toEqual([{ kind: "rerun", stage: "stage_0", payload: { note: "A stronger hook." }, revision: 3 }]));
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
 
   FakeEventSource.emit("run.updated", { payload: { ...waiting, revision: 4, changes: [applied("rerun", 0, "script")], updated_at: "2026-10-26T10:04:00+00:00" } });
   await expect.element(screen.getByTestId("timeline")).toMatchTextContent(/script.*Re-run by you \d\d:\d\d/);
@@ -79,7 +79,7 @@ test("a Rerun while the run is at work shows the refusal and Apply stays off", a
   await screen.getByRole("menuitem", { name: /^Re-run from here/ }).click();
   const card = screen.getByTestId("change-card");
   await expect.element(card).toMatchTextContent(/This would not pass: the run is at work: pause first\./);
-  await expect.element(card).toMatchTextContent(/Resets script, about \$0\.00 more/);
+  await expect.element(card).toMatchTextContent(/Resets script\..*about \$0\.00/);
   await expect.element(card).not.toMatchTextContent(/ left/);
   await expect.element(card.getByRole("button", { name: "Apply" })).toBeDisabled();
 });
@@ -115,11 +115,11 @@ test("Skip on a step that has not started applies, and one the check refuses kee
   await screen.getByRole("button", { name: "Run actions" }).click();
   await screen.getByRole("menuitem", { name: /^Skip/ }).click();
   card = screen.getByTestId("change-card");
-  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent("upload pending skipped");
+  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent("upload pendingupload skipped");
   expect(card.getByRole("button", { name: "Edit" }).elements()).toHaveLength(0);
   await card.getByRole("button", { name: "Apply" }).click();
   await vi.waitFor(() => expect(sent).toEqual([{ kind: "skip", stage: "stage_3", payload: {}, revision: 3 }]));
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
   expect(calls.filter((c) => c === "POST /api/runs/run_1/changes")).toHaveLength(1);
 });
 

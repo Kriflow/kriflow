@@ -52,7 +52,7 @@ test("an applied Stage Edit drafts the workflow's next version, names a newer ve
   const apply = card.getByRole("button", { name: "Apply" });
   await expect.element(apply).toBeEnabled();
   await apply.click();
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
 
   await card.getByRole("button", { name: "Also save to the workflow" }).click();
   const save = card.getByRole("region", { name: "Save to the workflow" });

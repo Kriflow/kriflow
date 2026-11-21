@@ -1,6 +1,5 @@
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
-import YAML from "yaml";
 
 import {
   blocked,
@@ -18,12 +17,14 @@ import {
   useGateForm,
   REJECT,
 } from "../api/answer";
-import { applyCard, type Card, cardTitle, lines, markCard, useGateAsk } from "../api/assistant";
+import { applyCard, type Card, cardTitle, costMeta, markCard, proposalRows, type Said, useGateAsk } from "../api/assistant";
 import { api } from "../api/client";
 import { labelOf, useConnectors } from "../api/connectors";
 import type { Agent, ArtifactFile } from "../api/events";
 import { dropGate, reloadGates, useOpenGates } from "../api/gates";
-import { abortAsk, type Gate, money, type Run, useRunUpdates } from "../api/runs";
+import { abortAsk, type Gate, money, refusal, type Run, useRunUpdates } from "../api/runs";
+import { ChangeFrame, Chat, DoneLine, exchangeTurns, What } from "../Chat";
+import { usePhone } from "../usePhone";
 import { type Ask as AskFor, useConfirm } from "../Dialog";
 import type { components } from "../api/schema";
 import type { Skin } from "../skin";
@@ -33,6 +34,8 @@ import "./office.css";
 import { asker, line } from "./scene";
 
 type PublishPreview = components["schemas"]["PublishPreview"];
+type Conversation = components["schemas"]["Conversation"];
+type Kind = components["schemas"]["ApplyChange"]["kind"];
 
 /** One answer at a gate: its button, whether the asker cheers (yes) or slumps (stop, send back),
  * and the choice it makes from the form, or null when it should not go (a pick left empty). */
@@ -331,68 +334,78 @@ function Ask({
             ))}
           </ol>
         </form>
-        {/* The note and Ask this run, folded under the choices as on the Needs you page. */}
-        <details className="talk-more">
-          <summary>{gate.kind === "budget" ? "Ask before you answer" : "Add a note or ask"}</summary>
-          {gate.kind !== "budget" && (
-            <label>
-              Note (optional)
-              <textarea name="note" rows={1} form={formId} />
-            </label>
-          )}
-          <AskRun gate={gate} revision={run?.revision} onFill={fill} />
-        </details>
+        {gate.kind !== "budget" && (
+          <label className="talk-note">
+            Note (optional)
+            <textarea name="note" rows={1} form={formId} />
+          </label>
+        )}
       </section>
+      <AskRun gate={gate} run={run} asker={asker.name} onFill={fill} />
     </div>
   );
 }
 
-/** Ask or change at the gate (spec Run Assistant), as the Needs you page asks: a turn with the
- * run's assistant under the gate's form. Its proposals come as cards to apply or dismiss; at a
- * publish gate the fields it fills go into the form above, for the operator to confirm. */
-function AskRun({ gate, revision, onFill }: { gate: Gate; revision?: number | null; onFill: (fields: Record<string, string>) => void }) {
-  const { turns, text, setText, asking, error, send, filled } = useGateAsk(gate, onFill);
+/** Ask the asker before you answer (spec Run Assistant): the shared chat, in the Office's
+ * colours, beside the gate on a wide screen and under it on a phone. The asker answers for the
+ * run's assistant, so the skin's fiction holds. Its proposals come as change cards to apply or
+ * dismiss; at a publish gate the fields it fills go into the form, for the operator to confirm. */
+function AskRun({ gate, run, asker, onFill }: { gate: Gate; run?: Run; asker: string; onFill: (fields: Record<string, string>) => void }) {
+  const phone = usePhone();
+  const { exchanges, since, ask, drop, filled } = useGateAsk(gate, onFill);
+  const [costs, setCosts] = useState<Conversation | null>(null);
+  useEffect(() => {
+    api
+      .GET("/api/runs/{run_id}/assistant", { params: { path: { run_id: gate.run_id } } })
+      .then(({ data }) => data && setCosts(data))
+      .catch(() => undefined);
+  }, [gate.run_id, exchanges.length]);
+  const cards = (said: Said) => (said.proposals ?? []).map((card) => <TalkCard key={card.id} runId={gate.run_id} card={card} revision={run?.revision ?? 0} />);
   return (
-    <section className="talk-ask" aria-label="Ask or change">
-      {turns.map(({ said }) => (
-        <div key={said.id} className="talk-review">
-          <p>{said.text}</p>
-          {filled(said) && <p>{filled(said)}</p>}
-          {(said.proposals ?? []).map((card) => (
-            <TalkCard key={card.id} runId={gate.run_id} card={card} revision={revision ?? 0} />
-          ))}
-        </div>
-      ))}
-      {error && <p role="alert">{error}</p>}
-      <form className="talk-form" onSubmit={send}>
-        <label>
-          Ask or change before you answer
-          <textarea rows={1} value={text} onChange={(e) => setText(e.target.value)} />
-        </label>
-        <button type="submit" className="office-btn" disabled={!text.trim() || asking}>
-          {asking ? "Reading the run..." : "Send"}
-        </button>
-      </form>
-    </section>
+    <Chat
+      label="Ask or change"
+      className="talk-chat"
+      title={phone ? undefined : `Ask ${asker}`}
+      context="Answers for the run assistant"
+      lead={<span className="mark" aria-hidden="true">{asker[0]}</span>}
+      speaker={{ name: asker, role: "for the run assistant", mark: asker[0] }}
+      turns={exchangeTurns(exchanges, filled, cards)}
+      waiting={since}
+      placeholder={`Ask ${asker} before you answer`}
+      meta={costMeta(costs)}
+      refs={run?.stages.map((s) => s.name) ?? []}
+      onSend={(text) => void ask(text)}
+      onRetry={(t) => void ask(t.text, t.id)}
+      onEdit={(t) => drop(t.id)}
+    />
   );
 }
 
-/** A Run Change the assistant proposed: what changes, what the check refuses, Apply and Not now.
- * Applying reloads the gates, so the preview shows what will really go out. Once the run is past
- * the `revision` it was proposed at, it is stale and cannot be applied. */
+/** A Run Change the assistant proposed, in the shared change card: what changes, what the check
+ * refuses, Apply and Not now. Applying reloads the gates, so the preview shows what will really go
+ * out. Once the run is past the `revision` it was proposed at, it is out of date: Ask again checks
+ * the same change against the run as it is now. */
 function TalkCard({ runId, card, revision }: { runId: string; card: Card; revision: number }) {
   const [state, setState] = useState<"open" | "applied" | "dismissed">("open");
+  const [proposal, setProposal] = useState(card.proposal);
   const [refused, setRefused] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  if (state === "dismissed") return null;
-  const { change, before, after, violations, read_by, in_place, fork_from } = card.proposal;
-  const text = (v: Record<string, unknown>) => (change.kind === "artifact_edit" ? String(v.text ?? "") : YAML.stringify(v));
-  const diff = lines(text(before), text(after));
-  const stale = state === "open" && revision > card.proposal.revision;
+  const title = cardTitle(card);
+  if (state === "dismissed") return <DoneLine dismissed>Not now: {title}</DoneLine>;
+  if (state === "applied")
+    return (
+      <div data-testid="talk-card">
+        <DoneLine>
+          <b>{title}</b> Applied by you.
+        </DoneLine>
+      </div>
+    );
+  const { violations, read_by, in_place, fork_from } = proposal;
+  const stale = revision > proposal.revision;
 
   async function apply() {
     setBusy(true);
-    const why = await applyCard(runId, card);
+    const why = await applyCard(runId, { ...card, proposal });
     setBusy(false);
     setRefused(why);
     if (why) return;
@@ -400,41 +413,64 @@ function TalkCard({ runId, card, revision }: { runId: string; card: Card; revisi
     reloadGates();
   }
 
+  async function again() {
+    const { change } = proposal;
+    setBusy(true);
+    const { data, error, response } = await api.POST("/api/runs/{run_id}/changes/propose", {
+      params: { path: { run_id: runId } },
+      body: { kind: change.kind as Kind, stage: change.stage, payload: change.payload },
+    });
+    setBusy(false);
+    if (data) setProposal(data);
+    setRefused(data ? null : refusal(error, response, "The change could not be checked"));
+  }
+
+  const notNow = (
+    <button
+      type="button"
+      className="office-btn"
+      disabled={busy}
+      onClick={() => {
+        setState("dismissed");
+        void markCard(runId, card, "dismissed");
+      }}
+    >
+      Not now
+    </button>
+  );
   return (
-    <section className="talk-card" aria-label={cardTitle(card)} data-testid="talk-card">
-      <b>{cardTitle(card)}</b>
-      <ul aria-label="The change">
-        {diff.map((l, i) => (
-          <li key={i}>{l.startsWith("-") ? <del>{l.slice(1)}</del> : <ins>{l.slice(1)}</ins>}</li>
-        ))}
-      </ul>
-      {state === "open" &&
-        violations.map((v) => <p key={v}>This would not pass: {v.replace(/\.$/, "")}.</p>)}
-      {state === "open" && (read_by ?? []).length > 0 && <p>{(read_by ?? []).join(", ")} already read the old version.</p>}
-      {state === "open" && !in_place && <p>Continues as a new run from {fork_from}; this one ends.</p>}
-      {stale && <p role="status">The run moved on since this was proposed.</p>}
-      {refused && <p role="alert">{refused}</p>}
-      {state === "applied" ? (
-        <p role="status">Applied by you.</p>
-      ) : (
-        <div className="talk-card-actions">
-          <button type="button" className="office-btn talk-yes" disabled={busy || stale || violations.length > 0} onClick={() => void apply()}>
-            Apply
-          </button>
-          <button
-            type="button"
-            className="office-btn"
-            disabled={busy}
-            onClick={() => {
-              setState("dismissed");
-              void markCard(runId, card, "dismissed");
-            }}
-          >
-            Not now
-          </button>
-        </div>
-      )}
-    </section>
+    <ChangeFrame
+      testId="talk-card"
+      title={title}
+      status={stale ? "Out of date" : violations.length > 0 ? "Would not pass" : "Proposed"}
+      diff={proposalRows(proposal)}
+      what={[
+        ...(stale ? [<What key="stale" tone="warn" role="status">The run moved on since this was proposed.</What>] : []),
+        ...violations.map((v) => <What key={v} tone="bad">This would not pass: {v.replace(/\.$/, "")}.</What>),
+        ...(!stale && violations.length === 0 ? [<What key="ok" tone="ok">Check passed.</What>] : []),
+        ...((read_by ?? []).length > 0 ? [<What key="read" tone="warn">{(read_by ?? []).join(", ")} already read the old version.</What>] : []),
+        ...(!in_place ? [<What key="fork" tone="warn">Continues as a new run from {fork_from}; this one ends.</What>] : []),
+        ...(refused ? [<What key="refused" tone="bad" role="alert">{refused}</What>] : []),
+      ]}
+      actions={
+        stale ? (
+          <>
+            <button type="button" className="office-btn talk-yes" disabled={busy} onClick={() => void again()}>
+              Ask again
+            </button>
+            {notNow}
+          </>
+        ) : (
+          <>
+            <button type="button" className="office-btn talk-yes" disabled={busy || violations.length > 0} onClick={() => void apply()}>
+              Apply
+            </button>
+            {notNow}
+          </>
+        )
+      }
+      cost={proposal.cost_usd != null ? `${money(proposal.cost_usd)}${proposal.budget_left_usd != null ? ` of ${money(proposal.budget_left_usd)} left` : ""}` : null}
+    />
   );
 }
 

@@ -237,3 +237,44 @@ def test_the_planner_starts_a_run_when_the_operator_asks(
     assert not started.is_error, started.text
     (run,) = running.get(f"/api/worlds/{world}/runs").json()
     assert (run["workflow_id"], run["budget_usd"]) == (wf["workflow_id"], 2)
+
+
+def test_a_planner_question_comes_back_as_choices_to_tap(
+    running: TestClient, script: Script
+) -> None:
+    world = _world(running)
+    asked = {
+        "text": "Where should the approved summary go?",
+        "choices": [
+            {"label": "Email it to me", "hint": "email connector"},
+            {"label": "Keep it in the library only"},
+            {"label": "  "},  # no label: dropped
+        ],
+    }
+    script.scripts = [[Answer({"reply": "Drafted 5 stages.", "yaml": DRAFT, "question": asked})]]
+    reply = running.post(f"/api/worlds/{world}/planner", json={"message": "x"}).json()
+    assert reply["reply"] == "Drafted 5 stages."
+    assert reply["question"] == {
+        "text": "Where should the approved summary go?",
+        "choices": [
+            {"label": "Email it to me", "hint": "email connector"},
+            {"label": "Keep it in the library only", "hint": ""},
+        ],
+    }
+    assert "question" in (script.sessions[0].output_format or {})["schema"]["properties"]
+
+
+def test_a_question_without_two_choices_falls_back_to_the_plain_reply() -> None:
+    from swarmify_api.planner import parse_question
+
+    assert parse_question({"reply": "Hi."}) is None
+    assert parse_question({"question": None}) is None
+    assert parse_question({"question": {"text": "Which?", "choices": [{"label": "A"}]}}) is None
+    assert (
+        parse_question({"question": {"text": " ", "choices": [{"label": "A"}, {"label": "B"}]}})
+        is None
+    )
+    assert parse_question({"question": {"text": "Which?", "choices": "A, B"}}) is None
+    many = [{"label": str(n)} for n in range(6)]
+    question = parse_question({"question": {"text": "Which?", "choices": many}})
+    assert question and [c.label for c in question.choices] == ["0", "1", "2", "3"]

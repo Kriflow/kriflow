@@ -56,7 +56,7 @@ test("a Stage Edit is proposed, shows what the check refuses, goes stale when th
   await expect.element(apply).toBeDisabled();
 
   await config.fill("calls: remotion_render\nparams:\n  fps: 60\n");
-  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent('params {"fps":30} {"fps":60}');
+  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent('params {"fps":30}params {"fps":60}');
   await expect.element(card).not.toMatchTextContent(/This would not pass/);
   await expect.element(apply).toBeEnabled();
 
@@ -64,14 +64,14 @@ test("a Stage Edit is proposed, shows what the check refuses, goes stale when th
   revision = 4;
   FakeEventSource.emit("run.updated", { payload: { ...waiting, revision: 4, updated_at: "2026-10-26T10:03:00+00:00" } });
   await expect.element(card).toMatchTextContent(/The run moved on since this was proposed\./);
-  await expect.element(apply).toBeDisabled();
+  await expect.element(apply).not.toBeInTheDocument();
   await card.getByRole("button", { name: "Ask again" }).click();
   await expect.element(card).not.toMatchTextContent(/The run moved on/);
   await apply.click();
   await vi.waitFor(() =>
     expect(applied).toEqual([{ kind: "stage_edit", stage: "stage_1", payload: { calls: "remotion_render", params: { fps: 60 } }, revision: 4 }]),
   );
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
   expect(calls.filter((c) => c === "POST /api/runs/run_1/changes")).toHaveLength(1);
 
   // The run's own update carries the change: the Timeline marks the stage, the menu counts it.
@@ -156,7 +156,7 @@ test("an Artifact Edit of a finished step's text file shows the line diff and wh
   await expect.element(apply).toBeEnabled();
   await apply.click();
   await vi.waitFor(() => expect(applied).toEqual([{ kind: "artifact_edit", stage: "stage_0", payload: { path: "metadata.md", text: five }, revision: 7 }]));
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d · Earlier version/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d · Earlier version/);
   await expect.element(card.getByRole("link", { name: "Earlier version" })).toHaveAttribute("href", expect.stringContaining("previous%2F1-metadata.md"));
 });
 
@@ -195,7 +195,7 @@ test("a Restructure shows the stages to come, says it continues as a new run and
   await card.getByRole("button", { name: "Apply" }).click();
   await vi.waitFor(() => expect(applied).toHaveLength(1));
   expect(applied[0]).toMatchObject({ kind: "restructure", stage: "stage_1", payload: { stages: [tag, { name: "render" }] }, revision: 3 });
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d\. Continues in Render then pick/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d\. Continues in Render then pick/);
   await expect.element(card.getByTestId("continues-in").getByRole("link")).toHaveAttribute("href", "/worlds/world_1/runs/run_2");
 });
 

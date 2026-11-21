@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 /** Open a card's one fold: the note and Ask this run. */
-const more = (card: ReturnType<ReturnType<typeof page.elementLocator>["getByTestId"]>) => card.getByText(/^(Add a note or ask|Ask before you answer)$/).click();
+const more = (card: ReturnType<ReturnType<typeof page.elementLocator>["getByTestId"]>) => card.getByText(/^Add a note$/).click();
 
 test("the queue opens the next decision after each answer and says what was decided", async () => {
   localStorage.removeItem("swarmify.answered-a-gate");
@@ -672,7 +672,7 @@ test("asking at a publish gate answers there, fills the form, and an applied fil
   const confirm = card.getByRole("button", { name: "Confirm and post" });
   await expect.element(confirm).toBeDisabled();
   await more(card);
-  await expect.element(card).toMatchTextContent(/Asking costs about \$0\.19 a question, from the \$41\.20 the world has left this month\./);
+  await expect.element(card).toMatchTextContent(/About \$0\.19 a question, \$41\.20 left this month/);
 
   await card.getByLabelText("Ask or change before you answer").fill("Cut the hashtags to five");
   await card.getByRole("button", { name: "Send" }).click();
@@ -681,6 +681,8 @@ test("asking at a publish gate answers there, fills the form, and an applied fil
   // The gate field fills the form instead of a card, and Confirm unlocks.
   await expect.element(card.getByLabelText("Hashtags")).toHaveValue(five);
   await expect.element(card).toMatchTextContent(/Filled Title, Hashtags in the form above\./);
+  // Marked on the fields themselves, for the person to check.
+  expect(card.getByText("Filled by the assistant, check it").elements()).toHaveLength(2);
   await expect.element(confirm).toBeEnabled();
 
   // The file edit is a card; applying it refreshes the preview from the server.
@@ -688,7 +690,7 @@ test("asking at a publish gate answers there, fills the form, and an applied fil
   await expect.element(edit.getByRole("heading", { name: "Edit metadata.md" })).toBeVisible();
   await expect.element(edit.getByRole("list", { name: "The change" })).toHaveTextContent(`hashtags: ${seven}hashtags: ${five}`);
   await edit.getByRole("button", { name: "Apply" }).click();
-  await expect.element(edit).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+  await expect.element(edit).toMatchTextContent(/applied by you, \d\d:\d\d/);
   expect(applied).toEqual([{ ...change, revision: 3 }]);
   await vi.waitFor(() => expect(marked).toEqual([{ state: "applied", change_id: "change_1" }]));
   await vi.waitFor(() => expect(calls.filter((c) => c === "GET /api/gates")).toHaveLength(2));
@@ -738,14 +740,14 @@ test("asking at a gate offers a Rerun, a Skip and a Restructure as Apply cards t
   await card.getByRole("button", { name: "Send" }).click();
 
   const rerun = card.getByRole("region", { name: "Re-run from script" });
-  await expect.element(rerun.getByRole("list", { name: "The change" })).toHaveTextContent("script done pendingpick waiting pending");
+  await expect.element(rerun.getByRole("list", { name: "The change" })).toHaveTextContent("script donescript pendingpick waitingpick pendingnote Stronger hook.");
   await expect.element(card.getByRole("region", { name: "Skip upload" })).toBeVisible();
   const restructure = card.getByRole("region", { name: "Change the stages from upload on" });
   await expect.element(restructure.getByRole("list", { name: "The change" })).toMatchTextContent(/review \(gate\)/);
   for (const name of ["Re-run from script", "Skip upload", "Change the stages from upload on"]) {
     const change = card.getByRole("region", { name });
     await change.getByRole("button", { name: "Apply" }).click();
-    await expect.element(change).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+    await expect.element(change).toMatchTextContent(/applied by you, \d\d:\d\d/);
   }
   expect(applied.map((a) => a.kind)).toEqual(["rerun", "skip", "restructure"]);
   expect(applied[0]).toEqual({ kind: "rerun", stage: "stage_0", payload: { note: "Stronger hook." }, revision: 3 });
@@ -908,4 +910,47 @@ test("a long gate question is folded to a few lines, one per item, until Show al
   await expect.element(screen.getByRole("button", { name: "Show all" })).not.toBeInTheDocument();
   expect(shown.element().getBoundingClientRect().height).toBeGreaterThan(folded * 2);
   expect((shown.element() as HTMLElement).innerText.split("\n")).toHaveLength(14);
+});
+
+test("a gate has one box to ask in, under the answer, with its own starters; the note stays separate", async () => {
+  const sent: unknown[] = [];
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([gate("approve", { send_backs_left: 1, max_send_backs: 2, earlier_stages: ["script"] })]),
+    "GET /api/runs/run_1": () => Response.json(run("waiting_gate", [stage(0, "script", "swarm", "done"), stage(1, "review", "gate", "waiting")])),
+    "GET /api/runs/run_1/assistant": () => Response.json({ messages: [], spent_usd: 0, average_usd: 0.54, month_left_usd: 73.97 }),
+    "POST /api/runs/run_1/assistant": async (req) => {
+      sent.push(await req.json());
+      return Response.json({ id: "m2", role: "assistant", text: "Every link **resolves**.", at: ts, sources: [{ label: "script.md", stage: "stage_0" }], proposals: [], cost_usd: 0.02, fields: {} });
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  const card = screen.getByTestId("gate-run_1");
+  const ask = card.getByRole("region", { name: "Ask before you answer" });
+  await expect.element(ask.getByRole("heading", { name: "Ask before you answer" })).toBeVisible();
+  await expect.element(ask).toMatchTextContent(/Run assistant reads this run\. Nothing changes until you apply\./);
+  await expect.element(ask).toMatchTextContent(/Your note to the gate stays separate, under Add a note\..*About \$0\.54 a question, \$73\.97 left this month/);
+  // One box: the note is folded away under Add a note, never a second textarea beside this one.
+  expect(card.getByRole("textbox").elements()).toHaveLength(1);
+  await ask.getByRole("button", { name: "Check every link before I answer" }).click();
+  await expect.element(ask.getByText("resolves")).toHaveProperty("tagName", "B");
+  await expect.element(ask).toMatchTextContent(/Read\s*script\.md/);
+  expect(sent).toEqual([{ message: "Check every link before I answer" }]);
+  // Once asked, the starters step aside.
+  expect(ask.getByRole("button", { name: "Check every link before I answer" }).elements()).toHaveLength(0);
+});
+
+test("on a 390 px phone the gate's ask fits with no horizontal scroll", async () => {
+  await page.viewport(390, 844);
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([gate("approve", { send_backs_left: 1, max_send_backs: 2, earlier_stages: ["script"] })]),
+    "GET /api/runs/run_1": () => Response.json(run("waiting_gate", [stage(0, "script", "swarm", "done"), stage(1, "review", "gate", "waiting")])),
+    "GET /api/runs/run_1/assistant": () => Response.json({ messages: [], spent_usd: 0 }),
+  });
+  const { screen } = await mountAt("/gates");
+  const ask = screen.getByRole("region", { name: "Ask before you answer" });
+  await expect.element(ask.getByRole("textbox")).toBeVisible();
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  expect(ask.element().getBoundingClientRect().right).toBeLessThanOrEqual(390);
 });

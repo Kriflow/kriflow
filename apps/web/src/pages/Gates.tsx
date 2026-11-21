@@ -564,8 +564,8 @@ export function GateCard({
   const [round, setRound] = useState(0);
   // The budget's top-up, from a preset chip or typed.
   const [add, setAdd] = useState(() => topUpSuggestion(gate));
-  // Ask this run mounts the first time its disclosure opens, then stays with its turns.
-  const [asking, setAsking] = useState(false);
+  // The publish fields the assistant filled, marked on the field for the person to check.
+  const [filled, setFilled] = useState<string[]>([]);
   // The earlier step a Send back menu item chose; the form then submits with it.
   const sendBack = useRef<string | null>(null);
   // The gate's form, and whether an editable field of the post differs from what the gate shows.
@@ -673,26 +673,33 @@ export function GateCard({
     setBusy(false);
   }
 
-  // The note and Ask this run, folded under the work so the decision stays in the first screen.
-  // The note belongs to the gate's form through its `form` attribute.
-  // A budget gate takes no note, nor an approve items gate: each send-back has its own.
+  // The note, folded under the work so the decision stays in the first screen. It belongs to the
+  // gate's form through its `form` attribute. A budget gate takes no note, nor an approve items
+  // gate: each send-back has its own. Asking the run is its own section below the answer, so the
+  // two boxes are never side by side.
   const noteless = gate.kind === "budget" || gate.kind === "approve_items";
-  const more = (!noteless || !bare) && (
-    <details className="gate-more" onToggle={(e) => e.currentTarget.open && setAsking(true)}>
-      <summary>{noteless ? "Ask before you answer" : bare ? "Add a note" : "Add a note or ask"}</summary>
-      {!noteless && (
-        <label>
-          {gate.kind === "approve"
-            ? "Note (sent back with it, or kept with the approval)"
-            : gate.kind === "skill"
-              ? "Note (kept with the decision; on a rejection, say why)"
-              : "Note (optional)"}
-          <textarea name="note" rows={2} form={formId} />
-        </label>
-      )}
-      {/* The run page has its own Ask this run. */}
-      {!bare && asking && <GateAsk gate={gate} onFill={fill} />}
+  const more = !noteless && (
+    <details className="gate-more">
+      <summary>Add a note</summary>
+      <label>
+        {gate.kind === "approve"
+          ? "Note (sent back with it, or kept with the approval)"
+          : gate.kind === "skill"
+            ? "Note (kept with the decision; on a rejection, say why)"
+            : "Note (optional)"}
+        <textarea name="note" rows={2} form={formId} />
+      </label>
     </details>
+  );
+  // The run page has its own Ask this run; a gate further down the deck asks once it is current.
+  const ask = !bare && !inactive && (
+    <GateAsk
+      gate={gate}
+      onFill={(values) => {
+        fill(values);
+        setFilled((k) => [...new Set([...k, ...Object.keys(values)])]);
+      }}
+    />
   );
   const answeredBar = done && (
     <div className="row gate-actions action-bar gate-done" role="status">
@@ -751,7 +758,7 @@ export function GateCard({
             className="gate-form"
             aria-label={`Answer ${gate.stage_name}`}
           >
-            {gate.publish && <WhatGoesOut key={JSON.stringify(gate.publish)} preview={gate.publish} worldId={gate.world_id} />}
+            {gate.publish && <WhatGoesOut key={JSON.stringify(gate.publish)} preview={gate.publish} worldId={gate.world_id} filled={filled} />}
             {gate.kind === "budget" && (
               <div className="top-up">
                 <p className="spent" data-testid="budget-spent">
@@ -906,6 +913,7 @@ export function GateCard({
           )}
         </>
       )}
+      {ask}
     </li>
   );
 }
@@ -1048,7 +1056,7 @@ function RejectButton({ formId, busy, onReject }: { formId: string; busy: boolea
 
 /** What the publish stage after this gate sends out: exactly these values, as its connector
  * describes them (ADR 0007). Fields it marks editable are fields of the gate's form. */
-function WhatGoesOut({ preview, worldId }: { preview: PublishPreview; worldId: string }) {
+function WhatGoesOut({ preview, worldId, filled = [] }: { preview: PublishPreview; worldId: string; filled?: string[] }) {
   const id = useId();
   const connectors = useConnectors(worldId);
   const problems = preview.problems ?? [];
@@ -1070,6 +1078,7 @@ function WhatGoesOut({ preview, worldId }: { preview: PublishPreview; worldId: s
                     defaultValue={String(f.value ?? "")}
                   />
                   {f.hint && <span className="faint">{f.hint}</span>}
+                  {filled.includes(f.key) && <span className="pill positive field-filled">Filled by the assistant, check it</span>}
                 </>
               ) : (
                 <PublishValue value={f.value} hint={f.hint} />

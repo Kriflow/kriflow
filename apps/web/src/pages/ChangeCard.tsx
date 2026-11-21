@@ -1,11 +1,12 @@
-import { useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import YAML from "yaml";
 
 import { lines } from "../api/assistant";
 import { api } from "../api/client";
 import type { ArtifactFile } from "../api/events";
-import { refusal, type Run } from "../api/runs";
+import { money, refusal, type Run } from "../api/runs";
 import type { components } from "../api/schema";
+import { ChangeFrame, type DiffRow, DoneLine, hhmm, What } from "../Chat";
 import { FileLink, fileUrl } from "./Artifacts";
 import { RunRef } from "./Runs";
 import { SaveToWorkflow } from "./SaveToWorkflow";
@@ -16,7 +17,7 @@ export type AppliedChange = components["schemas"]["AppliedChange"];
 
 /** Who applied a change, as the page says it: the operator is "you". */
 export const who = (by: string) => (by === "operator" ? "you" : by);
-export const hhmm = (at: string) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+export { hhmm };
 
 /** A file an Artifact Edit may rewrite: text a finished stage made, never a binary. */
 export const EDITABLE = /\.(md|markdown|json|ya?ml|txt)$/i;
@@ -149,97 +150,120 @@ export function ChangeCard({
   const problems = [...(problem ? [problem] : []), ...(proposal?.violations ?? [])];
   const ready = !!proposal && changed.length > 0 && problems.length === 0 && !stale;
   const ended = ["done", "failed", "aborted"].includes(run.status);
+  const actions = stale ? (
+    <>
+      <button type="button" className="primary" onClick={() => setAsked((n) => n + 1)}>
+        Ask again
+      </button>
+      <button type="button" className="quiet" onClick={onClose}>
+        Not now
+      </button>
+    </>
+  ) : (
+    <>
+      <button type="button" className="primary" disabled={!ready} onClick={apply}>
+        Apply
+      </button>
+      <button type="button" aria-pressed={editing} onClick={() => setEditing(!editing)}>
+        Edit
+      </button>
+      <button type="button" className="quiet" onClick={onClose}>
+        Not now
+      </button>
+    </>
+  );
+  if (applied)
+    return (
+      <AppliedLine run={run} title={title} applied={applied}>
+        {named !== null && typeof applied.before.kept === "string" && (
+          <>
+            {" · "}
+            <FileLink a={{ path: applied.before.kept, name: named }} worldId={run.world_id}>
+              Earlier version
+            </FileLink>
+          </>
+        )}
+      </AppliedLine>
+    );
+  const diff: DiffRow[] = !proposal
+    ? []
+    : named !== null
+      ? changed.map((l) => ({ sign: l.startsWith("-") ? "-" : "+", text: l.slice(1) }))
+      : changed.flatMap((k) => [
+          ...(k in before ? [{ sign: "-" as const, key: k, text: show(before[k], restructure) }] : []),
+          ...(k in after ? [{ sign: "+" as const, key: k, text: show(after[k], restructure) }] : []),
+        ]);
   return (
-    <section className="change-card" aria-label={title} data-testid="change-card">
-      <h3>{title}</h3>
-      {proposal && changed.length > 0 && named !== null ? (
-        <ul className="diff" aria-label="The change">
-          {changed.map((l, i) => (
-            <li key={i}>{l.startsWith("-") ? <del>{l.slice(1)}</del> : <ins>{l.slice(1)}</ins>}</li>
-          ))}
-        </ul>
-      ) : proposal && changed.length > 0 ? (
-        <ul className="diff" aria-label="The change">
-          {changed.map((k) => (
-            <li key={k}>
-              <b>{k}</b> {k in before && <del>{show(before[k], restructure)}</del>} {k in after && <ins>{show(after[k], restructure)}</ins>}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        !applied && <p className="faint">No change yet. Edit the {named !== null ? "text" : "fields"} below.</p>
-      )}
-      {readBy.length > 0 && !applied && (
-        <p className="warn">
-          {listed(readBy)} already read the old version. Re-run {readBy.length > 1 ? "them" : "it"}?
-        </p>
-      )}
-      {!applied &&
-        problems.map((p) => (
-          <p className="stage-error" key={p}>
+    <ChangeFrame
+      title={title}
+      status={stale ? "Out of date" : problems.length > 0 ? "Would not pass" : "Proposed"}
+      diff={diff}
+      what={[
+        ...(!proposal || changed.length === 0 ? [<What key="none">No change yet. Edit the {named !== null ? "text" : "fields"} below.</What>] : []),
+        ...(stale ? [<What key="stale" tone="warn" role="status">The run moved on since this was proposed.</What>] : []),
+        ...problems.map((p) => (
+          <What key={p} tone="bad">
             This would not pass: {p.replace(/\.$/, "")}.
-          </p>
-        ))}
-      {proposal && !proposal.in_place && !applied && (
-        <p className="warn">
-          Continues as a new run from {proposal.fork_from}
-          {ended ? "." : "; this one ends."}
-        </p>
-      )}
-      {refused && !applied && (
-        <p className="stage-error" role="alert">
-          {refused}
-        </p>
-      )}
-      {stale && (
-        <p className="warn" role="status">
-          The run moved on since this was proposed.{" "}
-          <button type="button" onClick={() => setAsked((n) => n + 1)}>
-            Ask again
-          </button>
-        </p>
-      )}
-      {applied ? (
+          </What>
+        )),
+        ...(ready ? [<What key="ok" tone="ok">Check passed.{proposal?.in_place ? " Runs in place." : ""}</What>] : []),
+        ...(proposal && !proposal.in_place && !stale
+          ? [
+              <What key="fork" tone="warn">
+                Continues as a new run from {proposal.fork_from}
+                {ended ? "." : "; this one ends."}
+              </What>,
+            ]
+          : []),
+        ...(readBy.length > 0 && !stale
+          ? [
+              <What key="read" tone="warn">
+                {listed(readBy)} already read the old version. Re-run {readBy.length > 1 ? "them" : "it"}?
+              </What>,
+            ]
+          : []),
+        ...(refused
+          ? [
+              <What key="refused" tone="bad" role="alert">
+                {refused}
+              </What>,
+            ]
+          : []),
+      ]}
+      actions={actions}
+      cost={costLine(proposal)}
+    >
+      {editing && !stale && (
         <>
-          <p className="notice ok" role="status">
-            Applied by {who(applied.by)} at {hhmm(applied.at)}
-            {named !== null && typeof applied.before.kept === "string" && (
-              <>
-                {" · "}
-                <FileLink a={{ path: applied.before.kept, name: named }} worldId={run.world_id}>
-                  Earlier version
-                </FileLink>
-              </>
-            )}
-            {applied.fork && (
-              <>
-                . <RunRef label="Continues in" run={applied.fork} testId="continues-in" />
-              </>
-            )}
-          </p>
-          <SaveToWorkflow run={run} change={applied} />
-        </>
-      ) : (
-        <>
-          {editing && (
-            <>
-              <label htmlFor={configId}>{named !== null ? `${named}'s text` : restructure ? `The stages from ${stage.name} on` : `${stage.name}'s config`}</label>
-              <textarea id={configId} value={text ?? ""} disabled={text === null} spellCheck={false} rows={10} onChange={(e) => setText(e.target.value)} />
-            </>
-          )}
-          <div className="answer-bar">
-            <button type="button" className="primary" disabled={!ready} onClick={apply}>
-              Apply
-            </button>
-            <button type="button" aria-pressed={editing} onClick={() => setEditing(!editing)}>
-              Edit
-            </button>
-            <button type="button" onClick={onClose}>
-              Not now
-            </button>
-          </div>
+          <label htmlFor={configId}>{named !== null ? `${named}'s text` : restructure ? `The stages from ${stage.name} on` : `${stage.name}'s config`}</label>
+          <textarea id={configId} value={text ?? ""} disabled={text === null} spellCheck={false} rows={10} onChange={(e) => setText(e.target.value)} />
         </>
       )}
+    </ChangeFrame>
+  );
+}
+
+/** What a change costs against the money left, as "$1.20 of $18.40 left", when it says. */
+export function costLine(p?: Pick<Proposal, "cost_usd" | "budget_left_usd"> | null): string | null {
+  if (p?.cost_usd == null) return null;
+  return p.budget_left_usd != null ? `${money(p.cost_usd)} of ${money(p.budget_left_usd)} left` : `about ${money(p.cost_usd)}`;
+}
+
+/** An applied change, shrunk to one line: what it was, who applied it and when, where a Fork
+ * continues, then Also save to the workflow. Keeps the card's test id, for the card it was. */
+export function AppliedLine({ run, title, applied, children }: { run: Run; title: string; applied: AppliedChange; children?: ReactNode }) {
+  return (
+    <section className="change-done" aria-label={title} data-testid="change-card">
+      <DoneLine>
+        <b>{title}</b> applied by {who(applied.by)}, {hhmm(applied.at)}
+        {children}
+        {applied.fork && (
+          <>
+            . <RunRef label="Continues in" run={applied.fork} testId="continues-in" />
+          </>
+        )}
+      </DoneLine>
+      <SaveToWorkflow run={run} change={applied} />
     </section>
   );
 }
