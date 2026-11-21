@@ -408,3 +408,34 @@ def test_lists_load_in_place(phone: Page, ids: dict[str, str], path: str) -> Non
     shift = settled_shift(phone, path.format(**ids))
     expect(phone.get_by_text("Loading...")).to_have_count(0)
     assert shift < 0.1, f"{path} shifts by {shift:.3f} while it loads"
+
+
+def test_a_wheel_over_a_gates_table_or_code_still_scrolls_the_page(
+    browser: Browser, locked_url: str, ids: dict
+) -> None:
+    """Sideways scrollers (tables, code, fields) keep only their sideways scroll: Chrome contained
+    the y axis too, so the Needs you page stopped scrolling under the pointer."""
+    context = browser.new_context(viewport={"width": 1280, "height": 700}, base_url=locked_url)
+    context.request.post("/api/session", data={"password": PASSWORD})
+    page = context.new_page()
+    page.goto(f"/gates?gate={ids['long_gate']}")
+    inner = page.locator(".gate .scroll-x, .gate pre").filter(visible=True).first
+    inner.scroll_into_view_if_needed()
+    page.evaluate("scrollTo(0, 0)")
+    box = inner.bounding_box()
+    assert box and box["y"] < 700, "the gate has no table or code in view to scroll over"
+    at = {"x": box["x"] + 20, "y": box["y"] + min(box["height"], 700 - box["y"]) / 2}
+    # Under the pointer once the card has settled (its arrival animation, its files loading).
+    inner.evaluate(
+        "(e, p) => new Promise(ok => { const t = () =>"
+        " e.contains(document.elementFromPoint(p.x, p.y))"
+        " ? ok() : requestAnimationFrame(t); t(); })",
+        at,
+    )
+    # A real wheel gesture through the compositor, where overscroll-behavior applies.
+    page.context.new_cdp_session(page).send(
+        "Input.synthesizeScrollGesture",
+        {**at, "yDistance": -300, "gestureSourceType": "mouse"},
+    )
+    page.wait_for_function("scrollY > 0", timeout=2000)
+    context.close()

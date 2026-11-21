@@ -64,8 +64,11 @@ html[data-text-size="larger"] { --text-scale: 1.25; }
 nav, button, a.button, label.button, [role="tab"], [role="tablist"], .tabs, .chip-row, .chip-button, .tabbar, .tabbar-item, .sidebar, .nav-item, .pill, .segments, svg {
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
-/* Every inner scroller keeps its scroll to itself. */
-.sidebar, .chat-log, .stage-log, .log, .lib-body, pre, .scroll-x, .sheet, .talk-box, .office-dressing > *, textarea { overscroll-behavior: contain; }
+/* Every inner scroller keeps its scroll to itself. The sideways ones (code, tables, fields) only
+   sideways: Chrome contains a scroll container's y axis even when it has nothing to scroll there,
+   so a wheel or swipe over a code block or table stopped the page (Needs you). */
+.sidebar, .chat-log, .stage-log, .log, .lib-body, .sheet, .talk-box, .office-dressing > * { overscroll-behavior: contain; }
+pre, .scroll-x, textarea { overscroll-behavior-x: contain; }
 body { margin: 0; background: var(--ground); color: var(--text); font: 400 var(--fs-body)/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 main { max-width: 80rem; padding: 28px var(--pad) 64px; }
 a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--control); }
