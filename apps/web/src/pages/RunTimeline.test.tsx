@@ -933,3 +933,12 @@ test("on a phone the strip names the step that is now and marks it, the others a
   await userEvent.keyboard("{Escape}");
   await expect.element(sheet).not.toBeInTheDocument();
 });
+
+test("a rerun stage that runs again shows no failure from its previous attempt (issue 527)", async () => {
+  const error = "blender_render: the finish step exited with 1";
+  const live = run("running", [research("done"), { ...video("running"), index: 1, id: "stage_1", error }], { revision: 3 });
+  fakeFetch({ "GET /api/runs/run_1": () => Response.json(live) });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
+  await expect.element(screen.getByTestId("stage-panel")).toBeVisible();
+  expect(screen.getByTestId("failure").query()).toBeNull();
+});

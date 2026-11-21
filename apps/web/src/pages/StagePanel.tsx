@@ -771,7 +771,7 @@ export function StagePanel(p: PanelProps) {
           {stage.waiting.charAt(0).toUpperCase() + stage.waiting.slice(1)}.
         </p>
       )}
-      {stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}
+      {stage.status === "failed" && stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}
       {connector && <StepInputs run={run} stage={stage} artifacts={p.artifacts} worldId={worldId} />}
       {inside}
       <AllFiles made={made} worldId={worldId} onEdit={p.onEditFile} />

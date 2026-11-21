@@ -40,6 +40,7 @@ from swarmify_learning.retro import (
     parse_retro,
     prompt,
     proposal_markdown,
+    published,
     recurrences,
 )
 from swarmify_learning.scorecard import scorecard
@@ -166,7 +167,8 @@ class Learning:
             + ")"
             for p in self.storage.list_proposals(world_id)[-PRIORS:]
         ]
-        text = prompt(run, recurring, skills, priors, workflow_yaml)
+        outcomes = published(events, workflow_id, PRIORS) if workflow_id else []
+        text = prompt(run, recurring, skills, priors, workflow_yaml, outcomes)
         retro: Retro = ask(SYSTEM, text, RETRO_SCHEMA, parse_retro)
         skill = self._settle(retro.skill, {name for name, _ in skills})
         # A workflow change is only ever drawn from a recurrence Learning itself found.

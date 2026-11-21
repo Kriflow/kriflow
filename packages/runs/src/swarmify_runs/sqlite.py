@@ -228,7 +228,8 @@ class SqliteStorage:
             for i, status in enumerate(state.stages):
                 # A stage sent back forgets its timestamps and its child run, so it reads as
                 # fresh. A send-back usually reruns the stage at once, so it may never be saved
-                # as pending: an ended stage turning active again is a fresh visit too.
+                # as pending: an ended stage turning active again is a fresh visit too, and its
+                # old error goes (issue 527).
                 conn.execute(
                     "UPDATE run_stages SET status = :s,"
                     " started_at = CASE WHEN :s = 'pending' THEN NULL"
@@ -237,7 +238,8 @@ class SqliteStorage:
                     "   ELSE started_at END,"
                     " ended_at = CASE WHEN :s IN ('pending', 'running', 'waiting') THEN NULL"
                     "   ELSE coalesce(ended_at, :now) END,"
-                    " error = CASE WHEN :s = 'failed' THEN coalesce(:error, error) ELSE error END,"
+                    " error = CASE WHEN :s = 'failed' THEN coalesce(:error, error)"
+                    "   WHEN :s IN ('pending', 'running', 'waiting') THEN NULL ELSE error END,"
                     " child_run_id = CASE WHEN :s IN ('pending', 'running') THEN NULL"
                     "   ELSE child_run_id END"
                     " WHERE run_id = :run AND idx = :i AND status != :s",

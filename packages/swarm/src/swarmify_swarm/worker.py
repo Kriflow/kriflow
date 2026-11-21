@@ -111,6 +111,11 @@ class Files(Protocol):
         its folder."""
         ...
 
+    def publish_records(self, world_id: str) -> list[tuple[str, dict[str, Any]]]:
+        """Every publish record of the world: (path relative to its folder, fields with the
+        latest outcomes merged in)."""
+        ...
+
     def write_note(
         self,
         world_id: str,
@@ -403,6 +408,12 @@ TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
         "The world's assets: reusable files the operator added (music beds, sound effects,"
         " logos), read-only, as paths relative to the world folder. Name one in a script or"
         " brief for a later stage to use.",
+        _obj(),
+    ),
+    "publish_outcomes": (
+        "How the world's published posts did: each publish record's path and fields, with its"
+        " latest outcomes (views and other metrics by name, `outcomes_at`, `primary_metric`)"
+        " once the platform reported them.",
         _obj(),
     ),
     "write_note": (
@@ -1147,6 +1158,9 @@ class Swarm:
                 )
             ),
             "list_assets": lambda a: json.dumps(files.assets(world_id)),
+            "publish_outcomes": lambda a: json.dumps(
+                [{"path": p, **f} for p, f in files.publish_records(world_id)], default=str
+            ),
             "write_note": lambda a: (
                 "Wrote "
                 + files.write_note(

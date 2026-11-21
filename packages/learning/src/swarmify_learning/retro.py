@@ -4,7 +4,7 @@ and the parse of its answer into zero or one Skill Proposal plus zero or one Wor
 
 Learning reads events only (Context Map): `run.updated` carries the run with its stages and
 gate decisions, `verdict.created` the judge's verdicts, `task.updated` the tasks people added,
-`agent.logged` each line of a stage's live log.
+`agent.logged` each line of a stage's live log, `outcome.recorded` how a published run did.
 """
 
 import re
@@ -15,6 +15,7 @@ from typing import Any
 
 from swarmify_kernel import Event
 from swarmify_learning.model import ACTIONS, SKILL_NAME, SkillChange, WorkflowSuggestion
+from swarmify_learning.scorecard import scorecard
 
 RECURRENCE = 3
 """The same manual intervention in this many runs makes a Workflow Suggestion worth raising."""
@@ -228,15 +229,30 @@ def recurrences(events: list[Event], workflow_id: str) -> list[Recurrence]:
     ]
 
 
+def published(events: list[Event], workflow_id: str, last: int = 8) -> list[str]:
+    """One line per earlier run of the workflow with outcomes, its `last` newest: what the
+    scorecard folds from `outcome.recorded`. A retro runs before its own run is published, so
+    these are the outcomes it can learn from."""
+    if not any(e.type == "outcome.recorded" for e in events):
+        return []
+    lines = [
+        f"{s.name} ({s.run_id}): " + ", ".join(f"{m} {v:g}" for m, v in s.outcomes.items())
+        for s in scorecard(events, workflow_id)
+        if s.outcomes
+    ]
+    return lines[-last:]
+
+
 def prompt(
     run: Evidence,
     recurring: list[Recurrence],
     skills: list[tuple[str, str]],
     priors: list[str],
     workflow_yaml: str | None,
+    outcomes: list[str] | None = None,
 ) -> str:
     """What the retro session reads. `skills` are (name, SKILL.md) the world's agents load,
-    `priors` one line per earlier proposal of the world."""
+    `priors` one line per earlier proposal of the world, `outcomes` the `published` lines."""
     lines = [
         f"Retro of run {run.name} ({run.run_id}), which ended {run.status or 'unknown'}"
         f" with {run.send_backs} send-back(s).",
@@ -255,6 +271,8 @@ def prompt(
     if not skills:
         lines.append("(none yet)")
     lines += ["# Earlier retros", *(f"- {p}" for p in priors or ["(none yet)"])]
+    lines.append("# How earlier runs of this workflow did once published")
+    lines += [f"- {o}" for o in outcomes or ["(none published yet)"]]
     if recurring:
         lines.append(
             f"# Interventions repeated in {RECURRENCE} or more runs of this workflow"

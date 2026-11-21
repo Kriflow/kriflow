@@ -10,7 +10,17 @@ from pathlib import Path
 import pytest
 
 from runs_fakes import FakeNotifier, wait_for
-from swarmify_runs import Illegal, Item, OverBudget, Pinned, Run, Runner, SqliteStorage, StageDef
+from swarmify_runs import (
+    Illegal,
+    Item,
+    OverBudget,
+    Pinned,
+    Run,
+    RunChange,
+    Runner,
+    SqliteStorage,
+    StageDef,
+)  # fmt: skip
 from swarmify_runs.control import RunControl
 
 LIST = StageDef("paragraphs", "connector", {"calls": "split"})
@@ -508,6 +518,25 @@ def test_a_failed_item_of_an_approve_stage_is_sent_back_from_where_it_failed(
     at(runner, parent.id, "waiting_gate")
     runner.review_items(parent.id, approve=["p1"])
     at(runner, parent.id, "done")
+
+
+def test_a_rerun_inside_an_ended_child_run_is_refused_and_points_at_the_parent_gate(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    """Issue 523: a Fork of an ended child run would have no parent, so the parent's Item
+    would never see it. Every change that would fork it is refused, naming the parent."""
+    library(runner, [TRANSLATE], paragraphs=cards(tmp_path, 2))
+    translate.failing["Paragraph 1"] = 1
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    at(runner, parent.id, "waiting_gate")
+    (failed,) = [c for c in children(runner, parent.id) if c.status == "failed"]
+    rerun = RunChange("rerun", failed.stages[0].id, {"note": "again"})
+    proposal = runner.propose(failed.id, rerun)
+    assert any("Book" in v and "gate" in v for v in proposal.violations), proposal.violations
+    with pytest.raises(Illegal, match="Book"):
+        runner.apply(failed.id, rerun, proposal.revision, "operator")
+    assert len(children(runner, parent.id)) == 2
+    assert [r for r in runner.storage.list_runs(failed.world_id) if r.parent_run_id is None] == []
 
 
 def test_review_items_needs_an_approve_fan_out_stage(
