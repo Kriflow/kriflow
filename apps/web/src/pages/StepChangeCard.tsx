@@ -1,11 +1,10 @@
 import { useEffect, useId, useState } from "react";
 
 import { api } from "../api/client";
-import { money, refusal, type Run } from "../api/runs";
+import { refusal, type Run } from "../api/runs";
 import type { components } from "../api/schema";
-import { type AppliedChange, hhmm, who } from "./ChangeCard";
-import { RunRef } from "./Runs";
-import { SaveToWorkflow } from "./SaveToWorkflow";
+import { ChangeFrame, type DiffRow, What } from "../Chat";
+import { type AppliedChange, AppliedLine, costLine } from "./ChangeCard";
 
 type Stage = Run["stages"][number];
 type Proposal = components["schemas"]["ChangeProposal"];
@@ -87,80 +86,73 @@ export function StepChangeCard({
   const stale = !applied && !!proposal && (run.revision ?? 0) > proposal.revision;
   const problems = [...(problem ? [problem] : []), ...(proposal?.violations ?? [])];
   const ready = !!proposal && problems.length === 0 && !stale;
-  const left = proposal?.budget_left_usd;
-  const cost = proposal?.cost_usd;
+  const actions = stale ? (
+    <>
+      <button type="button" className="primary" onClick={() => setAsked((n) => n + 1)}>
+        Ask again
+      </button>
+      <button type="button" className="quiet" onClick={onClose}>
+        Not now
+      </button>
+    </>
+  ) : (
+    <>
+      <button type="button" className="primary" disabled={!ready} onClick={apply}>
+        Apply
+      </button>
+      {kind === "rerun" && (
+        <button type="button" aria-pressed={editing} onClick={() => setEditing(!editing)}>
+          Edit note
+        </button>
+      )}
+      <button type="button" className="quiet" onClick={onClose}>
+        Not now
+      </button>
+    </>
+  );
+  if (applied) return <AppliedLine run={run} title={title} applied={applied} />;
+  const shownNote = note.trim();
+  const diff: DiffRow[] = proposal
+    ? [
+        ...Object.keys(before).flatMap((k) => [
+          { sign: "-" as const, key: k, text: String(before[k]) },
+          { sign: "+" as const, key: k, text: String(after[k]) },
+        ]),
+        ...(kind === "rerun" && shownNote ? [{ sign: "+" as const, key: "note", text: shownNote }] : []),
+      ]
+    : [];
   return (
-    <section className="change-card" aria-label={title} data-testid="change-card">
-      <h3>{title}</h3>
-      {proposal && (
-        <ul className="diff" aria-label="The change">
-          {Object.keys(before).map((k) => (
-            <li key={k}>
-              <b>{k}</b> <del>{String(before[k])}</del> <ins>{String(after[k])}</ins>
-            </li>
-          ))}
-        </ul>
-      )}
-      {!applied &&
-        problems.map((p) => (
-          <p className="stage-error" key={p}>
+    <ChangeFrame
+      title={title}
+      status={stale ? "Out of date" : problems.length > 0 ? "Would not pass" : "Proposed"}
+      diff={diff}
+      what={[
+        ...(stale ? [<What key="stale" tone="warn" role="status">The run moved on since this was proposed.</What>] : []),
+        ...problems.map((p) => (
+          <What key={p} tone="bad">
             This would not pass: {p.replace(/\.$/, "")}.
-          </p>
-        ))}
-      {proposal && kind === "rerun" && cost != null && (
-        <p className="faint">
-          Resets {names.format(Object.keys(before))}, about {money(cost)} more{left != null && ` of the ${money(left)} left`}
-        </p>
-      )}
-      {proposal && !proposal.in_place && !applied && <p className="warn">Continues as a new run from {proposal.fork_from}.</p>}
-      {refused && !applied && (
-        <p className="stage-error" role="alert">
-          {refused}
-        </p>
-      )}
-      {stale && (
-        <p className="warn" role="status">
-          The run moved on since this was proposed.{" "}
-          <button type="button" onClick={() => setAsked((n) => n + 1)}>
-            Ask again
-          </button>
-        </p>
-      )}
-      {applied ? (
+          </What>
+        )),
+        ...(ready ? [<What key="ok" tone="ok">Check passed.{proposal?.in_place ? " Runs in place." : ""}</What>] : []),
+        ...(proposal && !proposal.in_place && !stale ? [<What key="fork" tone="warn">Continues as a new run from {proposal.fork_from}.</What>] : []),
+        ...(proposal && kind === "rerun" && Object.keys(before).length > 0 ? [<What key="resets">Resets {names.format(Object.keys(before))}.</What>] : []),
+        ...(refused
+          ? [
+              <What key="refused" tone="bad" role="alert">
+                {refused}
+              </What>,
+            ]
+          : []),
+      ]}
+      actions={actions}
+      cost={proposal && kind === "rerun" ? costLine(proposal) : null}
+    >
+      {editing && kind === "rerun" && !stale && (
         <>
-          <p className="notice ok" role="status">
-            Applied by {who(applied.by)} at {hhmm(applied.at)}
-            {applied.fork && (
-              <>
-                . <RunRef label="Continues in" run={applied.fork} testId="continues-in" />
-              </>
-            )}
-          </p>
-          <SaveToWorkflow run={run} change={applied} />
-        </>
-      ) : (
-        <>
-          {editing && kind === "rerun" && (
-            <>
-              <label htmlFor={noteId}>Note for {stage.name}</label>
-              <textarea id={noteId} value={note} rows={3} placeholder="What to do differently" onChange={(e) => setNote(e.target.value)} />
-            </>
-          )}
-          <div className="answer-bar">
-            <button type="button" className="primary" disabled={!ready} onClick={apply}>
-              Apply
-            </button>
-            {kind === "rerun" && (
-              <button type="button" aria-pressed={editing} onClick={() => setEditing(!editing)}>
-                Edit
-              </button>
-            )}
-            <button type="button" onClick={onClose}>
-              Not now
-            </button>
-          </div>
+          <label htmlFor={noteId}>Note for {stage.name}</label>
+          <textarea id={noteId} value={note} rows={3} placeholder="What to do differently" onChange={(e) => setNote(e.target.value)} />
         </>
       )}
-    </section>
+    </ChangeFrame>
   );
 }

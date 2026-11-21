@@ -2579,6 +2579,16 @@ export interface components {
             /** Workflow Id */
             workflow_id?: string | null;
         };
+        /** Choice */
+        Choice: {
+            /** Label */
+            label: string;
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+        };
         /** Claim */
         Claim: {
             /** Agent */
@@ -3702,9 +3712,19 @@ export interface components {
             auth: string;
         };
         /** Question */
-        Question: {
+        "Question-Input": {
             /** Question */
             question: string;
+        };
+        /**
+         * Question
+         * @description A question the planner asks, with choices the operator can tap instead of typing.
+         */
+        "Question-Output": {
+            /** Text */
+            text: string;
+            /** Choices */
+            choices: components["schemas"]["Choice"][];
         };
         /** Rebuild */
         Rebuild: {
@@ -3789,6 +3809,7 @@ export interface components {
         Reply: {
             /** Reply */
             reply: string;
+            question?: components["schemas"]["Question-Output"] | null;
             /** Yaml */
             yaml: string | null;
             /** Session Id */
@@ -7543,7 +7564,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Question"];
+                "application/json": components["schemas"]["Question-Input"];
             };
         };
         responses: {

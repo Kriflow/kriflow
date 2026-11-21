@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import type { Agent } from "../api/events";
@@ -137,8 +137,7 @@ test("an answer posts the gate's decision, the asker reacts and the next steps u
   const { screen } = await mountAt("/worlds/world_1/office/talk");
   await expect.element(screen.getByText("Ship it to Publish?")).toBeVisible();
   // Number keys answer: 1 approves, 2 sends back to the step before.
-  // The note and the ask share one fold under the choices.
-  await screen.getByText("Add a note or ask").click();
+  // The note sits under the choices; asking is its own chat beside them.
   await screen.getByLabelText("Note (optional)").fill("Tighter ending.");
   (document.activeElement as HTMLElement).blur();
   await userEvent.keyboard("2");
@@ -306,8 +305,7 @@ test("asking at a publish gate in Talk answers there, fills the form, and an app
   const confirm = screen.getByRole("button", { name: "1 Confirm and post" });
   await expect.element(confirm).toBeDisabled();
 
-  await screen.getByText("Add a note or ask").click();
-  await screen.getByLabelText("Ask or change before you answer").fill("Cut the hashtags to five");
+  await screen.getByRole("textbox", { name: /^Ask .* before you answer$/ }).fill("Cut the hashtags to five");
   await screen.getByRole("button", { name: "Send" }).click();
   await expect.element(screen.getByText("Cut to five, here and in metadata.md.")).toBeVisible();
   await expect.element(screen.getByLabelText("Hashtags")).toHaveValue(five);
@@ -318,7 +316,7 @@ test("asking at a publish gate in Talk answers there, fills the form, and an app
   await expect.element(card).toMatchTextContent(/Edit metadata\.md/);
   await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent(`hashtags: ${seven}hashtags: ${five}`);
   await card.getByRole("button", { name: "Apply" }).click();
-  await expect.element(card.getByRole("status")).toHaveTextContent("Applied by you.");
+  await expect.element(card.getByRole("status")).toHaveTextContent("Edit metadata.md Applied by you.");
   expect(applied).toEqual([{ ...change, revision: 3 }]);
   expect(marked).toEqual([{ state: "applied", change_id: "change_1" }]);
   await expect.element(screen.getByLabelText("Title")).toHaveValue("Owls, explained");
@@ -330,4 +328,22 @@ test("asking at a publish gate in Talk answers there, fills the form, and an app
   await expect.element(confirm).toBeEnabled();
   await confirm.click();
   await vi.waitFor(() => expect(posted.map((p) => p.key)).toEqual(["POST /api/runs/run_c/decision"]));
+});
+
+test("Talk asks in the shared chat in the office's colours: beside the gate on a wide screen, under it on a 390 px phone with no horizontal scroll", async () => {
+  await page.viewport(1280, 800);
+  world1([judged, planned], agents, gates().slice(0, 1));
+  const { screen } = await mountAt("/worlds/world_1/office/talk");
+  const chat = screen.getByRole("region", { name: "Ask or change" });
+  await expect.element(chat.getByRole("heading", { name: /^Ask Mira$/ })).toBeVisible();
+  await expect.element(chat).toMatchTextContent(/Answers for the run assistant/);
+  await expect.element(chat.getByRole("textbox", { name: "Ask Mira before you answer" })).toBeVisible();
+  expect(getComputedStyle(chat.element()).backgroundColor).toBe("rgb(255, 253, 246)"); // the office's paper
+
+  await page.viewport(390, 844);
+  await expect.element(chat.getByRole("heading", { name: /^Ask Mira$/ })).not.toBeInTheDocument(); // the box above names the asker
+  const field = chat.getByRole("textbox").element().getBoundingClientRect();
+  expect(field.right).toBeLessThanOrEqual(390);
+  expect(field.bottom).toBeLessThanOrEqual(844);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });

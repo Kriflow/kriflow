@@ -68,9 +68,9 @@ test("asking from the run header answers with source links and a change card tha
 
   const panel = screen.getByTestId("assistant");
   await expect.element(panel.getByRole("heading", { name: "Ask this run" })).toBeVisible();
-  await expect.element(panel).toMatchTextContent(/It reads the run and proposes changes\. Nothing changes until you apply\./);
-  await expect.element(panel).toMatchTextContent(/The first question sets what asking costs, from the world's budget\./);
-  const field = panel.getByPlaceholder("Ask about this run, or say what to change");
+  await expect.element(panel).toMatchTextContent(/Reads the run, proposes changes\. Nothing changes until you apply\./);
+  await expect.element(panel).toMatchTextContent(/The first question sets the cost, from the world's budget/);
+  const field = panel.getByPlaceholder("Ask, or say what to change. @ for a stage or file");
   await field.fill("Render at 60 fps.");
   await panel.getByRole("button", { name: "Send" }).click();
 
@@ -79,15 +79,15 @@ test("asking from the run header answers with source links and a change card tha
   await expect.element(source).toHaveAttribute("href", "/worlds/world_1/runs/run_1?stage=stage_1");
   const card = panel.getByTestId("change-card");
   await expect.element(card.getByRole("heading", { name: "Edit render" })).toBeVisible();
-  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent('params {"fps":30} {"fps":60}');
+  await expect.element(card.getByRole("list", { name: "The change" })).toHaveTextContent('params {"fps":30}params {"fps":60}');
   expect(calls).not.toContain("POST /api/runs/run_1/changes/propose"); // shown as proposed
 
   await card.getByRole("button", { name: "Apply" }).click();
-  await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+  await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
   expect(applied).toEqual([{ kind: "stage_edit", stage: "stage_1", payload: after, revision: 3 }]);
   await vi.waitFor(() => expect(marked).toEqual([{ state: "applied", change_id: "change_1" }]));
   await expect.element(screen.getByTestId("assistant-spend")).toHaveTextContent("Assistant $0.02, from the world's budget, not this run's.");
-  await expect.element(panel).toMatchTextContent(/Asking costs about \$0\.19 a question, from the \$41\.20 the world has left this month\./);
+  await expect.element(panel).toMatchTextContent(/About \$0\.19 a question, \$41\.20 left this month/);
 });
 
 test("the conversation comes back on reload; a stale card asks again and Not now dismisses it", async () => {
@@ -109,13 +109,16 @@ test("the conversation comes back on reload; a stale card asks again and Not now
   await expect.element(panel).toMatchTextContent(/Render at 60 fps\./);
   const card = panel.getByTestId("change-card");
   await expect.element(card).toMatchTextContent(/The run moved on since this was proposed\./);
-  await expect.element(card.getByRole("button", { name: "Apply" })).toBeDisabled();
+  await expect.element(card).toMatchTextContent(/Out of date/);
+  await expect.element(card.getByRole("button", { name: "Apply" })).not.toBeInTheDocument();
   await card.getByRole("button", { name: "Ask again" }).click();
+  await expect.element(card.getByRole("button", { name: "Apply" })).toBeEnabled();
   await expect.element(card).not.toMatchTextContent(/The run moved on/);
   expect(calls).toContain("POST /api/runs/run_1/changes/propose");
 
   await card.getByRole("button", { name: "Not now" }).click();
   await expect.element(panel.getByTestId("change-card")).not.toBeInTheDocument();
+  await expect.element(panel.getByRole("status").filter({ hasText: "Not now: Edit render" })).toBeVisible();
   expect(marked).toEqual([{ state: "dismissed", change_id: null }]);
   expect(calls).not.toContain("POST /api/runs/run_1/changes");
 });
@@ -134,8 +137,8 @@ test("on a phone the assistant opens as a sheet from the run header", async () =
   const sheet = screen.getByRole("dialog", { name: "Ask this run" });
   await expect.element(sheet).toBeVisible();
   await expect.element(sheet).toMatchTextContent(/The render stage runs at 30 fps/);
-  await expect.element(sheet).toMatchTextContent(/Edit render\. Applied by you at \d\d:\d\d/);
-  await expect.element(sheet.getByPlaceholder("Ask about this run, or say what to change")).toBeVisible();
+  await expect.element(sheet).toMatchTextContent(/Edit render applied by you, \d\d:\d\d/);
+  await expect.element(sheet.getByPlaceholder("Ask, or say what to change")).toBeVisible();
   await expect.element(sheet.getByRole("button", { name: "Send" })).toBeVisible();
   expect(screen.getByTestId("assistant").elements()).toHaveLength(1); // the sheet's, no column
 });
@@ -193,10 +196,10 @@ test("a proposed Rerun, Skip and Restructure each come as an Apply card that app
   const panel = screen.getByTestId("assistant");
 
   const rerun = panel.getByRole("region", { name: "Re-run from script" });
-  await expect.element(rerun.getByRole("list", { name: "The change" })).toHaveTextContent("script done pendingcheck waiting pending");
-  await expect.element(rerun).toMatchTextContent(/Resets script and check, about \$0\.40 more of the \$2\.00 left/);
+  await expect.element(rerun.getByRole("list", { name: "The change" })).toHaveTextContent("script donescript pendingcheck waitingcheck pendingnote Stronger hook.");
+  await expect.element(rerun).toMatchTextContent(/Resets script and check\..*\$0\.40 of \$2\.00 left/);
   const skip = panel.getByRole("region", { name: "Skip upload" });
-  await expect.element(skip.getByRole("list", { name: "The change" })).toHaveTextContent("upload pending skipped");
+  await expect.element(skip.getByRole("list", { name: "The change" })).toHaveTextContent("upload pendingupload skipped");
   // The Restructure shows the stages it proposes, not the run's current ones.
   const restructure = panel.getByRole("region", { name: "Change the stages from speech on" });
   await expect.element(restructure.getByRole("list", { name: "The change" })).toMatchTextContent(/review \(gate\) \{"ask":"Ready to upload\?"\}/);
@@ -205,7 +208,7 @@ test("a proposed Rerun, Skip and Restructure each come as an Apply card that app
 
   for (const card of [rerun, skip, restructure]) {
     await card.getByRole("button", { name: "Apply" }).click();
-    await expect.element(card).toMatchTextContent(/Applied by you at \d\d:\d\d/);
+    await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
   }
   const { rerun: r, skip: k, restructure: s } = proposed;
   expect(applied).toEqual([{ ...r.change, revision: 3 }, { ...k.change, revision: 3 }, { ...s.change, payload: s.after, revision: 3 }]);
@@ -221,8 +224,71 @@ test("an applied card of any kind reads its own title", async () => {
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
   await screen.getByRole("button", { name: "Ask this run" }).click();
   const panel = screen.getByTestId("assistant");
-  await expect.element(panel).toMatchTextContent(/Re-run from script\. Applied by you at \d\d:\d\d/);
-  await expect.element(panel).toMatchTextContent(/Skip upload\. Applied by you at \d\d:\d\d/);
-  await expect.element(panel).toMatchTextContent(/Change the stages from speech on\. Applied by you at \d\d:\d\d/);
+  await expect.element(panel).toMatchTextContent(/Re-run from script applied by you, \d\d:\d\d/);
+  await expect.element(panel).toMatchTextContent(/Skip upload applied by you, \d\d:\d\d/);
+  await expect.element(panel).toMatchTextContent(/Change the stages from speech on applied by you, \d\d:\d\d/);
   await expect.element(panel).not.toMatchTextContent(/Edit (script|upload|speech)/);
+});
+
+test("an empty conversation offers starters drawn from the run, and a question that fails stays to retry", async () => {
+  await page.viewport(1280, 800);
+  let fail = true;
+  const slow = run("waiting_gate", [stage(0, "script", "swarm", "done", { started_at: "2026-10-26T10:00:00+00:00", ended_at: "2026-10-26T10:06:00+00:00" }), stage(1, "check", "gate", "waiting"), speech], { budget_usd: 5 });
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(slow),
+    "GET /api/runs/run_1/assistant": () => Response.json(fail ? { messages: [], spent_usd: 0 } : { messages: [{ ...asked, text: "What will speech send?" }, answered(3)], spent_usd: 0.02 }),
+    "POST /api/runs/run_1/assistant": () => (fail ? Response.json({ detail: "The assistant did not answer: timed out" }, { status: 502 }) : Response.json(answered(3))),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
+  await screen.getByRole("button", { name: "Ask this run" }).click();
+  const panel = screen.getByTestId("assistant");
+  await expect.element(panel).toMatchTextContent(/Ask anything about this run, or say what to change\. It reads every stage, file and log line, and proposes changes you apply\./);
+  for (const s of ["Why did script take 6 min?", "What will speech send?", "How much of the budget is left?", "Re-run a stage with a note"])
+    await expect.element(panel.getByRole("button", { name: s })).toBeVisible();
+  await panel.getByRole("button", { name: "What will speech send?" }).click();
+  await expect.element(panel.getByRole("alert")).toMatchTextContent(/Not sent: The assistant did not answer: timed out\./);
+  fail = false;
+  await panel.getByRole("button", { name: "Retry" }).click();
+  await expect.element(panel).toMatchTextContent(/The render stage runs at 30 fps/);
+  await expect.element(panel.getByRole("alert")).not.toBeInTheDocument();
+});
+
+test("on a desktop the column is as tall as the window and its composer stays in view as the log grows", async () => {
+  await page.viewport(1280, 800);
+  const many = Array.from({ length: 30 }, (_, i) => ({ ...asked, id: `m${i}`, text: `Question ${i} with enough words to wrap a line or two in the column.` }));
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(waiting),
+    "GET /api/runs/run_1/assistant": () => Response.json({ messages: many, spent_usd: 0 }),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByRole("button", { name: "Ask this run" }).click();
+  const panel = screen.getByTestId("assistant");
+  await expect.element(panel).toMatchTextContent(/Question 29/);
+  const field = panel.getByRole("textbox").element().getBoundingClientRect();
+  expect(field.bottom).toBeLessThanOrEqual(800);
+  const log = panel.getByRole("log").element();
+  expect(log.scrollHeight).toBeGreaterThan(log.clientHeight); // the log scrolls inside itself
+  await expect.element(panel.getByText("Enter sends")).toBeVisible();
+});
+
+test("on a 390 px phone the sheet has one title, its composer pinned in view, and no horizontal scroll", async () => {
+  await page.viewport(390, 844);
+  const many = Array.from({ length: 20 }, (_, i) => ({ ...asked, id: `m${i}`, text: `Question ${i}` }));
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(waiting),
+    "GET /api/runs/run_1/assistant": () => Response.json({ messages: [...many, answered(3)], spent_usd: 0, average_usd: 0.54, month_left_usd: 73.97 }),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByRole("button", { name: "Ask this run" }).click();
+  const sheet = screen.getByRole("dialog", { name: "Ask this run" });
+  await expect.element(sheet.getByTestId("change-card")).toBeVisible();
+  expect(sheet.getByRole("heading", { name: "Ask this run" }).elements()).toHaveLength(1);
+  await expect.element(sheet).toMatchTextContent(/Render then pick · stage 1 of 2, pick/);
+  await expect.element(sheet).toMatchTextContent(/About \$0\.54 a question\$73\.97 left this month/);
+  const send = sheet.getByRole("button", { name: "Send" }).element().getBoundingClientRect();
+  expect(send.bottom).toBeLessThanOrEqual(844);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  expect(sheet.element().scrollWidth).toBeLessThanOrEqual(390);
+  await sheet.getByRole("button", { name: "Close" }).last().click();
+  await expect.element(screen.getByRole("dialog", { name: "Ask this run" })).not.toBeInTheDocument();
 });

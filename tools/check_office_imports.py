@@ -4,7 +4,8 @@ Usage: python tools/check_office_imports.py apps/web/src
 The office (`src/office`) may import packages, itself, the API layer (`src/api`) and the skin
 module (`src/skin.ts`) and the skin-neutral leaves: the Dialog (`src/Dialog.tsx`) and the
 Sheet (`src/Sheet.tsx`, with its hooks), styled by whichever skin renders them, the icon set
-(`src/Icon.tsx`) and the run clock (`src/Elapsed.tsx`), never a plain page or its styles. The
+(`src/Icon.tsx`), the run clock (`src/Elapsed.tsx`), and the shared chat (`src/Chat.tsx`, with
+the markdown it renders, `src/Markdown.tsx`), never a plain page or its styles. The
 rest of the app may load the office only with a dynamic `import()`, so its code loads when an
 office route opens. Tests are not scanned: they mount the whole app.
 """
@@ -49,6 +50,8 @@ def violations(src: Path) -> list[str]:
                         "usePhone",
                         "Icon",
                         "Elapsed",
+                        "Chat",
+                        "Markdown",
                     )
                 ]
                 if not ok and target.with_suffix("") not in neutral:

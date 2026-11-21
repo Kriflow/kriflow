@@ -1,6 +1,7 @@
 /** Asking a run's Run Assistant from a gate, shared by the Needs you page and a skin's own gate
  * screen (Talk), so both ask, apply and dismiss alike. */
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import YAML from "yaml";
 
 import { api } from "./client";
 import { type Gate, money, refusal } from "./runs";
@@ -20,37 +21,36 @@ export async function askRun(runId: string, message: string): Promise<{ said?: S
   return data ? { said: data } : { refused: refusal(error, response, "The assistant did not answer") ?? undefined };
 }
 
-/** A gate's turns with its run's assistant, for each skin to show alike: the message being
- * written, `send` to ask it, and why the last ask failed. A reply's fields go to `onFill`, and
- * `filled` says which ones it filled; `onSaid` runs after each answer. */
-export function useGateAsk(gate: Gate, onFill: (fields: Record<string, string>) => void, onSaid?: () => Promise<unknown>) {
-  const [turns, setTurns] = useState<{ asked: string; said: Said }[]>([]);
-  const [text, setText] = useState("");
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/** One exchange at a gate: what you asked, and the reply, or why it did not come. */
+export type Exchange = { id: string; asked: string; at: string; said?: Said; failed?: string };
 
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const asked = text.trim();
-    if (!asked || asking) return;
-    setError(null);
-    setAsking(true);
-    const { said, refused } = await askRun(gate.run_id, asked);
-    if (said) {
-      setText("");
-      setTurns((t) => [...t, { asked, said }]);
-      if (Object.keys(said.fields ?? {}).length > 0) onFill(said.fields ?? {});
-      await onSaid?.();
-    } else setError(refused ?? "The assistant did not answer");
-    setAsking(false);
+/** A gate's turns with its run's assistant, for each skin to show alike: the exchanges so far,
+ * when the unanswered one went (`since`), `ask` (again, with its id, to retry), `drop` (a failed
+ * one taken back to edit). A reply's fields go to `onFill`, and `filled` says which ones it
+ * filled; `onSaid` runs after each answer. */
+export function useGateAsk(gate: Gate, onFill: (fields: Record<string, string>) => void, onSaid?: () => Promise<unknown>) {
+  const [exchanges, setExchanges] = useState<Exchange[]>([]);
+  const [since, setSince] = useState<number | null>(null);
+
+  async function ask(asked: string, id = `ask-${Date.now()}`) {
+    if (since !== null) return;
+    setExchanges((x) => [...x.filter((e) => e.id !== id), { id, asked, at: new Date().toISOString() }]);
+    setSince(Date.now());
+    const { said, refused } = await askRun(gate.run_id, asked).catch(() => ({ said: undefined, refused: "the API could not be reached" }));
+    setExchanges((x) => x.map((e) => (e.id === id ? { ...e, said, failed: said ? undefined : (refused ?? "the assistant did not answer") } : e)));
+    setSince(null);
+    if (!said) return;
+    if (Object.keys(said.fields ?? {}).length > 0) onFill(said.fields ?? {});
+    await onSaid?.();
   }
+  const drop = (id: string) => setExchanges((x) => x.filter((e) => e.id !== id));
 
   const labelOf = (key: string) => gate.publish?.fields?.find((f) => f.key === key)?.label ?? key;
   const filled = (said: Said) => {
     const keys = Object.keys(said.fields ?? {});
     return keys.length > 0 ? `Filled ${keys.map(labelOf).join(", ")} in the form above. Check it, then answer.` : null;
   };
-  return { turns, text, setText, asking, error, send, filled };
+  return { exchanges, since, ask, drop, filled };
 }
 
 /** Apply a proposal as proposed, through the Run Change seam, and record it on the card. Resolves
@@ -79,6 +79,21 @@ export function askingCosts(c?: Pick<Conversation, "average_usd" | "month_left_u
   const figure = c?.average_usd != null ? `Asking costs about ${money(c.average_usd)} a question` : "The first question sets what asking costs";
   const from = c?.month_left_usd != null ? `from the ${money(c.month_left_usd)} the world has left this month` : "from the world's budget";
   return `${figure}, ${from}.`;
+}
+
+/** The composer's cost line: what a question costs, then what the month has left, each beside
+ * the other (Chat v1: a figure is never alone). */
+export function costMeta(c?: Pick<Conversation, "average_usd" | "month_left_usd"> | null): [string, string] {
+  return [
+    c?.average_usd != null ? `About ${money(c.average_usd)} a question` : "The first question sets the cost",
+    c?.month_left_usd != null ? `${money(c.month_left_usd)} left this month` : "from the world's budget",
+  ];
+}
+
+/** A proposal's diff as -/+ rows: a file's lines, or its fields as YAML. */
+export function proposalRows(p: Card["proposal"]): { sign: "-" | "+"; text: string }[] {
+  const text = (v: Record<string, unknown>) => (p.change.kind === "artifact_edit" ? String(v.text ?? "") : YAML.stringify(v));
+  return lines(text(p.before), text(p.after)).map((l) => ({ sign: l.startsWith("-") ? "-" : "+", text: l.slice(1) }));
 }
 
 /** A change card's title by kind, in the spec's words: "Edit metadata.md", "Re-run from Script". */
