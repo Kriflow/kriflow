@@ -389,6 +389,7 @@ def test_a_rerun_of_a_failed_stage_while_its_retro_waits_runs_it_again_in_place(
     wait_for(lambda: fetch(runner, run.id).stages[4].status == "waiting")
     run = fetch(runner, run.id)
     assert statuses(run) == ["done", "failed", "skipped", "skipped", "waiting"]
+    assert run.stages[1].error
     rerun = change(run, "rerun", "write", "Mind the length.")
 
     proposal = runner.propose(run.id, rerun)
@@ -401,6 +402,7 @@ def test_a_rerun_of_a_failed_stage_while_its_retro_waits_runs_it_again_in_place(
     assert applied.fork is None
     again = ["waiting", "pending", "pending", "skipped", "pending"]
     wait_for(lambda: statuses(fetch(runner, run.id)) == again)
+    assert fetch(runner, run.id).stages[1].error is None  # issue 527: a live stage never failed
     runner.decide(run.id, choice="idea 1")  # the gate before it asks again, as for any Rerun
     wait_for(lambda: len(calls.ran) == 3)
     run = at(runner, run.id, "waiting_gate")
