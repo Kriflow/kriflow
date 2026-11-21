@@ -25,9 +25,14 @@ class DiskFiles:
         """Every typed artifact written: (name, type, fields, body)."""
         self.pins: list[str] = []
         """Paths relative to the world folder that `pinned` answers with."""
+        self.published: list[tuple[str, dict[str, Any]]] = []
+        """What `publish_records` answers with: (path, fields with outcomes)."""
 
     def pinned(self, world_id: str) -> list[str]:
         return list(self.pins)
+
+    def publish_records(self, world_id: str) -> list[tuple[str, dict[str, Any]]]:
+        return list(self.published)
 
     def assets(self, world_id: str) -> list[str]:
         world = self.root / world_id

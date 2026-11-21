@@ -11,7 +11,15 @@ import pytest
 
 from runs_fakes import FakeNotifier, wait_for
 from swarmify_runs import (
-    Illegal, Item, OverBudget, Pinned, Run, RunChange, Runner, SqliteStorage, StageDef,
+    Illegal,
+    Item,
+    OverBudget,
+    Pinned,
+    Run,
+    RunChange,
+    Runner,
+    SqliteStorage,
+    StageDef,
 )  # fmt: skip
 from swarmify_runs.control import RunControl
 

@@ -122,6 +122,19 @@ def test_a_worker_lists_the_world_assets(board: SqliteStorage, tmp_path: Path) -
     assert json.loads(script.outcomes[2].text) == ["assets/sfx/whoosh.wav"]
 
 
+def test_a_worker_reads_the_world_publish_outcomes(board: SqliteStorage, tmp_path: Path) -> None:
+    _seed(board)
+    files = DiskFiles(tmp_path)
+    files.published = [("runs/r0/s/artifacts/publish.md", {"outcomes": {"views": 1200}})]
+    script = Script([GRAPH, CLAIM, Call(tool_id("publish_outcomes")), FINISH, Say("Done.")], PASS)
+    swarm = Swarm(board, SdkRuntime(transport=script.transport), files, graphs=DiskGraphs(tmp_path))
+    _run(swarm, tmp_path)
+    assert not any(o.is_error for o in script.outcomes), script.outcomes
+    assert json.loads(script.outcomes[2].text) == [
+        {"path": "runs/r0/s/artifacts/publish.md", "outcomes": {"views": 1200}}
+    ]
+
+
 def test_the_planner_seeds_an_empty_board_from_its_json_answer(
     board: SqliteStorage, tmp_path: Path
 ) -> None:

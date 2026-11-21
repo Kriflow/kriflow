@@ -15,7 +15,7 @@ from swarmify_learning import (
     parse_retro,
     recurrences,
 )
-from swarmify_learning.retro import LOG_TAIL, frontmatter, prompt
+from swarmify_learning.retro import LOG_TAIL, frontmatter, prompt, published
 
 SKILL = "---\nname: hooks\ndescription: Open on the hook.\n---\n\nWrite the hook first.\n"
 
@@ -312,3 +312,24 @@ def test_a_multi_pick_shows_the_retro_its_picks_rejects_with_reasons_and_parked_
     assert evidence([run_event("run_3", [picked])], "run_3").decisions == [
         "at review: picked Card A, Card B; rejected Card D because done before; parked Card C"
     ]
+
+
+def test_the_prompt_carries_how_earlier_runs_of_the_workflow_did_once_published() -> None:
+    """The retro runs before its own run's outcomes exist, so it reads its workflow's earlier
+    ones from `outcome.recorded`: each run's latest value of each Primary Metric."""
+    old = run_event("run_0", [], created_at="2026-11-01T00:00:00+00:00", name="First")
+    now = run_event("run_1", [], created_at="2026-11-02T00:00:00+00:00")
+    other = run_event("run_9", [], workflow_id="wf_2", created_at="2026-11-01T00:00:00+00:00")
+    seen = {"path": "runs/run_0/s/artifacts/publish.md", "primary": "views"}
+    events = [
+        old, now, other,
+        ev("outcome.recorded", {**seen, "metrics": {"views": 10}}, "run_0"),
+        ev("outcome.recorded", {**seen, "metrics": {"views": 1200}}, "run_0"),
+        ev("outcome.recorded", {**seen, "metrics": {"views": 5}}, "run_9"),
+    ]  # fmt: skip
+    lines = published(events, "wf_1")
+    assert lines == ["First (run_0): views 1200"]
+    text = prompt(evidence(events, "run_1"), [], [], [], None, lines)
+    assert "# How earlier runs of this workflow did once published" in text
+    assert "First (run_0): views 1200" in text
+    assert "(none published yet)" in prompt(evidence(events, "run_1"), [], [], [], None)
