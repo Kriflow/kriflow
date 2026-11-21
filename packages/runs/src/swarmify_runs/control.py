@@ -919,6 +919,8 @@ class RunControl:
         first = next((i for i, (a, b) in pairs if a != b), min(len(old), len(stages)))
         unfinished = next((s for s in run.stages if s.status not in ("done", "skipped")), None)
         index = min(first, len(stages) if unfinished is None else unfinished.index)
+        if problem := in_family(run):
+            return problem, index
         if old == stages:
             return "nothing would change", index
         if index >= len(stages):
@@ -1284,9 +1286,23 @@ STEPS = ("rerun", "skip")
 """The Run Changes that move the run's stages rather than edit them, through its workflow."""
 
 
+def in_family(run: Run) -> str | None:
+    """Why a child run cannot be forked: the Fork would have no parent, so the parent's Item
+    or stage would never see it (issue 523). It goes again from the parent's gate instead."""
+    if run.parent_run_id is None:
+        return None
+    name = run.parent.name if run.parent else run.parent_run_id
+    return (
+        f"this run is a child of {name}: a Fork of it would not reach {name}. Send its Item"
+        f" back (or retry it) from {name}'s gate instead"
+    )
+
+
 def unforkable(run: Run, index: int) -> str | None:
     """Why a Fork of the run cannot run anew from stage `index`: nothing is left to run, or a
     stage before it has not finished, as a Fork copies only finished stages."""
+    if problem := in_family(run):
+        return problem
     if index >= len(run.stages):
         return "the Fork would have nothing to run"
     unfinished = next((s for s in run.stages[:index] if s.status not in ("done", "skipped")), None)
