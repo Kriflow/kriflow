@@ -18,7 +18,14 @@ from typing import Any, Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from swarmify_connectors import VISIBILITY_LABEL, VISIBLE, ConnectorError, Connectors, setup
+from swarmify_connectors import (
+    CURVES,
+    VISIBILITY_LABEL,
+    VISIBLE,
+    ConnectorError,
+    Connectors,
+    setup,
+)
 from swarmify_memory import Memory
 from swarmify_swarm.network import NOTICE_AFTER, Waiting
 from swarmify_worlds import Worlds
@@ -52,9 +59,11 @@ def record_outcomes(
     """Record fresh Outcomes of publish artifacts; returns how many changed. A post's metrics
     from several connectors add up; its Primary Metric is its own connector's when that one
     answered, else the first that did; whether everyone can see it (`visible`, with the
-    platform's `visibility_label`) is what the first connector to say reported. A
-    connector that cannot answer (its Setup not done) is logged and skipped. What a connector
-    says it could not read goes in `notices` by connector name, logged once, gone once it can."""
+    platform's `visibility_label`) is what the first connector to say reported. Its `curves` are
+    stored as answered, never added up: a later connector's curve of the same name wins, and a
+    stored curve no connector drew this pass is kept. A connector that cannot answer (its Setup
+    not done) is logged and skipped. What a connector says it could not read goes in `notices`
+    by connector name, logged once, gone once it can."""
     changed = 0
     noticed: dict[str, str] = {}
     for world in worlds.list_all():
@@ -70,8 +79,9 @@ def record_outcomes(
         ]
         made_by = {p["id"]: p["connector"] for p in posts}
         found: dict[str, dict[str, float]] = {}
-        seen: dict[str, dict[str, float | bool | str]] = {}
+        seen: dict[str, dict[str, Any]] = {}
         primary: dict[str, str] = {}
+        curves: dict[str, dict[str, Any]] = {}
         for connector in reporters:
             try:
                 answer, notice = registry.outcomes(connector, posts)
@@ -87,7 +97,9 @@ def record_outcomes(
                     continue  # not one of the posts it was asked about
                 mine = found.setdefault(post, {})
                 for metric, n in metrics.items():
-                    if metric not in (VISIBLE, VISIBILITY_LABEL) and not isinstance(n, bool | str):
+                    if metric == CURVES and isinstance(n, dict):
+                        curves.setdefault(post, {}).update(n)
+                    elif metric not in (VISIBLE, VISIBILITY_LABEL) and isinstance(n, int | float):
                         mine[metric] = mine.get(metric, 0) + n
                 if isinstance(metrics.get(VISIBLE), bool) and post not in seen:
                     seen[post] = {
@@ -96,17 +108,20 @@ def record_outcomes(
                 if post not in primary or made_by[post] == connector.name:
                     primary[post] = connector.manifest["primary_metric"]
         for (path, fields), post in zip(records, posts, strict=True):
+            stored = fields.get(CURVES) if isinstance(fields.get(CURVES), dict) else {}
+            drawn = {**stored, **curves.get(post["id"], {})} or None
             metrics = found.get(post["id"])
-            if not metrics:
+            if not metrics and not curves.get(post["id"]):
                 continue
             ranked_by, shown = primary[post["id"]], seen.get(post["id"], {})
             was = {k: fields[k] for k in (VISIBLE, VISIBILITY_LABEL) if k in fields}
-            if (fields.get("outcomes"), fields.get("primary_metric"), was) != (
-                metrics,
+            if (fields.get("outcomes"), fields.get("primary_metric"), was, fields.get(CURVES)) != (
+                metrics or {},
                 ranked_by,
                 shown,
+                drawn,
             ):
-                memory.record_outcome(world.id, path, metrics, ranked_by, now, shown)
+                memory.record_outcome(world.id, path, metrics or {}, ranked_by, now, shown, drawn)
                 changed += 1
     if notices is not None:
         for name, text in noticed.items():

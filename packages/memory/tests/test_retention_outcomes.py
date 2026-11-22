@@ -118,6 +118,15 @@ def test_an_outcome_lives_beside_the_publish_record_which_never_changes_for_it(
     with pytest.raises(ValueError, match="not a file"):
         memory.record_outcome("w1", "../../escape.md", {}, "views", NOW)
 
+    # curves are stored as given beside the numbers, the latest replacing the last
+    curve = {"retention": [[0, 1], [0.5, 0.42], [1, 0.1]]}
+    memory.record_outcome("w1", path, {"views": 41300}, "views", NOW, curves=curve)
+    [(_, fields)] = memory.publish_records("w1")
+    assert (fields["outcomes"], fields["curves"]) == ({"views": 41300}, curve)
+    memory.record_outcome("w1", path, {"views": 41400}, "views", NOW)
+    [(_, fields)] = memory.publish_records("w1")
+    assert "curves" not in fields
+
     # Retention keeps it however old: it is the record's, not a run binary.
     _age(sidecar, 400)
     assert memory.prune("w1", NOW - timedelta(days=90), NOW) == [] and sidecar.is_file()

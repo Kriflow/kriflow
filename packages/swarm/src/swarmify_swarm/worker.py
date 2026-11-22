@@ -498,7 +498,8 @@ TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "publish_outcomes": (
         "How the world's published posts did: each publish record's path and fields, with its"
         " latest outcomes (views and other metrics by name, `outcomes_at`, `primary_metric`)"
-        " once the platform reported them.",
+        " once the platform reported them, and its `curves` (such as a retention curve, each a"
+        " list of [x, y] points) when the platform gave any.",
         _obj(),
     ),
     "write_note": (

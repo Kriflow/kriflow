@@ -93,7 +93,7 @@ __all__ = [
 
 OUTCOME = "## Outcome\n\n"
 """The body section records from before the sidecar carry their outcome in."""
-OUTCOME_FIELDS = ("outcomes", "outcomes_at", "primary_metric", "views", "views_at")
+OUTCOME_FIELDS = ("outcomes", "outcomes_at", "primary_metric", "curves", "views", "views_at")
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 INLINE_MAX = 1 << 20
 """The largest file an artifact listing inlines as text, in bytes."""
@@ -498,11 +498,12 @@ class Memory:
         primary: str,
         at: datetime,
         visibility: Mapping[str, Any] | None = None,
+        curves: Mapping[str, list[list[float]]] | None = None,
     ) -> None:
         """Write a publish artifact's Outcome (`outcomes` by metric, `outcomes_at` and
         `primary_metric`, the one the scorecard ranks by) into its sidecar, replacing the last,
         with `visibility`, how its platform shows the post (`visible`, `visibility_label`), when
-        one says.
+        one says, and `curves` (named lists of [x, y] points) as given, when there are any.
         A record from before the sidecar has its outcome fields and Outcome section taken out,
         once; after that the record itself is never written for an outcome."""
         file = self._inside(world_id, path)
@@ -515,6 +516,7 @@ class Memory:
             "outcomes_at": at.astimezone(UTC).isoformat(),
             "primary_metric": primary,
             **(visibility or {}),
+            **({"curves": dict(curves)} if curves else {}),
         }
         # whole or not at all, so a scorecard read meanwhile never sees half a sidecar; the temp
         # name ends like a sidecar, so the graph's watch and prune pass over it too
