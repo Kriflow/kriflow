@@ -157,10 +157,21 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
         "w1", ["signer", "probe"], run=("run_1", "stg_1"), login="shop"
     )
     signer, probe = servers["signer"], servers["probe"]
-    assert signer["env"]["SWARMIFY_LOGIN_PASSWORD"] == "pa55-word"
-    assert signer["env"]["SWARMIFY_LOGIN_TOTP"] == SECRET
+    # Regression (security review): the agent runtime passes a server's config on the CLI's
+    # command line, so no value is in it, only the path of a mode-600 file the launcher reads
+    assert "pa55-word" not in json.dumps(servers) and SECRET not in json.dumps(servers)
+    assert list(k for k in signer["env"] if k.startswith("SWARMIFY_LOGIN")) == [
+        "SWARMIFY_LOGIN_FILE"
+    ]
     assert not [k for k in probe["env"] if k.startswith("SWARMIFY_LOGIN")]
-    home = Path(signer["env"]["SWARMIFY_LOGIN_SESSION"]).parent
+    login_file = Path(signer["env"]["SWARMIFY_LOGIN_FILE"])
+    assert stat.S_IMODE(login_file.stat().st_mode) == 0o600
+    values = json.loads(login_file.read_text())
+    assert (values["SWARMIFY_LOGIN_PASSWORD"], values["SWARMIFY_LOGIN_TOTP"]) == (
+        "pa55-word",
+        SECRET,
+    )
+    home = login_file.parent
     plan = (home.parent / "plan.json").read_text()
     assert "pa55-word" not in plan and SECRET not in plan and "s3ss-old-777" not in plan
     assert json.loads(plan)["sandbox"]["network"]["allowedDomains"] == ["shop.example.com"]
@@ -172,6 +183,7 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
     connectors.settle("w1", "run_1", "stg_1")
     assert connectors.logins.hand("w1", "shop").session == NEW_SESSION
     assert not session.exists() and not (home / "login-session.out.json").exists()
+    assert not login_file.exists()
     [use] = connectors.logins.uses("w1", "shop")
     assert (use.run_id, use.stage_id, use.package, use.result) == (
         "run_1", "stg_1", "signer", "received"

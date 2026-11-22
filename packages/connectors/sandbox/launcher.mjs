@@ -19,7 +19,7 @@
 // launcher stops that whole group.
 
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, existsSync, fstatSync, openSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime";
 
@@ -105,21 +105,41 @@ function save() {
   saving = undefined;
   if (plan.stderr && tail.length) writeFileSync(plan.stderr, tail.join("\n") + "\n");
 }
-// A World Login's values (spec: World Logins) never leave in a stderr line, to the API's log
-// or the tail: the password, the authenticator secret and the saved session's values.
+// A World Login (spec: World Logins) reaches its process through a mode-600 file in its scratch
+// folder that the core names in SWARMIFY_LOGIN_FILE, never a command line or an MCP config (the
+// agent runtime passes those as arguments, which `ps` shows): read once, deleted at once, and
+// handed to the command as its environment. Its values never leave in a stderr line either.
+function loginValues(file) {
+  if (!file) return {};
+  try {
+    const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      if (!fstatSync(fd).isFile()) return {};
+      const read = JSON.parse(readFileSync(fd, "utf8"));
+      return Object.fromEntries(Object.entries(read).filter(([k, v]) => k.startsWith("SWARMIFY_LOGIN_") && typeof v === "string"));
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return {};
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+const login = loginValues(process.env.SWARMIFY_LOGIN_FILE);
 const cookies = (x) =>
   !x || typeof x !== "object" ? [] : Object.entries(x).flatMap(([k, v]) => (k === "value" && typeof v === "string" && v.length >= 8 ? [v] : cookies(v)));
-const session = process.env.SWARMIFY_LOGIN_SESSION;
 let kept = [];
 try {
+  const session = login.SWARMIFY_LOGIN_SESSION;
   kept = session && existsSync(session) ? cookies(JSON.parse(readFileSync(session, "utf8"))) : [];
 } catch {
   // a session that does not parse holds nothing to look for
 }
-const secrets = [process.env.SWARMIFY_LOGIN_PASSWORD, process.env.SWARMIFY_LOGIN_TOTP, ...kept]
+const secrets = [login.SWARMIFY_LOGIN_PASSWORD, login.SWARMIFY_LOGIN_TOTP, ...kept]
   .filter(Boolean)
   .sort((a, b) => b.length - a.length);
-const hidden = `[secret: ${process.env.SWARMIFY_LOGIN_NAME ?? "login"}]`;
+const hidden = `[secret: ${login.SWARMIFY_LOGIN_NAME ?? "login"}]`;
 function said(raw) {
   const line = secrets.reduce((l, s) => l.replaceAll(s, hidden), raw);
   process.stderr.write(line + "\n");
@@ -211,6 +231,7 @@ try {
     env: {
       ...Object.fromEntries([...BASE, ...plan.pass].filter((k) => k in process.env).map((k) => [k, process.env[k]])),
       ...plan.env,
+      ...login,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });

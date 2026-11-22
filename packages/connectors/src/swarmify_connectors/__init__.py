@@ -237,6 +237,8 @@ LOGIN_ENV = (
 domains (comma-separated), username, password, authenticator secret (when it has one) and the
 path of its Saved Session file. A coding session never sees these names."""
 SESSION_IN, SESSION_OUT = "login-session.json", "login-session.out.json"
+LOGIN_FILE = "login.json"
+"""The login's values for the launcher to hand its process (`_place_session`); gone once read."""
 """The Saved Session the core hands a login's process, mode 600 in its own scratch folder (its
 HOME), and the updated one the process writes beside it, kept once it ends; both deleted then."""
 SCAN_BYTES = 5 * 1024 * 1024
@@ -828,8 +830,8 @@ class Connectors:
         handoff, extra, handed = None, None, None
         if login is not None:
             assert stage is not None  # only a stage names a login
-            login_env, extra, handed = self._hand(connector, login, stage)
-            env = {**env, **login_env}
+            extra, handed = self._hand(connector, login, stage)
+            env = dict(env)  # the login file's name joins it once placed
         confined, sandboxed = self.confine(connector, env, stage, extra=extra)
         if handed is not None:
             assert stage is not None
@@ -887,12 +889,10 @@ class Connectors:
 
     # World Logins (spec: World Logins And Browser Connector)
 
-    def _hand(
-        self, connector: Connector, login: str, stage: Stage
-    ) -> tuple[dict[str, str], Grants, Handed]:
-        """The login's values as the process environment, and the network it adds (its
-        domains), for a package that accepts one. Raises ConnectorError when it does not, or
-        the world has no such login any more."""
+    def _hand(self, connector: Connector, login: str, stage: Stage) -> tuple[Grants, Handed]:
+        """The login's values, and the network it adds (its domains), for a package that
+        accepts one (`_place_session` writes them for its process). Raises ConnectorError when
+        it does not, or the world has no such login any more."""
         if not accepts_login(connector):
             raise ConnectorError(f"{connector.name} does not accept a login")
         if not connector.command:
@@ -909,15 +909,7 @@ class Connectors:
         run_id, stage_id = stage
         secrets_ = [handed.password, handed.totp, *scrub.cookies(handed.session)]
         scrub.add(stage_id, run_id, login, secrets_)
-        values = {
-            "SWARMIFY_LOGIN_NAME": login,
-            "SWARMIFY_LOGIN_DOMAINS": ",".join(handed.login.domains),
-            "SWARMIFY_LOGIN_USERNAME": handed.login.username,
-            "SWARMIFY_LOGIN_PASSWORD": handed.password,
-            **({"SWARMIFY_LOGIN_TOTP": handed.totp} if handed.totp else {}),
-            "SWARMIFY_LOGIN_SESSION": "",  # named now, so the sandbox passes it; set once placed
-        }
-        return values, Grants(domains=list(handed.login.domains)), handed
+        return Grants(domains=list(handed.login.domains)), handed
 
     def _place_session(
         self,
@@ -927,13 +919,24 @@ class Connectors:
         env: dict[str, str],
         stage: Stage,
     ) -> _Handoff:
-        """The Saved Session written, mode 600, in the process's own scratch folder, named in
-        `env` before the process starts."""
+        """The login's values and its Saved Session written, mode 600, in the process's own
+        scratch folder before it starts. Only the file's path joins `env` (SWARMIFY_LOGIN_FILE),
+        which may reach an agent runtime's command line; the sandbox's launcher reads the file,
+        deletes it and hands the values to the process as its environment (LOGIN_ENV)."""
         assert confined is not None and connector.world_id is not None  # `_hand` checked
         home = confined.folder / "home"
         if handed.session is not None:
             safefile.write_in(home, SESSION_IN, handed.session.encode())
-        env["SWARMIFY_LOGIN_SESSION"] = str(home / SESSION_IN)
+        values = {
+            "SWARMIFY_LOGIN_NAME": handed.login.name,
+            "SWARMIFY_LOGIN_DOMAINS": ",".join(handed.login.domains),
+            "SWARMIFY_LOGIN_USERNAME": handed.login.username,
+            "SWARMIFY_LOGIN_PASSWORD": handed.password,
+            **({"SWARMIFY_LOGIN_TOTP": handed.totp} if handed.totp else {}),
+            "SWARMIFY_LOGIN_SESSION": str(home / SESSION_IN),
+        }
+        safefile.write_in(home, LOGIN_FILE, json.dumps(values).encode())
+        env["SWARMIFY_LOGIN_FILE"] = str(home / LOGIN_FILE)
         return _Handoff(connector.world_id, stage, connector.name, handed.login.name, home)
 
     def _settle_login(self, handoff: _Handoff) -> None:
@@ -944,7 +947,7 @@ class Connectors:
             self.logins.keep_session(handoff.world_id, handoff.login, saved)
             run_id, stage_id = handoff.stage
             scrub.add(stage_id, run_id, handoff.login, scrub.cookies(saved))
-        for name in (SESSION_IN, SESSION_OUT):
+        for name in (SESSION_IN, SESSION_OUT, LOGIN_FILE):
             safefile.remove(handoff.home, name)
         run_id, stage_id = handoff.stage
         self.logins.used(
@@ -1282,7 +1285,7 @@ class Connectors:
         except PermissionError:
             saved = set()
         named = {n for c in self.list_all(world_id) for n in c.credentials}
-        return sorted(saved | named | set(LOGIN_ENV))
+        return sorted(saved | named | set(LOGIN_ENV) | {"SWARMIFY_LOGIN_FILE"})
 
     def agent_servers(
         self,
@@ -1317,8 +1320,7 @@ class Connectors:
             env["SWARMIFY_ASSETS"] = str(self.data_dir / "worlds" / world_id / "assets")
             where, handed = stage, None
             if login is not None and accepts_login(connector) and (where := stage or run):
-                login_env, known, handed = self._hand(connector, login, where)
-                env.update(login_env)
+                known, handed = self._hand(connector, login, where)
             else:
                 known = Grants(env=self.identity(run)) if run and not stage else None
             confined, sandboxed = self.confine(connector, env, where, extra=known)
