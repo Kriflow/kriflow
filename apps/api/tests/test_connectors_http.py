@@ -133,7 +133,7 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
         ("slack", "1.1.1", "connectors/slack"),
         ("speech", "1.3.1", "connectors/speech"),
         ("upload_post", "1.0.1", "connectors/upload_post"),
-        ("youtube", "1.4.0", "connectors/youtube"),
+        ("youtube", "1.5.0", "connectors/youtube"),
     ]
     assert client.get(f"/api/worlds/{w}/packages").json() == [
         {"name": "fal_video", "version": "0.0.1"},
@@ -142,7 +142,7 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
         {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.4.0"},
+        {"name": "youtube", "version": "1.5.0"},
     ]
     form = client.get(f"/api/worlds/{w}/packages/fal_video/setup")
     (field,) = form.json()["fields"]
@@ -391,7 +391,7 @@ def test_a_package_serves_the_icon_its_manifest_names_as_an_image_only(
     listed = {c["name"]: c for c in client.get(f"/api/worlds/{w}/connectors").json()}
     assert listed["youtube"]["icon"] == "icon.svg" and listed["upload_post"]["icon"] == "icon.png"
     assert {p["name"]: p["icon"] for p in client.get("/api/packages").json()}["meta"] == "icon.svg"
-    svg = client.get("/api/packages/youtube/1.4.0/icon")
+    svg = client.get("/api/packages/youtube/1.5.0/icon")
     assert svg.status_code == 200 and svg.headers["content-type"] == "image/svg+xml"
     assert svg.content == (Path(__file__).parents[3] / "connectors/youtube/icon.svg").read_bytes()
     assert svg.headers["x-content-type-options"] == "nosniff"
@@ -556,7 +556,7 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
         {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.4.0"},
+        {"name": "youtube", "version": "1.5.0"},
     ]
     echo = next(
         c for c in client.get(f"/api/worlds/{one}/connectors").json() if c["name"] == "echo"
@@ -573,7 +573,7 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
         {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.4.0"},
+        {"name": "youtube", "version": "1.5.0"},
     ]
     assert client.get(f"/api/worlds/{two}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
@@ -582,7 +582,7 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
         {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.4.0"},
+        {"name": "youtube", "version": "1.5.0"},
     ]
     assert client.post(f"/api/worlds/{one}/workflows", json={"yaml": ECHO}).status_code == 422
     assert client.post(f"/api/worlds/{two}/workflows", json={"yaml": ECHO}).status_code == 201
