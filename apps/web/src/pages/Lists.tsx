@@ -21,8 +21,10 @@ const ago = (ts: string) => `${took(Math.max(0, (Date.now() - Date.parse(ts)) / 
 const entries = (n: number) => `${n} ${n === 1 ? "Entry" : "Entries"}`;
 /** A field's value as typed in its box: text stays text, anything else is JSON. */
 const shown = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
-/** What was typed back as a value: JSON when it reads as JSON (a number, true), else the text. */
-const typed = (s: string): unknown => {
+/** What was typed back as a value: text stays text when it was text, else JSON when it reads
+ * as JSON (a number, true), else the text. */
+const typed = (s: string, was: unknown): unknown => {
+  if (typeof was === "string") return s;
   try {
     return JSON.parse(s);
   } catch {
@@ -181,6 +183,7 @@ export function Lists() {
                     <b>{e.title}</b>
                     <span className="entry-meta">
                       <span className="pill">{e.status}</span>
+                      {e.claimed_by && <span className="pill">held by a run</span>}
                       {e.score !== null && e.score !== undefined && <span>score {e.score}</span>}
                       {Object.entries(e.fields)
                         .slice(0, 3)
@@ -211,6 +214,7 @@ export function Lists() {
             worldId={worldId}
             list={list}
             keys={moving}
+            held={all.filter((e) => e.claimed_by && moving?.includes(e.key)).length}
             title={moving?.length === 1 ? (all.find((e) => e.key === moving[0])?.title ?? moving[0]!) : entries(moving?.length ?? 0)}
             onClose={() => setMoving(null)}
             onMoved={() => {
@@ -230,6 +234,7 @@ function MoveSheet({
   worldId,
   list,
   keys,
+  held,
   title,
   onClose,
   onMoved,
@@ -237,12 +242,15 @@ function MoveSheet({
   worldId: string;
   list: WorldList;
   keys: string[] | null;
+  held: number;
   title: string;
   onClose: () => void;
   onMoved: () => void;
 }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // A reason typed and left belongs to those Entries, not the next ones moved.
+  useEffect(() => setNote(""), [keys]);
   const move = async (status: string) => {
     if (!keys) return;
     setBusy(true);
@@ -253,16 +261,21 @@ function MoveSheet({
       })
       .finally(() => setBusy(false));
     if (error || !data) {
-      notify(`Could not move: ${(error as { detail?: string } | undefined)?.detail ?? "the API refused"}`, { tone: "error" });
+      const detail = (error as { detail?: unknown } | undefined)?.detail;
+      notify(`Could not move: ${typeof detail === "string" ? detail : "the API refused"}`, { tone: "error" });
       return;
     }
     notify(`Moved ${keys.length === 1 ? title : entries(keys.length)} to ${status}.`, { tone: "ok" });
-    setNote("");
     onMoved();
     onClose();
   };
   return (
     <Sheet open={keys !== null} onClose={onClose} label={`Move ${title}`} className="move-sheet">
+      {held > 0 && (
+        <p className="faint" data-testid="move-held">
+          {held === 1 && keys?.length === 1 ? "A run holds it" : `${entries(held)} held by a run`}; the run keeps its claim.
+        </p>
+      )}
       <label className="move-note">
         Reason (optional)
         <textarea rows={2} value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} />
@@ -336,16 +349,24 @@ function EntrySheet({
   const save = async (ev: FormEvent) => {
     ev.preventDefault();
     if (!entry) return;
+    const had = entry.score ?? null;
+    if (score.trim() === "" && had !== null) return notify("A score cannot be cleared; type one or keep the old one.", { tone: "error" });
     const n = score.trim() === "" ? null : Number(score);
     if (n !== null && !Number.isFinite(n)) return notify("A score is a number.", { tone: "error" });
+    // Only what was edited goes back, so a run's later write to another field stands.
+    const edited = Object.fromEntries(
+      fields.filter(([k, v]) => v !== shown(entry.fields[k])).map(([k, v]) => [k, typed(v, entry.fields[k])]),
+    );
+    if (Object.keys(edited).length === 0 && n === had) return notify("Nothing changed.");
     setBusy(true);
     const { data, error } = await api
       .PATCH("/api/worlds/{world_id}/lists/{name}/entries/{key}", {
         params: { path: { world_id: worldId, name: list.name, key: entry.key } },
-        body: { fields: Object.fromEntries(fields.map(([k, v]) => [k, typed(v)])), score: n, note: "" },
+        body: { fields: edited, score: n === had ? null : n, note: "" },
       })
       .finally(() => setBusy(false));
     if (error || !data) return notify("Could not save the Entry.", { tone: "error" });
+    setEntry((e) => (e ? { ...e, ...data } : e));
     notify("Saved.", { tone: "ok" });
   };
 

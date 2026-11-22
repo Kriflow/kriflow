@@ -1,7 +1,7 @@
 """The Lists page at phone size (issue 540): an operator on the sofa finds pitched Entries waiting
-through Needs you, approves two and rejects one in batches with a reason, restores the rejected
-one, edits a score, and opens an Entry's file, run and history. Nothing is wider than the
-screen and every tap is a 44 px thumb, at 390 and 360 wide."""
+through Needs you, approves two and rejects one with a reason, restores the rejected one, parks
+two in a batch with one reason, edits a score, and opens an Entry's file, run and history.
+Nothing is wider than the screen and every tap is a 44 px thumb, at 390 and 360 wide."""
 
 import sqlite3
 import time
@@ -87,7 +87,7 @@ def test_curating_a_list_from_a_phone(phone: Page, world: dict[str, str]) -> Non
     entry = lambda key: httpx.get(f"{world['api']}/entries/{key}").json()  # noqa: E731
 
     # Needs you says the list waits and leads to it.
-    phone.goto("/gates")
+    phone.goto(f"/gates?world={w}")
     group = phone.get_by_test_id("notices-review")
     expect(group).to_contain_text("1 list waits for you")
     group.locator("summary").click()
@@ -134,15 +134,27 @@ def test_curating_a_list_from_a_phone(phone: Page, world: dict[str, str]) -> Non
     phone.keyboard.press("Escape")
     assert entry("c")["status"] == "new"
 
-    # Edit A's score; its history says who moved it and why; its file and its run open.
+    # Batch park B and C with one reason; both histories carry it.
     phone.get_by_test_id("statuses").get_by_role("link", name="new").click()
     expect(cards).to_have_count(3)
+    for title in ("Idea B", "Idea C"):
+        phone.get_by_label(f"Select {title}").check()
+    phone.get_by_test_id("batch").get_by_role("button", name="Move 2").click()
+    move(phone, "Next month", "parked")
+    expect(cards).to_have_count(1)
+    for key in ("b", "c"):
+        assert entry(key)["status"] == "parked"
+        assert entry(key)["history"][-1]["note"] == "Next month"
+
+    # Edit A's score alone; its fields stay as they were and its history names only the score.
     cards.filter(has_text="Idea A").get_by_role("button").click()
     expect(sheet).to_contain_text("pitched to new by operator: Good week")
     sheet.get_by_label("Score").fill("9.5")
     sheet.get_by_role("button", name="Save").click()
     expect(phone.get_by_text("Saved.")).to_be_visible()
     assert entry("a")["score"] == 9.5
+    assert entry("a")["fields"] == {"kind": "one"}
+    expect(sheet).to_contain_text("Changed score by operator")
     expect(sheet.get_by_role("link", name="Make it")).to_be_visible()
     fits(phone)
     sheet.get_by_role("link", name="Open file").click()

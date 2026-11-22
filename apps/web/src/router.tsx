@@ -192,7 +192,6 @@ export const assetsRoute = createRoute({
   component: Assets,
 });
 
-// A document artifact or note, rendered to fit a phone; `path` is its path in the world folder.
 // `list` is the World List shown, `status` its status chip ("" for all).
 export const listsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -202,6 +201,7 @@ export const listsRoute = createRoute({
     Object.fromEntries((["list", "status"] as const).flatMap((k) => (typeof search[k] === "string" ? [[k, search[k]]] : []))),
 });
 
+// A document artifact or note, rendered to fit a phone; `path` is its path in the world folder.
 export const readerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/worlds/$worldId/read",
