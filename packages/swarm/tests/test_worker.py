@@ -1260,7 +1260,7 @@ class _Inbox:
     def before_tool(self, tool: str, input: dict, ref: str | None = None) -> str | None:  # type: ignore[type-arg]
         return None
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         return None
 
     def inbox(self) -> list[tuple[str, bool]]:

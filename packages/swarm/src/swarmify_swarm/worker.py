@@ -972,13 +972,16 @@ class Swarm:
         # that never started (lost, died, offline) hands them to the next.
         pending: list[str] = []
         while failed < SESSIONS:
-            stored = board.agent(at.world_id, at.run_id, at.stage_id, name, role).session_id
+            agent = board.agent(at.world_id, at.run_id, at.stage_id, name, role)
+            stored = agent.session_id
             resume = None if lost or (fresh and stored == before) else stored
             if resume:
                 said = "A replacement resumes" if failed else "Continuing"
                 board.log(at.stage_id, name, "session", f"{said} session {resume}.")
             session = spec(resume)
             hooks.secrets |= secret_values(session)
+            if resume:
+                session = replace(session, resumed_total=agent.session_total_usd)
             if lost:
                 session = replace(session, prompt=f"{session.prompt}\n\n{self._progress(at, name)}")
             pending += [t for t, _ in hooks.inbox()]  # sent while no session ran: it comes first
@@ -1016,6 +1019,8 @@ class Swarm:
             finally:
                 self._live.discard((at.stage_id, name))
             pending = []  # the session ran, so its transcript holds them
+            if end.total_usd is not None:
+                board.update_agent(at.stage_id, name, session_total_usd=end.total_usd)
             if end.stopped:
                 board.log(at.stage_id, name, "session", f"Stopped: {end.stopped}")
                 raise Stopped(end.stopped)
@@ -1442,9 +1447,9 @@ class _Hooks:
             for e in self.board.take(self.stage_id, self.agent)
         ]
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         """Add the estimate to the agent, then ask the Budget whether the session goes on."""
-        self.board.update_agent(self.stage_id, self.agent, cost_usd=usd)
+        self.board.update_agent(self.stage_id, self.agent, cost_usd=usd, tokens=tokens)
         self.renew()
         self.stopped = self.budget()
         return self.stopped

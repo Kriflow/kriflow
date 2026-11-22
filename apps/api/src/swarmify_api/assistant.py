@@ -274,6 +274,15 @@ class Conversations:
             ).fetchone()
         return row[0] if row else None
 
+    def session_spent(self, session_id: str) -> float:
+        """What the session's answered turns cost, which its next total includes."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT coalesce(sum(cost_usd), 0) FROM assistant_messages WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        return float(row[0])
+
     def messages(self, run: Run) -> list[Message]:
         with self._conn() as conn:
             rows = conn.execute(
@@ -388,7 +397,7 @@ class _Hooks:
     def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
         return None if tool in self.allowed else f"{tool} is not allowed in the Run Assistant."
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         return None
 
 
@@ -402,6 +411,7 @@ async def run_turn(
     folder = worlds.folder(run.world_id)
     folder.mkdir(parents=True, exist_ok=True)
     world = worlds.get(run.world_id)
+    resume = conversations.session(run.id)
     spec = SessionSpec(
         system_prompt=system,
         prompt=prompt,
@@ -409,7 +419,8 @@ async def run_turn(
         plugin=None,
         tools=tools,
         allowed=allowed,
-        resume=conversations.session(run.id),
+        resume=resume,
+        resumed_total=conversations.session_spent(resume) if resume else None,
         max_turns=MAX_TURNS,
         output_schema=schema,
         model=world.model_for("planner") if world else None,

@@ -2225,6 +2225,12 @@ export interface components {
             skills?: string[];
             /** Model */
             model?: string | null;
+            /** Tokens */
+            tokens?: {
+                [key: string]: number;
+            };
+            /** Session Total Usd */
+            session_total_usd?: number | null;
         };
         /** Answer */
         Answer: {

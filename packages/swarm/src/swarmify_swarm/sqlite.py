@@ -18,6 +18,7 @@ from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 from swarmify_swarm.model import (
     HEARTBEAT_TIMEOUT,
+    TOKENS,
     Agent,
     AgentRole,
     AgentStatus,
@@ -265,19 +266,32 @@ class SqliteStorage:
         cost_usd: float | None = None,
         skills: list[str] | None = None,
         model: str | None = None,
+        tokens: dict[str, int] | None = None,
+        session_total_usd: float | None = None,
     ) -> Agent:
+        t = tokens or {}
         with self._write() as conn:
             found = conn.execute(
                 "UPDATE agents SET status = coalesce(?, status),"
+                " session_total_usd = CASE WHEN ? IS NOT NULL THEN ?"
+                " WHEN coalesce(?, session_id) IS NOT session_id THEN NULL"
+                " ELSE session_total_usd END,"
                 " session_id = coalesce(?, session_id), cost_usd = cost_usd + coalesce(?, 0),"
-                " skills = coalesce(?, skills), model = coalesce(?, model), updated_at = ?"
+                " skills = coalesce(?, skills), model = coalesce(?, model),"
+                " input_tokens = input_tokens + ?, output_tokens = output_tokens + ?,"
+                " cache_creation_input_tokens = cache_creation_input_tokens + ?,"
+                " cache_read_input_tokens = cache_read_input_tokens + ?, updated_at = ?"
                 " WHERE stage_id = ? AND name = ?",
                 (
                     status,
+                    session_total_usd,
+                    session_total_usd,
+                    session_id,
                     session_id,
                     cost_usd,
                     None if skills is None else json.dumps(skills),
                     model,
+                    *(int(t.get(k, 0)) for k in TOKENS),
                     _iso(None),
                     stage_id,
                     name,
@@ -471,6 +485,8 @@ def _agent(row: sqlite3.Row) -> Agent:
         row["updated_at"],
         json.loads(row["skills"]),
         row["model"],
+        {k: row[k] for k in TOKENS},
+        row["session_total_usd"],
     )
 
 

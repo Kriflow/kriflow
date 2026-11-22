@@ -12,7 +12,8 @@ plugin; the opt-in real-CLI smoke test is where it gets pinned) (plus `host-skil
 settings are on, standing in for `~/.claude/skills` leaking in), the session runs on the model the
 options name, `resume` keeps the session id,
 each tool call's step carries `usage` (one message id per step), and the result carries `cost`
-as the session's estimated total. A user turn after the prompt (a person's message) plays the
+as the session's estimated total; as the real CLI does, a resumed session's total adds the totals
+of the sessions it continues. A user turn after the prompt (a person's message) plays the
 script's `replies` once the turn in play ends; an interrupt ends that turn first, with an error
 result, as the CLI's does.
 """
@@ -122,6 +123,8 @@ class Script:
         """The prompt each session was started with."""
         self.outcomes: list[Outcome] = []
         self.last_id: str | None = None
+        self.totals: dict[str, float] = {}
+        """Each session id's total so far, which a resumed session's result reports."""
 
     def transport(self, options: ClaudeAgentOptions) -> "ScriptedTransport":
         n = len(self.sessions)
@@ -366,7 +369,12 @@ class ScriptedTransport(Transport):
                 "parent_tool_use_id": None,
                 "session_id": sid,
             }
-        yield _result(sid, "success", False, len(steps), self.script.cost, last, answer)
+        yield _result(sid, "success", False, len(steps), self._total(sid), last, answer)
+
+    def _total(self, sid: str) -> float:
+        totals = self.script.totals
+        totals[sid] = totals.get(sid, 0.0) + self.script.cost
+        return totals[sid]
 
     async def _run_tool(self, step: Call) -> AsyncIterator[dict[str, Any] | tuple[str, bool]]:
         """Yields control requests to the SDK, then one (text, is_error) answer."""

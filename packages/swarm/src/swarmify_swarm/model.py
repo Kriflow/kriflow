@@ -46,6 +46,10 @@ AgentStatus = Literal["working", "done", "failed"]
 LogKind = Literal["session", "tool", "denied", "result", "error", "text", "output", "message"]
 
 
+TOKENS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+"""The usage counts each model step reports, kept per agent beside its estimated cost."""
+
+
 @dataclass(frozen=True)
 class Agent:
     """One agent of a swarm stage. `session_id` is its Agent SDK session, so a replacement agent
@@ -66,6 +70,10 @@ class Agent:
     """What the session's init message said loaded from the world's skills plugin."""
     model: str | None = None
     """The model its latest session ran on, as the session reported it."""
+    tokens: dict[str, int] = field(default_factory=dict)
+    """Its sessions' token counts so far: input, output, cache creation and cache read."""
+    session_total_usd: float | None = None
+    """The total its current session last reported at a result, which resuming it includes."""
 
 
 @dataclass(frozen=True)

@@ -210,8 +210,8 @@ class _Seen:
     def inbox(self) -> list[tuple[str, bool]]:
         return self.hooks.inbox()
 
-    def cost(self, usd: float) -> str | None:
-        return self.hooks.cost(usd)
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
+        return self.hooks.cost(usd, tokens)
 
 
 class Patient:
