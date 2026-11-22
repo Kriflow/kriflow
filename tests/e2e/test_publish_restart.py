@@ -18,7 +18,7 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from swarmify_connectors.setup import SetupStore
+from kriflow_connectors.setup import SetupStore
 
 FLOW = """name: Post once
 stages:

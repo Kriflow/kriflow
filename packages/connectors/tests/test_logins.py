@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors, _Handoff
-from swarmify_connectors.logins import FileSecrets, SecretStore, Taken, domain_problem, totp
-from swarmify_connectors.packages import MANIFEST
-from swarmify_kernel.sqlite import connect
+from kriflow_connectors import Connectors, _Handoff
+from kriflow_connectors.logins import FileSecrets, SecretStore, Taken, domain_problem, totp
+from kriflow_connectors.packages import MANIFEST
+from kriflow_kernel.sqlite import connect
 
 SECRET = "JBSWY3DPEHPK3PXP"
 

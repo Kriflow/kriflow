@@ -12,16 +12,16 @@ from api_fakes import install
 from fastapi.testclient import TestClient
 from mcp import Client
 
-from swarmify_api.main import (
+from kriflow_api.main import (
     connector_service,
     run_control,
     task_board,
     workflow_service,
     world_service,
 )
-from swarmify_api.mcp import server
-from swarmify_connectors.logins import FileSecrets, ref
-from swarmify_kernel.sqlite import connect
+from kriflow_api.mcp import server
+from kriflow_connectors.logins import FileSecrets, ref
+from kriflow_kernel.sqlite import connect
 
 SIGNER = "packages/connectors/tests/fixtures/packages/signer"
 PASSWORD, NEW_PASSWORD = "Pa55-word-9183", "N3w-pa55-2207"

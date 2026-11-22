@@ -34,17 +34,17 @@ import httpx
 from claude_agent_sdk import ClaudeAgentOptions
 from fastapi import FastAPI
 
-from swarmify_api.main import create_app as real_app
-from swarmify_api.planner import SYSTEM as PLANNER_SYSTEM
-from swarmify_connectors import Connector, ConnectorError, FakeTransport, McpTransport
-from swarmify_connectors.fake import FIXTURE_DEFAULTS, default_list
-from swarmify_connectors.mcp_transport import Caller
-from swarmify_connectors.model import Tool
-from swarmify_learning import SYSTEM as RETRO_SYSTEM
-from swarmify_memory import GRAPH_OUT
-from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedTransport
-from swarmify_worlds import World, Worlds
+from kriflow_api.main import create_app as real_app
+from kriflow_api.planner import SYSTEM as PLANNER_SYSTEM
+from kriflow_connectors import Connector, ConnectorError, FakeTransport, McpTransport
+from kriflow_connectors.fake import FIXTURE_DEFAULTS, default_list
+from kriflow_connectors.mcp_transport import Caller
+from kriflow_connectors.model import Tool
+from kriflow_learning import SYSTEM as RETRO_SYSTEM
+from kriflow_memory import GRAPH_OUT
+from kriflow_swarm import SdkRuntime, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedTransport
+from kriflow_worlds import World, Worlds
 
 REPO = Path(__file__).parents[2]
 FIXTURES = REPO / "packages/connectors/tests/fixtures/packages"

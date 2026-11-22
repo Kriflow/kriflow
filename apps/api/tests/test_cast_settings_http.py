@@ -11,12 +11,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fake_graph import fake_extract
-from swarmify_api.main import create_app, world_service
-from swarmify_connectors import FakeTransport
-from swarmify_memory import FakeGraphIndex
-from swarmify_runs import slot_queue
-from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_api.main import create_app, world_service
+from kriflow_connectors import FakeTransport
+from kriflow_memory import FakeGraphIndex
+from kriflow_runs import slot_queue
+from kriflow_swarm import SdkRuntime, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 
 RESEARCH = """name: Research
 stages:
@@ -448,7 +448,7 @@ def test_a_saved_ad_hoc_run_keeps_the_tasks_added_by_hand_in_its_goal(
 ) -> None:
     """Story 21: a task the operator added to the goal stage is part of what the run did, so
     the saved workflow's goal names it; tasks the agents added are theirs to plan again."""
-    from swarmify_api.main import task_board
+    from kriflow_api.main import task_board
 
     script.scripts = [PLAN, WORK, PASS]
     world = _world(running)

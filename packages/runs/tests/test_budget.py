@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from swarmify_runs.budget import DEFAULT_USD, level, monthly_cap, rule
+from kriflow_runs.budget import DEFAULT_USD, level, monthly_cap, rule
 
 MONEY = st.floats(min_value=0, max_value=1e6, allow_nan=False)
 

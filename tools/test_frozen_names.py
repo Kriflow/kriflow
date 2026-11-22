@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from swarmify_api.auth import COOKIE, Operator
-from swarmify_api.main import migrated_db
-from swarmify_connectors.packages import RECORD
-from swarmify_runs import runner
-from swarmify_runs.control import APP_NAME, SCHEDULED_WORKFLOW, WAKE
-from swarmify_swarm.ports import TOOL_SERVER, tool_id
-from swarmify_swarm.sqlite import SYSTEM
+from kriflow_api.auth import COOKIE, Operator
+from kriflow_api.main import migrated_db
+from kriflow_connectors.packages import RECORD
+from kriflow_runs import runner
+from kriflow_runs.control import APP_NAME, SCHEDULED_WORKFLOW, WAKE
+from kriflow_swarm.ports import TOOL_SERVER, tool_id
+from kriflow_swarm.sqlite import SYSTEM
 from tools import backup_data, gpu_compose
 
 ROOT = Path(__file__).resolve().parents[1]

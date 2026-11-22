@@ -11,10 +11,9 @@ from typing import Any
 
 import pytest
 
-from runs_fakes import FakeNotifier, wait_for
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import (
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import (
     Illegal,
     Run,
     RunChange,
@@ -24,6 +23,7 @@ from swarmify_runs import (
     run_folder,
     stage_folder,
 )
+from runs_fakes import FakeNotifier, wait_for
 
 WRITE = StageDef("write", "swarm", {"goal": "Write the metadata.", "done_when": "It is there."})
 TAG = StageDef("tag", "swarm", {"goal": "Tag it.", "done_when": "Tagged."})

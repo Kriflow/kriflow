@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-import swarmify_connectors.packages as packages_module
-from swarmify_connectors import DEFAULT_LIST, Connectors, InstallError
-from swarmify_connectors.fake import default_list, tag_package
-from swarmify_connectors.packages import RECORD
+import kriflow_connectors.packages as packages_module
+from kriflow_connectors import DEFAULT_LIST, Connectors, InstallError
+from kriflow_connectors.fake import default_list, tag_package
+from kriflow_connectors.packages import RECORD
 
 FIXTURES = Path(__file__).parent / "fixtures/packages"
 REPO = Path(__file__).parents[3]

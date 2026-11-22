@@ -3,8 +3,8 @@
 
 from pathlib import Path
 
+from kriflow_workflows import ConnectorRef, SqliteStorage, Workflows
 from samples import CONNECTORS, migrated_db
-from swarmify_workflows import ConnectorRef, SqliteStorage, Workflows
 
 YAML = """
 name: Echo

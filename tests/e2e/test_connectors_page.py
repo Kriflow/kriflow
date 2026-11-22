@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 from playwright.sync_api import Page, expect
 
-from swarmify_connectors.fake_oauth import FakeProvider
+from kriflow_connectors.fake_oauth import FakeProvider
 
 ECHO = Path(__file__).parents[2] / "packages/connectors/tests/echo_server.py"
 

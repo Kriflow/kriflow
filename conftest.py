@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import packages
+from kriflow_connectors import packages
 
 
 def pytest_configure(config: pytest.Config) -> None:

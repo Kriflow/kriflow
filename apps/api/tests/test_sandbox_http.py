@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import create_app
+from kriflow_api.main import create_app
 
 # These tests start a default package's real `.venv` process, so its install step runs.
 real_default_installs = True

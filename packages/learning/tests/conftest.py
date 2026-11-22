@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_learning import MIGRATIONS, Learning, SqliteStorage
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_learning import MIGRATIONS, Learning, SqliteStorage
 
 
 @pytest.fixture

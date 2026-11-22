@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy.exc import OperationalError
 
+from kriflow_runs import Pinned, Runner, SqliteStorage, StageDef
+from kriflow_runs.control import SCHEDULED_WORKFLOW
 from runs_fakes import FakeConnector, FakeNotifier, wait_for
-from swarmify_runs import Pinned, Runner, SqliteStorage, StageDef
-from swarmify_runs.control import SCHEDULED_WORKFLOW
 
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})
 EVERY_SECOND = "* * * * * *"
@@ -113,7 +113,7 @@ def test_a_busy_database_fails_the_schedule_instead_of_deferring_it(
 def test_skip_when_live_skips_and_logs_ticks_while_a_run_is_live(
     runner: Runner, caplog: pytest.LogCaptureFixture
 ) -> None:
-    caplog.set_level(logging.INFO, logger="swarmify_runs.runner")
+    caplog.set_level(logging.INFO, logger="kriflow_runs.runner")
     runner.schedule("wf_live", EVERY_SECOND)
     wait_for(lambda: len(runner.list_all("world_1")) == 1, 30)
     first = runner.list_all("world_1")[0]

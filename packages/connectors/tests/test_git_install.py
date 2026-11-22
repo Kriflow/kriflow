@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import InstallError, ManifestError, Packages
-from swarmify_connectors.packages import MANIFEST, RECORD, permissions, read_manifest
+from kriflow_connectors import InstallError, ManifestError, Packages
+from kriflow_connectors.packages import MANIFEST, RECORD, permissions, read_manifest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ECHO = [

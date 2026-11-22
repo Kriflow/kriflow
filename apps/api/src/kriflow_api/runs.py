@@ -1,0 +1,739 @@
+"""HTTP face of the Runs context: start a run of a workflow version or an Ad Hoc Run from a
+typed goal, fork a run or promote a Library artifact into one, list runs, read one, act on one
+(decide at its gate, pause, resume, abort, set its Budget), propose, apply and list its Run
+Changes, read the baseline it is measured against, the world's spend this month, list every open
+gate and save a finished run as a workflow."""
+
+import time
+from collections.abc import Callable
+from dataclasses import asdict, replace
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, StringConstraints, model_validator
+
+from kriflow_api.workflows import INVALID, Report
+from kriflow_runs import (
+    POSTED_CHOICES,
+    AppliedChange,
+    ChangeProposal,
+    Gate,
+    Illegal,
+    Pinned,
+    Run,
+    RunChange,
+    RunControl,
+    Runner,
+    StageDef,
+)
+from kriflow_runs.control import run_folder
+from kriflow_swarm import OPERATOR, Task
+from kriflow_swarm.network import Waiting
+from kriflow_workflows import (
+    Invalid,
+    Stage,
+    Violation,
+    Workflows,
+    WorkflowVersion,
+    dump_workflow,
+)
+from kriflow_worlds import MAX_AGENTS, Worlds
+
+DONE_WHEN = "The goal is met and what was found is written down as notes and artifacts."
+"""An Ad Hoc Run's done condition when none is typed."""
+RETRO = StageDef(
+    "retro",
+    "retro",
+    {
+        "kind": "skill",
+        "ask": "The retro read this run and proposes a change. Approve it, edit it, or reject it.",
+    },
+)
+"""The stage every run ends with (ADR 0008): the Retro, whose proposal waits at a skill gate."""
+ToolsFor = Callable[[str], list[str]]
+"""(world id) to the names of the world's connectors a swarm stage may use."""
+TasksOf = Callable[[str], list[Task]]
+"""(stage id) to the tasks on the swarm stage's whiteboard."""
+
+
+class StartRun(BaseModel):
+    version: int | None = None
+    """The workflow version to pin. The current one when left out."""
+    budget_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    """The run's Budget, overriding the workflow's `budget_usd`; 5 USD when neither is set."""
+    budget_warn_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    """The spend at which `budget.warning` fires, overriding the workflow's; below the Budget."""
+    agents: int | None = Field(default=None, ge=1, le=MAX_AGENTS)
+    """Workers per swarm stage, overriding each stage's own `agents`."""
+    baseline: bool = False
+    """Baseline mode: every swarm stage runs one agent with no graph, to measure the swarm."""
+
+
+class AdHoc(BaseModel):
+    """An Ad Hoc Run: one swarm stage on a typed goal, using every connector of the world that
+    swarm stages may use, with no saved workflow."""
+
+    goal: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    done_when: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] = ""
+    budget_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    baseline: bool = False
+
+
+class Spend(BaseModel):
+    """What the world's runs spent this calendar month against its Monthly Budget."""
+
+    month: str
+    spent_usd: float
+    monthly_budget_usd: float | None
+
+
+class SetBudget(BaseModel):
+    """The run's new Budget in total, not an increment, so sending it twice adds nothing twice.
+    Must be above what the run and its child runs have spent."""
+
+    budget_usd: float = Field(gt=0, allow_inf_nan=False)
+
+
+class Reject(BaseModel):
+    """A card the operator rejects at a pick gate, and why (optional)."""
+
+    artifact: str = Field(max_length=2_000)
+    reason: str = Field(default="", max_length=2_000)
+
+
+class ReviewItems(BaseModel):
+    """At a fan-out stage with `approve`: the Items approved, and those sent back, each with
+    the note its child run makes it again with."""
+
+    approve: list[str] = Field(default_factory=list, max_length=1_000)
+    send_back: dict[str, str] = Field(default_factory=dict, max_length=1_000)
+
+
+class Decide(BaseModel):
+    """A gate answer. Pick gates need `choice` or `artifact`, or `artifacts` at a gate that
+    takes several picks; approve gates may name `send_back_to`, an earlier stage that then runs
+    again with `note` in its context; confirm gates take neither."""
+
+    choice: str | None = Field(default=None, max_length=2_000)
+    note: str = Field(default="", max_length=10_000)
+    send_back_to: str | None = None
+    artifact: str | None = Field(default=None, max_length=2_000)
+    """The chosen artifact's path in the world folder, as `GET /runs/{run_id}/artifacts` lists
+    it: the card picked, or what was approved. A pick with no `choice` takes its title."""
+    artifacts: list[str] | None = Field(default=None, max_length=10)
+    """At a pick gate: the cards picked, in pick order, up to the gate's `picks`; the first
+    stands as `artifact`. The cards it offered and nobody picked or rejected are Parked."""
+    rejects: list[Reject] | None = Field(default=None, max_length=100)
+    """At a pick gate: offered cards rejected, each with an optional reason, which idea stages
+    read so they never offer them again."""
+    edits: dict[str, Any] | None = None
+    """At a gate before a publish stage: new values for fields its connector marks editable, by
+    key. Every field's value as posted is recorded with the decision."""
+    seen: dict[str, Any] | None = None
+    """At a gate before a publish stage: the values the gate showed, by key. A field that is not
+    editable and has changed since (a relative schedule now resolving to tomorrow) is refused
+    with 422, so the inbox can show it again."""
+    links: list[Annotated[str, StringConstraints(max_length=2_000)]] | None = Field(
+        default=None, max_length=10
+    )
+    """At a "Did this post go out?" gate answered `posted`: the link to the post on each
+    platform, which the stage records as what it posted."""
+
+
+class Change(BaseModel):
+    """A Run Change (ADR 0027). A `stage_edit` targets a stage that has not started, by id, and
+    its `payload` is the stage's whole new config. An `artifact_edit` targets a finished stage
+    and its `payload` is `{"path": <a text file in its artifacts folder>, "text": <new text>}`.
+    A `rerun` targets a finished or failed stage and its `payload` holds the `note` the stage
+    reruns with, its agents starting afresh. A `follow_up` targets a finished or failed swarm
+    stage and its `payload`'s `note` is the change asked: the agents continue their sessions
+    with it as a new Attempt, and later stages run again as for a Rerun. A `skip` targets a
+    stage that has not started and has none. A `restructure`'s
+    `payload` is `stages`, the new list from the target stage on, each a stage's `name`, `type`
+    and config fields."""
+
+    kind: Literal["stage_edit", "artifact_edit", "rerun", "follow_up", "skip", "restructure"]
+    stage: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _edits_carry_a_payload(self) -> "Change":
+        if self.kind in ("stage_edit", "artifact_edit", "restructure") and not self.payload:
+            raise ValueError(f"a {self.kind} needs a payload")
+        return self
+
+    def value(self) -> RunChange:
+        return RunChange(self.kind, self.stage, self.payload)
+
+
+class StageMessage(BaseModel):
+    """A Message to the running stage's agents (a Run Change a person applies as they send
+    it): to everyone still working, or to the agent named `to`; with `interrupt` the agent
+    stops its turn and does this instead."""
+
+    stage: str
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=8000)]
+    to: str | None = None
+    interrupt: bool = False
+
+
+class ApplyChange(Change):
+    revision: int
+    """The run's revision the proposal was made against: a run that moved on since refuses it."""
+
+
+class Fork(BaseModel):
+    stage: int = Field(ge=0)
+    """The first stage that runs anew; every stage before it is copied from the run."""
+
+
+class Promote(BaseModel):
+    artifact: str
+    """The Library artifact's path in the world folder; it becomes the run's input."""
+    stage: int = Field(ge=1)
+    """The stage the run starts at; the earlier ones are skipped."""
+    version: int | None = None
+
+
+class SaveAsWorkflow(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    """The workflow's name; the run's name when left out."""
+
+
+ACTION_ERRORS: dict[int | str, dict[str, Any]] = {
+    404: {"description": "No such run"},
+    409: {"description": "The run is not in a state where this action applies"},
+}
+
+
+class Archived(Invalid):
+    """A run start of an archived workflow: refused until it is restored."""
+
+    def __init__(self, name: str) -> None:
+        message = f"{name} is archived. Restore it to run it."
+        super().__init__([Violation("archived", message, None)])
+
+
+def stage_def(stage: Stage) -> StageDef:
+    fields = asdict(stage)
+    return StageDef(fields.pop("name"), fields.pop("type"), fields)
+
+
+def with_agents(stages: list[StageDef], agents: int | None) -> list[StageDef]:
+    """Each swarm stage carries its worker count in its config as `agents`, so a fork, retry or
+    restart keeps it. `agents` overrides every stage's; None leaves each stage's own."""
+    if agents is None:
+        return stages
+    return [
+        replace(s, config={**s.config, "agents": agents}) if s.type == "swarm" else s
+        for s in stages
+    ]
+
+
+def pinner(workflows: Workflows) -> Callable[..., Pinned]:
+    """A workflow version as Runs starts it: the given version, the current one by default.
+    Every run start of a version comes through here (start, promote, fork, schedule, child run,
+    MCP), so it runs today's workflow check first, at the package versions the version
+    recorded, which the run will use: rules and connectors change after a version is saved.
+    Raises KeyError for an unknown workflow or version, Invalid when the version fails the
+    check or the workflow is archived."""
+
+    def pin(workflow_id: str, number: int | None = None) -> Pinned:
+        workflow = workflows.get(workflow_id)
+        if workflow is None:
+            raise KeyError(f"workflow not found: {workflow_id}")
+        if workflow.archived_at is not None:
+            raise Archived(workflow.name)
+        version = workflows.version(workflow_id, number or workflow.current_version)
+        if version is None:
+            raise KeyError(f"version not found: {workflow_id} v{number}")
+        violations = workflows.check(
+            workflow.world_id, version.yaml, workflow_id, version.packages
+        ).violations
+        if violations:
+            raise Invalid(violations)
+        stages = [stage_def(s) for s in version.model.stages]
+        return Pinned(
+            workflow.world_id,
+            workflow_id,
+            version.number,
+            workflow.name,
+            stages,
+            version.model.budget_usd,
+            version.model.schedule,
+            version.model.budget_warn_usd,
+            version.model.skip_when_live,
+        )
+
+    return pin
+
+
+def checker(
+    workflows: Workflows,
+) -> Callable[[Run, list[StageDef]], tuple[list[str], list[StageDef]]]:
+    """The workflow check of a run's stages with a Run Change in them, as a workflow save meets
+    it, at the package versions and worker count the run's version recorded (an Ad Hoc Run has
+    none), and the stages as parsed, defaults filled in as a run of a version holds them. The
+    Retro is the run's own, never written in a workflow (`with_retro`), and stays as it is."""
+
+    def check(run: Run, stages: list[StageDef]) -> tuple[list[str], list[StageDef]]:
+        version = None
+        if run.workflow_id and run.workflow_version:
+            version = workflows.version(run.workflow_id, run.workflow_version)
+        yaml = dump_workflow(
+            run.name,
+            [(d.type, d.name, d.config) for d in stages if d.type != RETRO.type],
+            agents=version.model.agents if version else None,
+            given=version.model.given if version else (),
+        )
+        draft = workflows.check(
+            run.world_id, yaml, run.workflow_id, version.packages if version else None
+        )
+        violations = [v.message for v in draft.violations]
+        if draft.model is None:
+            return violations, stages
+        parsed = iter(stage_def(s) for s in draft.model.stages)
+        return violations, [d if d.type == RETRO.type else next(parsed) for d in stages]
+
+    return check
+
+
+def with_retro(stages: list[StageDef], baseline: bool = False) -> list[StageDef]:
+    """The run's stages plus the Retro at the end. A baseline run has no judge to learn from."""
+    return stages if baseline else [*stages, RETRO]
+
+
+def with_hand_tasks(stage: StageDef, tasks: list[Task]) -> StageDef:
+    """A swarm stage whose goal also names the tasks the operator added by hand, so the saved
+    workflow's planner seeds them again. The agents' own tasks are theirs to plan anew."""
+    lines = [f"- {t.title}: {t.body}" if t.body else f"- {t.title}" for t in tasks]
+    if stage.type != "swarm" or not lines:
+        return stage
+    goal = f"{stage.config['goal']}\n\nAlso do these tasks:\n" + "\n".join(lines)
+    return replace(stage, config={**stage.config, "goal": goal})
+
+
+def start_pinned(
+    control: RunControl,
+    p: Pinned,
+    retro: bool = True,
+    budget_usd: float | None = None,
+    agents: int | None = None,
+    baseline: bool = False,
+    budget_warn_usd: float | None = None,
+) -> Run:
+    """Start a run of the pinned version as `POST /workflows/{id}/runs` does, for HTTP and MCP:
+    `agents` workers per swarm stage, ending with the Retro when `retro` and not `baseline`."""
+    stages = with_agents(p.stages, agents)
+    return control.start(
+        p.world_id,
+        p.workflow_id,
+        p.version,
+        p.name,
+        with_retro(stages, baseline) if retro else stages,
+        budget_usd=budget_usd,
+        workflow_budget_usd=p.budget_usd,
+        baseline=baseline,
+        budget_warn_usd=budget_warn_usd,
+        workflow_budget_warn_usd=p.budget_warn_usd,
+    )
+
+
+def platform_links(links: list[str]) -> dict[str, str]:
+    """The links a person pasted, by platform: its site's name (www.youtube.com is youtube).
+    ValueError on one that is not an http(s) link."""
+    out: dict[str, str] = {}
+    for link in filter(None, (s.strip() for s in links)):
+        url = urlparse(link)
+        if url.scheme not in ("http", "https") or not url.hostname:
+            raise ValueError(f"not a link: {link}")
+        out[url.hostname.removeprefix("www.").removeprefix("m.").split(".")[0]] = link
+    return out
+
+
+def act[T](action: Callable[[], T]) -> T:
+    """The control layer's refusals as HTTP: unknown run 404, wrong moment 409 (a spent Monthly
+    Budget too), bad input 422."""
+    try:
+        return action()
+    except KeyError as exc:
+        raise HTTPException(404, "run not found") from exc
+    except Illegal as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except Invalid:
+        raise  # a run start's refusal, see `starting`
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+def starting(start: Callable[[], Run]) -> Run | JSONResponse:
+    """A run start as `act` answers it, plus a workflow version that fails today's check: 409
+    with its violations, and a `detail` the skin shows as the reason."""
+    try:
+        return act(start)
+    except Invalid as exc:
+        detail = (
+            str(exc)
+            if isinstance(exc, Archived)
+            else f"This version fails today's workflow check: {exc}"
+        )
+        violations = jsonable_encoder(exc.violations)
+        return JSONResponse(status_code=409, content={"detail": detail, "violations": violations})
+
+
+def network_note(w: Waiting) -> str:
+    return (
+        f"Waiting for the network since {w.since:%H:%M} UTC: {w.agent} cannot reach the model"
+        f" API ({w.error[:120]}). It resumes the same session by itself once the network is back;"
+        " this is not a failed attempt."
+    )
+
+
+def resource_note(wait: dict[str, Any], runner: Runner, now: float) -> str:
+    """A stage's wait for a Resource in words: who holds it and for how long."""
+    said = f"waiting for {wait['resource']}"
+    if not wait["holders"]:
+        return said
+    held = wait["holders"][0]
+    run = runner.get(str(held.get("run")))
+    stage = next((s.name for s in run.stages if s.id == held.get("stage")), None) if run else None
+    who = f"{run.name} / {stage or held.get('stage')}" if run else str(held.get("package", "?"))
+    minutes = int((now - float(held.get("since") or now)) // 60)
+    return f"{said}: held by {who} for {minutes} min" if minutes else f"{said}: held by {who}"
+
+
+def router(
+    runner: Runner,
+    workflows: Workflows,
+    worlds: Worlds,
+    tools_for: ToolsFor = lambda _world_id: [],
+    retro: bool = True,
+    tasks_of: TasksOf = lambda _stage_id: [],
+    waiting: Callable[[], list[Waiting]] = lambda: [],
+    resource_waits: Callable[[], list[dict[str, Any]]] = lambda: [],
+    message: Callable[[str, RunChange, str], AppliedChange] | None = None,
+    answer_unsure: Callable[[str, dict[str, str] | None], None] = lambda _stage, _links: None,
+) -> APIRouter:
+    """`tools_for` names the world's connectors an Ad Hoc Run's stage gets as its tools. With
+    `retro`, every run but a baseline ends with the Retro stage. `tasks_of` reads a swarm
+    stage's whiteboard, whose hand-added tasks a run saved as a workflow keeps. `waiting` names
+    the agents waiting for the network and `resource_waits` the processes waiting for a
+    Resource (resources.waits), which a run's running stage then says. `message` records a
+    Message and delivers it to the stage's agents; by default it is only recorded.
+    `answer_unsure` records a person's answer at a "Did this post go out?" gate with the stage's
+    publish call: the links found (It posted), or None (Post it now)."""
+    api = APIRouter(prefix="/api", tags=["runs"])
+    pin = pinner(workflows)
+
+    def stages(defs: list[StageDef], baseline: bool = False) -> list[StageDef]:
+        return with_retro(defs, baseline) if retro else defs
+
+    def pin_or_404(workflow_id: str, number: int | None) -> Pinned:
+        try:
+            return pin(workflow_id, number)
+        except KeyError as exc:
+            what = "version" if workflows.get(workflow_id) else "workflow"
+            raise HTTPException(404, f"{what} not found") from exc
+
+    @api.post(
+        "/workflows/{workflow_id}/runs",
+        status_code=201,
+        responses={404: {}, 409: {}},
+        response_model=Run,
+    )
+    def start_run(workflow_id: str, body: StartRun) -> Run | JSONResponse:
+        """409 when the world's Monthly Budget is spent, or with the violations when the
+        version fails today's workflow check."""
+        return starting(
+            lambda: start_pinned(
+                runner,
+                pin_or_404(workflow_id, body.version),
+                retro,
+                body.budget_usd,
+                body.agents,
+                body.baseline,
+                body.budget_warn_usd,
+            )
+        )
+
+    @api.post("/worlds/{world_id}/runs", status_code=201, responses={404: {}, 409: {}})
+    def start_ad_hoc(world_id: str, body: AdHoc) -> Run:
+        """Start an Ad Hoc Run from a typed goal: one swarm stage with the world's swarm
+        connectors as its tools, no workflow pinned. Its notes feed the world's graph like any
+        run's. 409 when the world's Monthly Budget is spent."""
+        if worlds.get(world_id) is None:
+            raise HTTPException(404, "world not found")
+        stage = StageDef(
+            "goal",
+            "swarm",
+            {
+                "goal": body.goal,
+                "done_when": body.done_when or DONE_WHEN,
+                "tools": tools_for(world_id),
+            },
+        )
+        name = body.goal.splitlines()[0][:80]
+        return act(
+            lambda: runner.start(
+                world_id,
+                None,
+                None,
+                name,
+                stages([stage], body.baseline),
+                budget_usd=body.budget_usd,
+                baseline=body.baseline,
+            )
+        )
+
+    @api.get("/worlds/{world_id}/spend")
+    def get_spend(world_id: str) -> Spend:
+        """The world's estimated spend this month, what its Monthly Budget is measured against."""
+        world = worlds.get(world_id)
+        if world is None:
+            raise HTTPException(404, "world not found")
+        month = datetime.now(UTC).strftime("%Y-%m")
+        return Spend(
+            month=month,
+            spent_usd=runner.storage.spent_in_month(world_id, month),
+            monthly_budget_usd=world.monthly_budget_usd,
+        )
+
+    @api.post("/runs/{run_id}/fork", status_code=201, responses=ACTION_ERRORS, response_model=Run)
+    def fork(run_id: str, body: Fork) -> Run | JSONResponse:
+        """A new run of the same workflow version that copies this one, rows and files, up to
+        `stage` and runs on from there. Every earlier stage must have finished. 409 with the
+        violations when that version fails today's workflow check."""
+        return starting(lambda: runner.fork(run_id, body.stage))
+
+    @api.post(
+        "/workflows/{workflow_id}/promote",
+        status_code=201,
+        responses={404: {}, 409: {}, 422: {}},
+        response_model=Run,
+    )
+    def promote(workflow_id: str, body: Promote) -> Run | JSONResponse:
+        """A run that starts at `stage` with `artifact` as its input; the earlier stages are
+        skipped. 409 with the violations when the version fails today's workflow check."""
+
+        def start() -> Run:
+            p = pin_or_404(workflow_id, body.version)
+            folder = worlds.folder(p.world_id)
+            file = (folder / body.artifact).resolve()
+            if not file.is_relative_to((folder / "runs").resolve()) or not file.is_file():
+                raise HTTPException(404, "artifact not found")
+            return runner.promote(
+                replace(p, stages=stages(p.stages)), body.stage, file, body.artifact
+            )
+
+        return starting(start)
+
+    @api.post(
+        "/runs/{run_id}/workflow",
+        status_code=201,
+        responses={**ACTION_ERRORS, **INVALID},
+        response_model=WorkflowVersion,
+    )
+    def save_as_workflow(run_id: str, body: SaveAsWorkflow) -> WorkflowVersion | JSONResponse:
+        """A new workflow in the run's world from the stages the run actually ran (an ad hoc run
+        becomes repeatable); each swarm stage's goal also names the tasks added to it by hand.
+        Only a run that is done."""
+        run = runner.get(run_id)
+        if run is None:
+            raise HTTPException(404, "run not found")
+        if run.status != "done":
+            raise HTTPException(409, f"the run is {run.status}; only a done run becomes a workflow")
+        # The Retro is added to every run, never written in a workflow (with_retro).
+        defs = [
+            with_hand_tasks(
+                runner.storage.stage_def(run.id, s.index)[1],
+                [t for t in tasks_of(s.id) if t.added_by == OPERATOR],
+            )
+            for s in run.stages
+        ]
+        defs = [d for d in defs if d.type != RETRO.type]
+        # Each swarm stage keeps the worker count it ran with; one, the default, goes unsaid.
+        yaml = dump_workflow(
+            (body.name or run.name).strip() or run.name,
+            [
+                (d.type, d.name, {k: v for k, v in d.config.items() if (k, v) != ("agents", 1)})
+                for d in defs
+            ],
+            budget_usd=run.budget_usd,
+            given=sorted(
+                p.name for p in (run_folder(runner.data_dir, run) / "given").glob("[!.]*")
+            ),
+        )
+        try:
+            return workflows.save(run.world_id, yaml)
+        except Invalid as exc:
+            report = Report(violations=exc.violations, model=None)
+            return JSONResponse(status_code=422, content=jsonable_encoder(report))
+
+    @api.get("/worlds/{world_id}/runs")
+    def list_runs(
+        world_id: str,
+        response: Response,
+        limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+        before: str | None = None,
+        archived: bool = False,
+    ) -> list[Run]:
+        """Every run not archived, newest first, or with `archived` the archived ones too. With
+        `limit`, one page of them: `X-Next-Before` names the last run when more follow, and
+        `?before=<it>` lists the next page."""
+        if worlds.get(world_id) is None:
+            raise HTTPException(404, "world not found")
+        runs = runner.list_all(world_id, limit and limit + 1, before, None if archived else False)
+        if limit and len(runs) > limit:
+            runs = runs[:limit]
+            response.headers["X-Next-Before"] = runs[-1].id
+        return runs
+
+    @api.get("/runs/{run_id}")
+    def get_run(run_id: str) -> Run:
+        run = runner.get(run_id)
+        if run is None:
+            raise HTTPException(404, "run not found")
+        notes = {w.stage_id: network_note(w) for w in reversed(waiting()) if w.run_id == run_id}
+        running = {s.id for s in run.stages if s.status == "running"}
+        now = time.time()
+        waits = {
+            str(w.get("stage")): resource_note(w, runner, now)
+            for w in resource_waits()
+            if w.get("run") == run_id and w.get("stage") in running
+        }
+        run = replace(run, last_run_seconds=runner.storage.last_run_seconds(run))
+        if not notes and not waits:
+            return run
+        stages = [replace(s, network=notes.get(s.id), waiting=waits.get(s.id)) for s in run.stages]
+        return replace(run, stages=stages)
+
+    @api.get("/runs/{run_id}/baseline")
+    def get_baseline(run_id: str) -> Run | None:
+        """The newest finished baseline run of the run's workflow, any version: its cost and
+        duration are what the swarm is measured against. Null when there is none yet."""
+        try:
+            return runner.baseline(run_id)
+        except KeyError as exc:
+            raise HTTPException(404, "run not found") from exc
+
+    @api.post("/runs/{run_id}/budget", responses=ACTION_ERRORS)
+    def set_budget(run_id: str, body: SetBudget) -> Run:
+        """Set the Budget of the run and its child runs. A run waiting at a budget gate goes on;
+        422 when the new budget is not above what was spent."""
+        return act(lambda: runner.set_budget(run_id, body.budget_usd))
+
+    @api.get("/gates")
+    def list_gates() -> list[Gate]:
+        """Every open gate across all worlds and runs, newest first: the inbox."""
+        return runner.gates()
+
+    @api.post("/runs/{run_id}/decision", responses=ACTION_ERRORS)
+    def decide(run_id: str, body: Decide) -> Run:
+        """Answer the gate the run waits at. At a "Did this post go out?" gate, `choice` is
+        `posted` with `links` (422 without one) or `post`; the publish call learns it first."""
+
+        def go() -> Run:
+            run = runner.get(run_id)
+            waiting = [s for s in run.stages if s.status == "waiting"] if run else []
+            at = waiting[0] if waiting and run and not run.over_budget else None
+            if at is not None and at.type == "connector" and body.choice in POSTED_CHOICES:
+                links = platform_links(body.links or []) if body.choice == "posted" else None
+                if body.choice == "posted" and not links:
+                    raise ValueError("It posted needs the link to the post")
+                answer_unsure(at.id, links)
+            return runner.decide(
+                run_id,
+                body.choice,
+                body.note,
+                body.send_back_to,
+                artifact=body.artifact,
+                edits=body.edits,
+                seen=body.seen,
+                artifacts=body.artifacts,
+                rejects=[r.model_dump() for r in body.rejects or []],
+                person=True,
+            )
+
+        return act(go)
+
+    @api.post("/runs/{run_id}/changes/propose", responses={**ACTION_ERRORS, 422: {}})
+    def propose_change(run_id: str, body: Change) -> ChangeProposal:
+        """What the Run Change would do, with nothing written: before and after, the violations
+        that would refuse it, the finished stages that already read a file it changes, and the
+        run's revision to apply it with."""
+        return act(lambda: runner.propose(run_id, body.value()))
+
+    @api.post("/runs/{run_id}/changes", status_code=201, responses={**ACTION_ERRORS, 422: {}})
+    def apply_change(run_id: str, body: ApplyChange) -> AppliedChange:
+        """Apply a proposed Run Change, checked again. A Restructure, or any change to a run that
+        has ended, answers with the Fork it continues in as `fork`. 409 when the run moved on
+        since the proposal's revision, naming what moved, or the stage has started; 422 with the
+        check's violations."""
+        return act(lambda: runner.apply(run_id, body.value(), body.revision, OPERATOR))
+
+    @api.post("/runs/{run_id}/messages", status_code=201, responses={**ACTION_ERRORS, 422: {}})
+    def send_message(run_id: str, body: StageMessage) -> AppliedChange:
+        """Send a Message to the running stage's agents, recorded as a Run Change of kind
+        `message`. Each agent's live session reads it as its next turn, or the session it starts
+        or resumes reads it first; the stage log says which (`message` lines, queued then
+        delivered). 409 when the stage is not running or no agent it names is working, 422 for
+        an empty text."""
+        payload = {"text": body.text, "to": body.to, "interrupt": body.interrupt}
+        change = RunChange("message", body.stage, payload)
+        send = message or runner.message
+        return act(lambda: send(run_id, change, OPERATOR))
+
+    @api.get("/runs/{run_id}/changes", responses={404: {}})
+    def list_changes(run_id: str) -> list[AppliedChange]:
+        """Every Run Change applied to the run, oldest first."""
+        run = runner.get(run_id)
+        if run is None:
+            raise HTTPException(404, "run not found")
+        return run.changes
+
+    @api.post("/runs/{run_id}/items/{key}/retry", responses=ACTION_ERRORS)
+    def retry_item(run_id: str, key: str) -> Run:
+        """Retry a failed Item of the run's running fan-out stage now, while its siblings still
+        run: its child is forked from where it failed, in the same family. Answers the new child.
+        409 when no fan-out stage runs or the Item has not failed, 404 for an unknown Item."""
+        return act(lambda: runner.retry_item(run_id, key))
+
+    @api.post("/runs/{run_id}/items/review", responses=ACTION_ERRORS)
+    def review_items(run_id: str, body: ReviewItems) -> Run:
+        """Approve or send back Items of the run's fan-out stage with `approve`, at its items
+        gate or while some still run. A sent-back Item's child is forked with the note as a
+        Rerun and its new output replaces the old; once every Item is approved the stage
+        finishes. 409 when no such stage is running or waiting, or an Item is not ready for
+        it, 404 for an unknown Item, 422 for a send-back without a note."""
+        return act(lambda: runner.review_items(run_id, body.approve, body.send_back, OPERATOR))
+
+    @api.post("/runs/{run_id}/archive", responses=ACTION_ERRORS)
+    def archive(run_id: str) -> Run:
+        """Archive a finished run and its child runs: left out of the runs list and its counts,
+        still opened by link. 409 while the run or a child of it is live."""
+        return act(lambda: runner.archive(run_id))
+
+    @api.post("/runs/{run_id}/restore", responses=ACTION_ERRORS)
+    def restore(run_id: str) -> Run:
+        """Undo an archive, for the run and its child runs."""
+        return act(lambda: runner.restore(run_id))
+
+    @api.post("/runs/{run_id}/pause", responses=ACTION_ERRORS)
+    def pause(run_id: str) -> Run:
+        """At a gate the pause is immediate; mid-stage it lands when the stage finishes."""
+        return act(lambda: runner.pause(run_id))
+
+    @api.post("/runs/{run_id}/resume", responses=ACTION_ERRORS)
+    def resume(run_id: str) -> Run:
+        return act(lambda: runner.resume(run_id))
+
+    @api.post("/runs/{run_id}/abort", responses=ACTION_ERRORS)
+    def abort(run_id: str) -> Run:
+        """Aborts the run and every child run it started."""
+        return act(lambda: runner.abort(run_id, person=True))
+
+    return api

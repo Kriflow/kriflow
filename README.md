@@ -112,7 +112,7 @@ world".
   and the weekly short (ranked ideas, then a pick). Each uses only stage types and tools every
   world has and passes the check as it stands; `<your topic>` and `<your question>` are yours to
   fill. Picking another replaces an untouched draft and asks first when you have edited it.
-  `GET /api/workflows/starters` lists them (`swarmify_workflows.starters`).
+  `GET /api/workflows/starters` lists them (`kriflow_workflows.starters`).
 - **Planner chat.** `POST /api/worlds/<id>/planner` with `{"message", "yaml", "workflow_id",
   "session_id"}` runs one turn of a Planner session on the AgentRuntime whose tools are the
   swarmify MCP server's own `check_workflow`, `save_workflow`, `get_workflow`,
@@ -166,7 +166,7 @@ child run holds none, so runs left at gates never keep a new run from starting; 
 queued until its first stage gets a slot.
 
 Run status is one of queued, running, waiting_gate, paused, done, failed, aborted; stage status one
-of pending, running, waiting, done, failed, skipped. The rules live in `swarmify_runs.machine`, a
+of pending, running, waiting, done, failed, skipped. The rules live in `kriflow_runs.machine`, a
 pure function from (stage kinds, state, event) to (next state, commands); the DBOS workflow only
 executes the commands. Every state change appends a `run.updated` event carrying the whole run to
 the world's stream, which the runs page and the run timeline render live.
@@ -215,7 +215,7 @@ the workflow's `budget_usd` (a fork keeps its source run's Budget), else 5 USD
 parent's. Spend is the Agent SDK's estimate, not your bill.
 
 - Cost hook: every model step of an agent session (one per tool call) adds an estimate priced
-  from the step's token usage at the price of the model it ran on (`swarmify_swarm.sdk.PRICES`:
+  from the step's token usage at the price of the model it ran on (`kriflow_swarm.sdk.PRICES`:
   Claude Opus 5.5, Sonnet 5.5 and Haiku 4.5; any other model is priced at the most expensive of
   them, so the Budget errs high), and the session's result trues the sum up to the SDK's own total.
   After each estimate the hooks ask the Budget, which refreshes the run's `spent_usd` (the run and
@@ -504,7 +504,7 @@ permissions are only a summary, and the operator approves what the clone declare
 
 Default packages (ADR 0023, issues 213 and 585): `python_script`, the core's own, installed from
 `connectors/python_script`, and the packages the Default List names. The Default List
-(`packages/connectors/src/swarmify_connectors/defaults.toml`) is the packages repository's git
+(`packages/connectors/src/kriflow_connectors/defaults.toml`) is the packages repository's git
 URL, Kriflow/packages, and one release tag per package (`youtube-v1.6.1`, as
 `<name>-v<version>`). On startup each listed version not installed yet is installed from git at
 its tag, from its folder, trusted as the core's own (no permission review) and sharing uv's and
@@ -624,7 +624,7 @@ health = "/health"
 [reviews]                         # its Review Feed: what waits on the operator in its own app
 label = "Echo things"             # Needs you says "3 Echo things need you"
 url = "endpoint"                  # the [[config]] key holding its base URL
-path = "/api/review-feed"         # added to it; the JSON it answers: swarmify_api/review_feeds.py
+path = "/api/review-feed"         # added to it; the JSON it answers: kriflow_api/review_feeds.py
 
 [permissions]                     # Credentials come from secret [[config]] fields, never listed
 network = ["api.example.org"]     # hosts it reaches; "localhost" alone: its own loopback servers
@@ -644,7 +644,7 @@ invalid fixture beside it in `fixtures/manifests`.
 A Package Contract is everything a package relies on from the core: the Manifest schema, the
 tools the core calls and the answers it reads, and what a package's process is given. Kriflow
 runs a range of contracts, oldest to newest (`OLDEST_CONTRACT` and `NEWEST_CONTRACT` in
-`swarmify_connectors/packages.py`). A Manifest's `contract` is checked before anything else of
+`kriflow_connectors/packages.py`). A Manifest's `contract` is checked before anything else of
 it, so a package outside the range is refused for that, not for a field this Kriflow does not
 know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contracts 1 to 2.
 Update Kriflow first, or install an older {name}." (or, below the oldest, "... was written for
@@ -730,7 +730,7 @@ a health or world types call, a swarm stage's MCP server, a remote approver's li
 install step runs in an OS sandbox, Anthropic's sandbox-runtime (ADR 0021): Seatbelt on macOS;
 bubblewrap, socat and a seccomp filter on Linux, where `bwrap`, `socat` and `rg` must be installed
 (the image has them). `packages/connectors/sandbox/launcher.mjs` starts it with what Kriflow
-grants (`swarmify_connectors/sandbox.py`), and Kriflow refuses to start a connector it cannot
+grants (`kriflow_connectors/sandbox.py`), and Kriflow refuses to start a connector it cannot
 sandbox.
 
 On Ubuntu 23.10 and later the host must also let bubblewrap make user namespaces with
@@ -787,7 +787,7 @@ sandboxed command any user namespace of its own.
      or a kill included, so nothing stays locked by a dead process; a note whose file nobody
      holds locked is stale and ignored.
 
-  `swarmify_connectors/resources.py` is the core's copy (`hold`, `snapshot`); a package carries
+  `kriflow_connectors/resources.py` is the core's copy (`hold`, `snapshot`); a package carries
   its own, as blender_render's `_slot` (it cannot import the core). Hold a Slot per process, not
   per job, so other jobs get the card between a long job's steps. `permissions.hold` asks the
   core to hold one Slot of each Resource it names around each whole call of a connector stage
@@ -1206,7 +1206,7 @@ the run page shows it beside each agent.
 /api/runs/<run>/stages/<stage>/log` a stage's live log; `agent.updated` and `agent.logged` events
 stream both, and the run page shows them under the timeline.
 
-Tests drive the real SDK client with `swarmify_swarm.fake.Script`, a scripted `claude` CLI behind
+Tests drive the real SDK client with `kriflow_swarm.fake.Script`, a scripted `claude` CLI behind
 the SDK's Transport seam: it answers the initialize handshake, fires the registered hook callbacks
 and calls in-process tools over the control protocol, so hooks and tools run for real without a
 model. The e2e server (`tests/e2e/scripted_app.py`) runs the same script.
@@ -1329,7 +1329,7 @@ The Office skin draws the cast from a sprite pack: a folder named by the pack's 
 `name` and `[characters.<id>.poses]` listing frame files per pose, idle required, and an
 optional `[casting.<agent name or role>]` of `character`, `name`, `colour`, `catchphrase`) and
 one folder of transparent PNG frames per character. Kriflow ships one,
-`packages/worlds/src/swarmify_worlds/sprite_packs/kenney-toon` (Kenney Toon Characters, CC0);
+`packages/worlds/src/kriflow_worlds/sprite_packs/kenney-toon` (Kenney Toon Characters, CC0);
 install another by copying its folder into `<data dir>/sprite-packs/`, where a pack of the same
 id wins over the bundled one. Packs with art you may not redistribute stay there, never in this
 repo. `GET /api/sprite-packs` lists them with any `problems` (an unreadable manifest, a missing
@@ -1497,7 +1497,7 @@ proposal is decided.
 ## Eval: baseline against swarm
 
 The swarm evidence eval (ADR 0020): for which kinds of task does a swarm earn its cost over one
-agent? `swarmify-eval` runs fixed tasks (in `swarmify_learning.evals`), each naming the starter
+agent? `swarmify-eval` runs fixed tasks (in `kriflow_learning.evals`), each naming the starter
 workflow it exercises: research briefs (heat pumps in cold climates), drafts (a beginner's guide
 to composting), typed lists from the scheduled monitor (AI regulation) and the weekly short (home
 espresso). The first three are the task kinds, 8 tasks each; one eval runs one kind, each task k
@@ -1714,7 +1714,7 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   refuse each. So `api`, which holds the Claude token, the sign-in password and every Setup value,
   keeps Docker's defaults and starts no sandbox: it hands every connector process, install step
   and Build Session CLI to the `sandbox` service over a socket in the `sandbox-socket` volume
-  (`SWARMIFY_SANDBOX_RUNNER`, `swarmify_connectors/runner.py`, which starts nothing but the
+  (`SWARMIFY_SANDBOX_RUNNER`, `kriflow_connectors/runner.py`, which starts nothing but the
   sandbox's launcher and the Claude CLI). `sandbox` alone gets the narrowest exceptions that work
   everywhere: `docker/seccomp-sandbox.json` (Docker's default profile plus `clone`, `mount`,
   `pivot_root`, `umount2` and `unshare`, which it allows only with `CAP_SYS_ADMIN`, never given),
@@ -1743,7 +1743,7 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   Chrome for Testing on ANGLE's EGL backend; without a GPU it renders as before. Its Render
   concurrency Setting can go up with the GPU: 4 tabs rendered fastest there.
 - Sign-in works natively too: `SWARMIFY_PASSWORD=... uv run uvicorn --factory
-  swarmify_api.main:create_app --host 0.0.0.0` puts the Mac on the LAN behind the same sign-in
+  kriflow_api.main:create_app --host 0.0.0.0` puts the Mac on the LAN behind the same sign-in
   page. With no password set or stored there is no sign-in, which is right only on `127.0.0.1`.
   For access from outside the house use Tailscale (see Sign-in) rather than opening the port.
 - Docker Desktop on a Mac stuck at "load metadata" on every pull is its `desktop` credential helper

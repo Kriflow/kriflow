@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_memory import Memory, made
+from kriflow_kernel import MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_memory import Memory, made
 
 NOW = datetime(2026, 11, 6, 12, tzinfo=UTC)
 

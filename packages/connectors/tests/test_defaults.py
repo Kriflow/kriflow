@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors
-from swarmify_connectors.fake import default_list, tag_package
-from swarmify_connectors.packages import MANIFEST
+from kriflow_connectors import Connectors
+from kriflow_connectors.fake import default_list, tag_package
+from kriflow_connectors.packages import MANIFEST
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PAIR = ("echo", "probe")

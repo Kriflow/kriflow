@@ -6,7 +6,7 @@ Without these the server makes a pair on first start and keeps it in `<data_dir>
 Keep the pair once browsers have subscribed: a new one silently ends every subscription.
 """
 
-from swarmify_notifications.push import generate_keys
+from kriflow_notifications.push import generate_keys
 
 if __name__ == "__main__":
     public, private = generate_keys()

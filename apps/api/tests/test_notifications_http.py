@@ -10,8 +10,8 @@ import pytest
 from api_fakes import studio, until
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import create_app
-from swarmify_notifications.fake import FakeSlack
+from kriflow_api.main import create_app
+from kriflow_notifications.fake import FakeSlack
 
 BASE = "http://swarmify.lan:8000"
 QUICK = "name: Quick\nstages:\n  - gate: ok\n    ask: Go?\n    kind: confirm\n"

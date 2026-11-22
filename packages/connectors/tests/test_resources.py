@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors, Credentials, McpTransport, SqliteStorage, resources
-from swarmify_connectors.packages import MANIFEST
-from swarmify_connectors.sandbox import Grants, Sandbox
+from kriflow_connectors import Connectors, Credentials, McpTransport, SqliteStorage, resources
+from kriflow_connectors.packages import MANIFEST
+from kriflow_connectors.sandbox import Grants, Sandbox
 
 PROBE = Path(__file__).parent / "fixtures/packages/probe"
 NOTE = {"run": "run_1", "root": "run_1", "stage": "s1", "package": "probe"}
@@ -133,7 +133,7 @@ def test_two_slots_let_two_holders_in_at_once(
 HOLDER = """
 import sys, time
 from pathlib import Path
-from swarmify_connectors import resources
+from kriflow_connectors import resources
 place, slots = resources.folder(Path(sys.argv[1]), "seat")
 with resources.hold(place, slots, {"run": "run_dead", "stage": "s1"}):
     print("held", flush=True)

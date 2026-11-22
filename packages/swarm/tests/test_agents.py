@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import scrub
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_swarm import Refused, SqliteStorage
+from kriflow_kernel import scrub
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_swarm import Refused, SqliteStorage
 
 
 def test_an_agent_is_added_once_and_updated_field_by_field(board: SqliteStorage) -> None:
@@ -98,9 +98,9 @@ def test_a_seed_lands_whole_with_its_dependencies(board: SqliteStorage) -> None:
 
 
 def test_migration_9_keeps_agents_and_their_log(tmp_path: Path) -> None:
-    from swarmify_kernel import MIGRATIONS as KERNEL
-    from swarmify_kernel.sqlite import migrate
-    from swarmify_swarm import MIGRATIONS
+    from kriflow_kernel import MIGRATIONS as KERNEL
+    from kriflow_kernel.sqlite import migrate
+    from kriflow_swarm import MIGRATIONS
 
     old = tmp_path / "old"
     old.mkdir()

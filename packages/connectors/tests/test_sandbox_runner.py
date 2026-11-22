@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import runner
-from swarmify_connectors.sandbox import Grants, Sandbox
+from kriflow_connectors import runner
+from kriflow_connectors.sandbox import Grants, Sandbox
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def socket_path() -> Iterator[str]:
 
 
 def through(path: str, argv: list[str], stdin: str = "") -> subprocess.CompletedProcess[str]:
-    command = [sys.executable, "-m", "swarmify_connectors.runner", path, *argv]
+    command = [sys.executable, "-m", "kriflow_connectors.runner", path, *argv]
     return subprocess.run(command, input=stdin, capture_output=True, text=True, timeout=60)
 
 
@@ -57,7 +57,7 @@ def test_a_process_whose_caller_goes_away_is_stopped(socket_path: str, tmp_path:
     )
     grants = Grants(writes=[ticks.parent])
     confined = Sandbox(tmp_path).wrap([sys.executable, "-c", script], None, grants)
-    command = [sys.executable, "-m", "swarmify_connectors.runner", socket_path, *confined.argv]
+    command = [sys.executable, "-m", "kriflow_connectors.runner", socket_path, *confined.argv]
     caller = subprocess.Popen(command, stdin=subprocess.PIPE)
     deadline = time.monotonic() + 30
     while not ticks.exists() or len(ticks.read_text()) < 3:

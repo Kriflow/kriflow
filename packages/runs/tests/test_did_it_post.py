@@ -4,9 +4,9 @@ lists; either answer (It posted, Post it now) runs the stage again, Abort ends t
 
 import pytest
 
+from kriflow_runs import Illegal, Runner, StageDef
+from kriflow_runs.model import Run
 from runs_fakes import FakeNotifier, wait_for
-from swarmify_runs import Illegal, Runner, StageDef
-from swarmify_runs.model import Run
 
 PUBLISH = StageDef("publish", "connector", {"calls": "youtube"})
 ASK = "YouTube was cut off while posting and could not check whether it posted: gone."

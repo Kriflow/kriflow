@@ -2,9 +2,9 @@
 
 from typing import Any
 
-from swarmify_kernel import Event
-from swarmify_learning import scorecard
-from swarmify_learning.scorecard import duration
+from kriflow_kernel import Event
+from kriflow_learning import scorecard
+from kriflow_learning.scorecard import duration
 
 T0, T1, T2 = "2026-10-26T10:00:00+00:00", "2026-10-26T10:05:00+00:00", "2026-10-26T10:07:30+00:00"
 

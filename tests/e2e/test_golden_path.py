@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 from playwright.sync_api import Page, expect
 
-from swarmify_connectors.setup import SetupStore
+from kriflow_connectors.setup import SetupStore
 
 
 def test_draft_with_the_planner_run_every_gate_and_publish(

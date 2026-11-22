@@ -81,4 +81,4 @@ RUN ln -s "$(python -c 'import claude_agent_sdk, pathlib; print(pathlib.Path(cla
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
-CMD ["uvicorn", "--factory", "swarmify_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
+CMD ["uvicorn", "--factory", "kriflow_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]

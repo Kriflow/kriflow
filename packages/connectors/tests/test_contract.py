@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import swarmify_connectors.packages as module
-from swarmify_connectors import (
+import kriflow_connectors.packages as module
+from kriflow_connectors import (
     ConnectorError,
     Connectors,
     InstallError,
@@ -16,8 +16,8 @@ from swarmify_connectors import (
     Packages,
     read_manifest,
 )
-from swarmify_connectors.index import read_index
-from swarmify_connectors.packages import MANIFEST
+from kriflow_connectors.index import read_index
+from kriflow_connectors.packages import MANIFEST
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NEWER = (

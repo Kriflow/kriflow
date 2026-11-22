@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from swarmify_connectors import (
+from kriflow_connectors import (
     Connector,
     ConnectorError,
     Connectors,
@@ -15,9 +15,9 @@ from swarmify_connectors import (
     JobCancelled,
     Tool,
 )
-from swarmify_connectors.sandbox import LAUNCHER, REGISTRIES, STDERR
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
+from kriflow_connectors.sandbox import LAUNCHER, REGISTRIES, STDERR
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
 
 W = "world_1"
 TOOLS = [Tool("fal_video", "Make a clip.", {"type": "object"})]

@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_workflows import Invalid, SqliteStorage, Workflows
 from samples import WEEKLY_SHORT
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_workflows import Invalid, SqliteStorage, Workflows
 
 WORLD = "world_1"
 SMALL = "name: Trend sweep\nstages:\n  - gate: ok\n    ask: Fine?\n"

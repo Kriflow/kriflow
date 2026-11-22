@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors.person_check import STOPPED, TIMED_OUT, PersonChecks
-from swarmify_kernel import Event, scrub
+from kriflow_connectors.person_check import STOPPED, TIMED_OUT, PersonChecks
+from kriflow_kernel import Event, scrub
 
 STAGE = ("run_1", "stg_1")
 

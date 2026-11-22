@@ -26,9 +26,9 @@ from pathlib import Path
 
 from dbos import DBOS
 
+from kriflow_runs import Item, Pinned, Run, Runner, SqliteStorage, StageDef, runner
+from kriflow_runs.control import slot_queue
 from runs_fakes import migrated, wait_for
-from swarmify_runs import Item, Pinned, Run, Runner, SqliteStorage, StageDef, runner
-from swarmify_runs.control import slot_queue
 
 FIXTURE = Path(__file__).parent / "upgrade_fixture"
 EVERY_SECOND = "* * * * * *"

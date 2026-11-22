@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from swarmify_kernel import MIGRATIONS, Event
-from swarmify_kernel.events import append, read_after
-from swarmify_kernel.sqlite import connect, migrate
+from kriflow_kernel import MIGRATIONS, Event
+from kriflow_kernel.events import append, read_after
+from kriflow_kernel.sqlite import connect, migrate
 
 
 def test_event_envelope_gets_id_and_utc_timestamp() -> None:

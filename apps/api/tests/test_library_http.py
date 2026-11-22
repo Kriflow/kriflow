@@ -13,10 +13,10 @@ from api_fakes import install, until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import FakeTransport
-from swarmify_connectors.build_session import fingerprint
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_connectors import FakeTransport
+from kriflow_connectors.build_session import fingerprint
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 
 RENDER = {
     "name": "render_video",

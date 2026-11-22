@@ -5,8 +5,8 @@ required Setup field, and an installed version can be removed."""
 import pytest
 from test_enable import FIXTURES
 
-from swarmify_connectors import Connectors, FakeTransport, InstallError, Packages
-from swarmify_connectors.packages import manifest_diff
+from kriflow_connectors import Connectors, FakeTransport, InstallError, Packages
+from kriflow_connectors.packages import manifest_diff
 
 
 @pytest.fixture

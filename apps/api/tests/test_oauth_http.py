@@ -12,9 +12,9 @@ from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_api import main
-from swarmify_connectors import ConnectorError, FakeTransport
-from swarmify_connectors.fake_oauth import FakeProvider
+from kriflow_api import main
+from kriflow_connectors import ConnectorError, FakeTransport
+from kriflow_connectors.fake_oauth import FakeProvider
 
 PASSWORD = "aviato"
 PROBE = Path(__file__).parents[3] / "packages/connectors/tests/fixtures/packages/probe"

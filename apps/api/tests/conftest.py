@@ -10,14 +10,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fake_graph import fake_extract
-from swarmify_api import main
-from swarmify_api.main import create_app
-from swarmify_connectors import Connectors, FakeTransport, Packages
-from swarmify_connectors.fake import FIXTURE_DEFAULTS, FIXTURES, default_list
-from swarmify_memory import FakeGraphIndex
-from swarmify_swarm import SdkRuntime
-from swarmify_swarm.fake import Script
-from swarmify_swarm.network import NetworkWait
+from kriflow_api import main
+from kriflow_api.main import create_app
+from kriflow_connectors import Connectors, FakeTransport, Packages
+from kriflow_connectors.fake import FIXTURE_DEFAULTS, FIXTURES, default_list
+from kriflow_memory import FakeGraphIndex
+from kriflow_swarm import SdkRuntime
+from kriflow_swarm.fake import Script
+from kriflow_swarm.network import NetworkWait
 
 
 @pytest.fixture(scope="session")

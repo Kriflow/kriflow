@@ -17,12 +17,12 @@ from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from kriflow_api.main import create_app, migrated_db, world_service
+from kriflow_connectors import ConnectorError, FakeTransport, Tool
+from kriflow_kernel.sqlite import connect
+from kriflow_workflows import ConnectorRef, Workflows
+from kriflow_workflows import SqliteStorage as WorkflowStorage
 from sse import sse_events
-from swarmify_api.main import create_app, migrated_db, world_service
-from swarmify_connectors import ConnectorError, FakeTransport, Tool
-from swarmify_kernel.sqlite import connect
-from swarmify_workflows import ConnectorRef, Workflows
-from swarmify_workflows import SqliteStorage as WorkflowStorage
 
 FIXTURES = "packages/connectors/tests/fixtures/packages"
 DEFAULTS = ["fake_publish", "kit", "python_script", "sketch"]

@@ -6,8 +6,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from swarmify_kernel import Event
-from swarmify_learning import (
+from kriflow_kernel import Event
+from kriflow_learning import (
     RECURRENCE,
     Recurrence,
     check_skill,
@@ -15,7 +15,7 @@ from swarmify_learning import (
     parse_retro,
     recurrences,
 )
-from swarmify_learning.retro import LOG_TAIL, frontmatter, prompt, published
+from kriflow_learning.retro import LOG_TAIL, frontmatter, prompt, published
 
 SKILL = "---\nname: hooks\ndescription: Open on the hook.\n---\n\nWrite the hook first.\n"
 

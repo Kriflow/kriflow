@@ -11,8 +11,8 @@ import sys
 import time
 from pathlib import Path
 
+from kriflow_runs import Run, Runner, SqliteStorage, StageDef
 from runs_fakes import migrated, wait_for
-from swarmify_runs import Run, Runner, SqliteStorage, StageDef
 
 root, mode = Path(sys.argv[1]), sys.argv[2]
 log = root / "calls.log"

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import InstallError, ManifestError, Packages, read_manifest
-from swarmify_connectors.packages import ICON_BYTES, MANIFEST, RECORD, check_manifest
+from kriflow_connectors import InstallError, ManifestError, Packages, read_manifest
+from kriflow_connectors.packages import ICON_BYTES, MANIFEST, RECORD, check_manifest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INVALID = sorted((FIXTURES / "manifests").glob("*.toml"))

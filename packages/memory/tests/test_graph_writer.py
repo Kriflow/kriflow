@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS, Event
-from swarmify_kernel.events import append, read_after
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_memory import (
+from kriflow_kernel import MIGRATIONS, Event
+from kriflow_kernel.events import append, read_after
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_memory import (
     GRAPH_OUT,
     OUTCOMES,
     GraphWriter,
@@ -23,7 +23,7 @@ from swarmify_memory import (
     ShrinkRefused,
     extract_command,
 )
-from swarmify_memory import writer as writer_module
+from kriflow_memory import writer as writer_module
 
 GRAPH = Path(__file__).parent / "fixtures/graph/graph.json"
 

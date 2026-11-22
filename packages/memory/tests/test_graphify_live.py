@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_memory import GRAPH_OUT, GraphWriter, McpGraphIndex
+from kriflow_kernel import MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_memory import GRAPH_OUT, GraphWriter, McpGraphIndex
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("SWARMIFY_GRAPHIFY") != "1" or shutil.which("claude") is None,

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Illegal, Pinned, Run, RunLink, Runner, StageDef
 from runs_fakes import FakeConnector, wait_for
-from swarmify_runs import Illegal, Pinned, Run, RunLink, Runner, StageDef
 
 RESEARCH = StageDef("research", "connector", {"calls": "web_search"})
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})

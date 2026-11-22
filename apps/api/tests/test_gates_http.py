@@ -11,11 +11,11 @@ from api_fakes import FakeNotifier, studio, until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from kriflow_api.main import create_app
+from kriflow_connectors import FakeTransport
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Script
 from sse import sse_events
-from swarmify_api.main import create_app
-from swarmify_connectors import FakeTransport
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Script
 
 # These tests start a default package's real `.venv` process, so its install step runs.
 real_default_installs = True

@@ -20,10 +20,10 @@ import pytest
 from api_fakes import install
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import create_app
-from swarmify_connectors.fake_site import FakeSite
-from swarmify_connectors.logins import FileSecrets, ref
-from swarmify_kernel.sqlite import connect
+from kriflow_api.main import create_app
+from kriflow_connectors.fake_site import FakeSite
+from kriflow_connectors.logins import FileSecrets, ref
+from kriflow_kernel.sqlite import connect
 
 SIGNER = Path(__file__).parents[3] / "packages/connectors/tests/fixtures/packages/signer"
 USER, PASSWORD = "ana", "Pa55-word-77031"

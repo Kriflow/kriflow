@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Illegal, OverBudget, Run, Runner, SqliteStorage, StageDef
+from kriflow_runs.control import RunControl
 from runs_fakes import FakeConnector, FakeNotifier, wait_for
-from swarmify_runs import Illegal, OverBudget, Run, Runner, SqliteStorage, StageDef
-from swarmify_runs.control import RunControl
 
 RESEARCH = StageDef("research", "swarm", {"goal": "Find ideas."})
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})

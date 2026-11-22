@@ -1,7 +1,6 @@
 import pytest
 
-from samples import CONNECTORS
-from swarmify_workflows.model import (
+from kriflow_workflows.model import (
     ConnectorRef,
     ConnectorStage,
     GateStage,
@@ -9,7 +8,8 @@ from swarmify_workflows.model import (
     WorkflowModel,
     WorkflowStage,
 )
-from swarmify_workflows.validate import validate, warnings
+from kriflow_workflows.validate import validate, warnings
+from samples import CONNECTORS
 
 GATE = GateStage("review", "Look.")
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from api_fakes import install, until
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import FakeTransport
+from kriflow_connectors import FakeTransport
 
 MANIFEST = """name = "seated"
 version = "1.0.0"

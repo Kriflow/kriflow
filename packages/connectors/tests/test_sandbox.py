@@ -18,9 +18,9 @@ from typing import Any
 
 import pytest
 
-from swarmify_connectors import Connectors, Credentials, McpTransport, SqliteStorage, observe
-from swarmify_connectors.packages import MANIFEST
-from swarmify_connectors.sandbox import (
+from kriflow_connectors import Connectors, Credentials, McpTransport, SqliteStorage, observe
+from kriflow_connectors.packages import MANIFEST
+from kriflow_connectors.sandbox import (
     LAUNCHER,
     RUNNER,
     STDERR,
@@ -185,7 +185,7 @@ except OSError:
 APP = f"""
 import multiprocessing, subprocess, sys
 from pathlib import Path
-from swarmify_connectors.sandbox import Grants, Sandbox
+from kriflow_connectors.sandbox import Grants, Sandbox
 
 def run(data):
     confined = Sandbox(Path(data)).wrap([sys.executable, "-c", {INSIDE!r}], None, Grants())

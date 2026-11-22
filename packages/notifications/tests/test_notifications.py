@@ -7,11 +7,11 @@ from urllib.error import HTTPError
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel import Event
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_notifications import MIGRATIONS, Notifications, SqliteStorage, slack
-from swarmify_notifications.fake import FakeSlack
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel import Event
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_notifications import MIGRATIONS, Notifications, SqliteStorage, slack
+from kriflow_notifications.fake import FakeSlack
 
 BASE = "http://swarmify.lan:8000/"
 RUN = "http://swarmify.lan:8000/worlds/world_1/runs/run_1"

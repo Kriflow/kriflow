@@ -2,7 +2,7 @@
 
 Usage: python tools/check_imports.py packages
 Each `packages/<name>/src/swarmify_<name>` package is scanned; any `swarmify_*` import that is
-not `swarmify_kernel` or the package's own name fails the check. The api app is the composition
+not `kriflow_kernel` or the package's own name fails the check. The api app is the composition
 root and lives outside `packages`, so it is not scanned.
 """
 
@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-KERNEL = "swarmify_kernel"
+KERNEL = "kriflow_kernel"
 
 
 @dataclass(frozen=True)

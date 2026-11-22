@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors, FakeTransport
-from swarmify_connectors.fake import default_list
+from kriflow_connectors import Connectors, FakeTransport
+from kriflow_connectors.fake import default_list
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

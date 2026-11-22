@@ -9,8 +9,8 @@ from pathlib import Path
 
 from dbos import DBOS
 
+from kriflow_runs import Pinned, Run, Runner, SqliteStorage, StageDef
 from runs_fakes import FakeConnector, wait_for
-from swarmify_runs import Pinned, Run, Runner, SqliteStorage, StageDef
 
 RENDER = StageDef("render", "connector")
 PICK = StageDef("pick", "gate", {"ask": "Pick one."})

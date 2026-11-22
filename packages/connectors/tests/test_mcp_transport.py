@@ -11,7 +11,7 @@ import pytest
 import uvicorn
 
 import echo_server
-from swarmify_connectors import Connector, ConnectorError, Connectors, McpTransport
+from kriflow_connectors import Connector, ConnectorError, Connectors, McpTransport
 
 ECHO = str(Path(__file__).parent / "echo_server.py")
 

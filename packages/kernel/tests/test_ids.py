@@ -1,4 +1,4 @@
-from swarmify_kernel import new_id
+from kriflow_kernel import new_id
 
 
 def test_new_id_has_prefix_and_26_char_ulid() -> None:

@@ -1,6 +1,6 @@
 from playwright.sync_api import Page, expect
 
-from swarmify_api.main import VERSION
+from kriflow_api.main import VERSION
 
 
 def test_home_page_shows_api_version(page: Page, base_url: str) -> None:

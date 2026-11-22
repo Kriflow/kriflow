@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from kriflow_workflows import Workflows, cron_problem, dump_workflow, next_fire
+from kriflow_workflows.parse import parse_workflow
 from samples import WEEKLY_SHORT
-from swarmify_workflows import Workflows, cron_problem, dump_workflow, next_fire
-from swarmify_workflows.parse import parse_workflow
 
 
 def test_cron_problem_accepts_five_and_six_fields_and_names_the_rest() -> None:

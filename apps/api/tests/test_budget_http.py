@@ -9,11 +9,11 @@ from api_fakes import FakeNotifier, until
 from fastapi.testclient import TestClient
 from mcp import Client
 
-from swarmify_api.main import create_app, run_control, task_board, workflow_service, world_service
-from swarmify_api.mcp import server
-from swarmify_memory import FakeGraphIndex
-from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_api.main import create_app, run_control, task_board, workflow_service, world_service
+from kriflow_api.mcp import server
+from kriflow_memory import FakeGraphIndex
+from kriflow_swarm import SdkRuntime, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 
 RESEARCH = """name: Research
 budget_usd: 3.5

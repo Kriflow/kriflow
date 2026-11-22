@@ -15,9 +15,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_publish_http import setup, until, weekly
 
-from swarmify_api.main import create_app, run_storage
-from swarmify_connectors import FakeTransport
-from swarmify_runs import Run, StageDef
+from kriflow_api.main import create_app, run_storage
+from kriflow_connectors import FakeTransport
+from kriflow_runs import Run, StageDef
 
 ONE_STAGE = "name: Render\nstages:\n  - connector: render\n    calls: maker\n"
 
@@ -165,7 +165,7 @@ def test_the_console_script_drives_the_drain_with_a_token(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from swarmify_api import drain
+    from kriflow_api import drain
 
     server = uvicorn.Server(uvicorn.Config(guarded, host="127.0.0.1", port=0, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)

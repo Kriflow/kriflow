@@ -1,5 +1,5 @@
 """Issue 332: a Build Session's Bash reads and writes its own build folder. The session's sandbox
-rules (swarmify_swarm.build.sandbox) applied by sandbox-runtime, the library Claude Code's own
+rules (kriflow_swarm.build.sandbox) applied by sandbox-runtime, the library Claude Code's own
 sandbox is, on this machine's OS sandbox (Seatbelt or bubblewrap): before the fix Seatbelt
 refused `ls .` in the build folder while bubblewrap allowed it."""
 
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors.sandbox import LAUNCHER
-from swarmify_swarm import build
+from kriflow_connectors.sandbox import LAUNCHER
+from kriflow_swarm import build
 
 RUNTIME = LAUNCHER.parent / "node_modules/@anthropic-ai/sandbox-runtime/dist/index.js"
 SANDBOX = shutil.which("sandbox-exec") or shutil.which("bwrap")

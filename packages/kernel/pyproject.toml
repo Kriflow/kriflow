@@ -1,5 +1,5 @@
 [project]
-name = "swarmify-kernel"
+name = "kriflow-kernel"
 version = "0.1.0"
 description = "Shared kernel: ids, Money, event envelope"
 requires-python = ">=3.12"

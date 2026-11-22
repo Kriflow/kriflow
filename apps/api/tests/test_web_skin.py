@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from swarmify_api import main
+from kriflow_api import main
 
 
 def test_deep_links_fall_back_to_index_but_api_misses_stay_404(

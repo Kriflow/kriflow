@@ -9,12 +9,12 @@ import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from swarmify_api.eval_harness import Settings, main, run_eval
-from swarmify_api.main import create_app, world_service
-from swarmify_learning.evals import TASKS, blind_order
-from swarmify_memory import FakeGraphIndex
-from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_api.eval_harness import Settings, main, run_eval
+from kriflow_api.main import create_app, world_service
+from kriflow_learning.evals import TASKS, blind_order
+from kriflow_memory import FakeGraphIndex
+from kriflow_swarm import SdkRuntime, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 
 TASK = TASKS[0]
 FAST = Settings(budget_usd=3.0, timeout_s=30, poll_s=0.05, swarm_agents=2)
@@ -201,9 +201,9 @@ def test_the_command_line_runs_one_task_kind_and_talks_to_the_api(
         seen.update(budget=settings.budget_usd, clean=clean)
         return {"verdict": "The swarm wins: ...", "id": "eval_1"}
 
-    monkeypatch.setattr("swarmify_api.eval_harness.run_eval", fake)
+    monkeypatch.setattr("kriflow_api.eval_harness.run_eval", fake)
     monkeypatch.setattr(
-        "swarmify_api.eval_harness.sign_in", lambda http, pw: seen.update(password=pw)
+        "kriflow_api.eval_harness.sign_in", lambda http, pw: seen.update(password=pw)
     )
     monkeypatch.setenv("SWARMIFY_PASSWORD", "pw")
     argv = ["--api", "http://box:8000", "--kind", "typed-lists", "--k", "1", "--tasks", "3"]

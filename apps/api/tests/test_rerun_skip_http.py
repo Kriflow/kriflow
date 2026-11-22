@@ -11,7 +11,7 @@ from api_fakes import until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import FakeTransport
+from kriflow_connectors import FakeTransport
 
 MAKER = {"name": "maker", "kind": "stage", "server": "uvx maker-mcp", "stage_types": ["connector"]}
 

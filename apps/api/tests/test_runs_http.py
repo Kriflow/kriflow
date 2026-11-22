@@ -8,9 +8,9 @@ from api_fakes import until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from kriflow_connectors import FakeTransport
+from kriflow_runs import StageDef
 from sse import sse_events
-from swarmify_connectors import FakeTransport
-from swarmify_runs import StageDef
 
 RENDER = {
     "name": "render_video",
@@ -114,8 +114,8 @@ def test_run_updates_stream_on_the_world_events(live_url: str) -> None:
 
 
 def test_stage_def_keeps_every_stage_field() -> None:
-    from swarmify_api.runs import stage_def
-    from swarmify_workflows import GateStage
+    from kriflow_api.runs import stage_def
+    from kriflow_workflows import GateStage
 
     assert stage_def(GateStage("pick", "Pick one.", "pick")) == StageDef(
         "pick",

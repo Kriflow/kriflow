@@ -11,8 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from mcp import Client
 
-from swarmify_api.main import run_control, task_board, workflow_service, world_service
-from swarmify_api.mcp import server
+from kriflow_api.main import run_control, task_board, workflow_service, world_service
+from kriflow_api.mcp import server
 
 RENDER = {
     "name": "render_video",
@@ -114,7 +114,7 @@ def test_the_world_list_marks_workflows_whose_current_version_fails(running: Tes
 
 @pytest.mark.anyio
 async def test_mcp_start_and_fork_refuse_with_the_violations(tmp_path: Path) -> None:
-    from swarmify_api.main import create_app
+    from kriflow_api.main import create_app
 
     control = run_control(tmp_path)
     with TestClient(create_app(tmp_path, connector=lambda *_: None, retro=False)) as http:

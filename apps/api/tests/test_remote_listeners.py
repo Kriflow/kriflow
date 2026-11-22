@@ -8,10 +8,10 @@ from pathlib import Path
 
 from api_fakes import until
 
-from swarmify_api import remote
-from swarmify_api.auth import Operator
-from swarmify_api.main import connector_service, migrated_db
-from swarmify_connectors import Packages
+from kriflow_api import remote
+from kriflow_api.auth import Operator
+from kriflow_api.main import connector_service, migrated_db
+from kriflow_connectors import Packages
 
 PAGER = Path(__file__).parents[3] / "packages/connectors/tests/fixtures/packages/pager"
 

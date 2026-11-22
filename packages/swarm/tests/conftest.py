@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_swarm import SqliteStorage
 from swarm_db import migrated
-from swarmify_swarm import SqliteStorage
 
 
 @pytest.fixture

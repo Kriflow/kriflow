@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import VERSION
+from kriflow_api.main import VERSION
 
 
 def test_health_returns_version(client: TestClient) -> None:

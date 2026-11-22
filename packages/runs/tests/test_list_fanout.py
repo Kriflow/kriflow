@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Held, Pinned, Run, Runner, SqliteStorage, StageDef, WorldLists
 from runs_fakes import FakeConnector, wait_for
-from swarmify_runs import Held, Pinned, Run, Runner, SqliteStorage, StageDef, WorldLists
 
 WORLD = "world_a"
 STATUSES = ["open", "working", "review", "closed", "rejected"]

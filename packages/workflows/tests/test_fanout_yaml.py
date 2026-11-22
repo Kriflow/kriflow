@@ -4,17 +4,17 @@ from dataclasses import asdict
 
 import pytest
 
-from samples import CONNECTORS
-from swarmify_workflows import (
+from kriflow_workflows import (
     ConnectorStage,
     GateStage,
     SwarmStage,
     WorkflowModel,
     WorkflowStage,
 )
-from swarmify_workflows.dump import dump_workflow
-from swarmify_workflows.parse import parse_workflow
-from swarmify_workflows.validate import validate
+from kriflow_workflows.dump import dump_workflow
+from kriflow_workflows.parse import parse_workflow
+from kriflow_workflows.validate import validate
+from samples import CONNECTORS
 
 LIST = "  - swarm: paragraphs\n    goal: g\n    done_when: d\n    produces: [paragraphs.json]\n"
 

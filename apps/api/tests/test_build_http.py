@@ -15,10 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fake_graph import fake_extract
-from swarmify_api.main import create_app
-from swarmify_connectors import Connector, ConnectorError, FakeTransport
-from swarmify_swarm import AgentRuntime, SdkRuntime, SessionEnd, SessionHooks, SessionSpec, build
-from swarmify_swarm.fake import Answer, Call, Die, Say, Script
+from kriflow_api.main import create_app
+from kriflow_connectors import Connector, ConnectorError, FakeTransport
+from kriflow_swarm import AgentRuntime, SdkRuntime, SessionEnd, SessionHooks, SessionSpec, build
+from kriflow_swarm.fake import Answer, Call, Die, Say, Script
 
 SCRIPT_WRITER = {
     "name": "script_writer",

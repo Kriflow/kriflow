@@ -16,11 +16,11 @@ from test_publish_http import at_gate as publish_gate
 from test_rerun_skip_http import at_check, step
 from test_run_changes_http import at_gate, change, failed_at_the_end, restructure, shape, stage
 
-from swarmify_connectors import FakeTransport
-from swarmify_memory import FakeGraphIndex
-from swarmify_memory.ports import graph_file
-from swarmify_swarm import SqliteStorage, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Die, Say, Script
+from kriflow_connectors import FakeTransport
+from kriflow_memory import FakeGraphIndex
+from kriflow_memory.ports import graph_file
+from kriflow_swarm import SqliteStorage, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Die, Say, Script
 
 READS = ("get_run", "read_run_file", "tail_stage_log", "list_run_events")
 READS += ("list_workflow_runs", "query_graph", "list_made")

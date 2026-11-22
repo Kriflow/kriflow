@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from swarmify_connectors import (
+from kriflow_connectors import (
     ConnectorError,
     Connectors,
     Credentials,
@@ -18,8 +18,8 @@ from swarmify_connectors import (
     McpTransport,
     SqliteStorage,
 )
-from swarmify_connectors.packages import MANIFEST, read_manifest
-from swarmify_connectors.setup import coerce, fields
+from kriflow_connectors.packages import MANIFEST, read_manifest
+from kriflow_connectors.setup import coerce, fields
 
 PROBE = Path(__file__).parent / "fixtures/packages/probe"
 

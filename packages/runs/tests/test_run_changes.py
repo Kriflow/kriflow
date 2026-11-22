@@ -10,10 +10,9 @@ from typing import Any
 
 import pytest
 
-from runs_fakes import FakeNotifier, wait_for
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import (
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import (
     Illegal,
     PublishField,
     PublishPreview,
@@ -24,6 +23,7 @@ from swarmify_runs import (
     SqliteStorage,
     StageDef,
 )
+from runs_fakes import FakeNotifier, wait_for
 
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})
 WRITE = StageDef("write", "swarm", {"goal": "Write a script.", "done_when": "It reads well."})

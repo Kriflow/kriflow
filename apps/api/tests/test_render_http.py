@@ -16,10 +16,10 @@ from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import create_app, with_files
-from swarmify_connectors import ConnectorError
-from swarmify_connectors.build_session import fingerprint
-from swarmify_runs import Run, RunStageView
+from kriflow_api.main import create_app, with_files
+from kriflow_connectors import ConnectorError
+from kriflow_connectors.build_session import fingerprint
+from kriflow_runs import Run, RunStageView
 
 HERE = Path(__file__).parent
 KIT = HERE.parents[2] / "packages/connectors/tests/fixtures/packages/kit"

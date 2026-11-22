@@ -2,7 +2,7 @@
 //
 //   node launcher.mjs <plan.json> -- <command> [args...]
 //
-// The plan is what Swarmify wrote for this process (swarmify_connectors/sandbox.py): `sandbox`,
+// The plan is what Swarmify wrote for this process (kriflow_connectors/sandbox.py): `sandbox`,
 // the sandbox-runtime config; `cwd`, the folder it runs in; `env`, variables set for the command
 // (its own HOME and TMPDIR); `pass`, the names of the variables of ours it may have (its own
 // Setup values), besides a few every process needs; `blocked`, the file each attempt the sandbox

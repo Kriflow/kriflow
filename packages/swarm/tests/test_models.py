@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_swarm import OPERATOR, CastEntry, SdkRuntime, SqliteStorage, Swarm, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_swarm.sdk import DEFAULT_MODEL, PRICES, step_cost
 from swarm_db import DiskFiles
-from swarmify_swarm import OPERATOR, CastEntry, SdkRuntime, SqliteStorage, Swarm, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
-from swarmify_swarm.sdk import DEFAULT_MODEL, PRICES, step_cost
 
 W, R, S = "world_1", "run_1", "stage_1"
 MTOK = {"input_tokens": 1_000_000}

@@ -12,12 +12,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fake_graph import fake_extract, shrinking_extract
+from kriflow_api.main import create_app
+from kriflow_memory import EMPTY, FakeGraphIndex
+from kriflow_memory.writer import STALLED
+from kriflow_swarm import SdkRuntime, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 from sse import sse_events
-from swarmify_api.main import create_app
-from swarmify_memory import EMPTY, FakeGraphIndex
-from swarmify_memory.writer import STALLED
-from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
 
 PLAN = [Answer({"tasks": [{"title": "Find 5 ideas."}]})]
 FINISH = Call(tool_id("finish_task"), {"task_id": LAST, "note": "Done."})

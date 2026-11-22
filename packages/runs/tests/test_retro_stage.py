@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Illegal, Run, Runner, StageDef
+from kriflow_runs.model import Run as RunModel
 from runs_fakes import FakeNotifier, wait_for
-from swarmify_runs import Illegal, Run, Runner, StageDef
-from swarmify_runs.model import Run as RunModel
 
 RESEARCH = StageDef("research", "connector", {"calls": "web_search"})
 RETRO = StageDef("retro", "retro", {"kind": "skill", "ask": "Approve, edit or reject the skill."})

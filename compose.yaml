@@ -37,7 +37,7 @@ services:
     # A compose entrypoint clears the image's CMD, so the start command is repeated here. Open
     # event streams (a phone with the app open) are cut after 5 s on a stop, never waited on, so
     # the drain below runs.
-    command: ["uvicorn", "--factory", "swarmify_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
+    command: ["uvicorn", "--factory", "kriflow_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
     # A stop drains (README, Deployment): stages at work finish for up to SWARMIFY_DRAIN_SECONDS
     # (20 min) first. Keep this a minute over it, or Docker kills the drain.
     stop_grace_period: 21m
@@ -87,7 +87,7 @@ services:
     init: true
     # As the api's: a connector stage the api's drain still finishes runs here.
     stop_grace_period: 21m
-    command: ["python", "-m", "swarmify_connectors.runner", "serve", "/run/swarmify/sandbox.sock"]
+    command: ["python", "-m", "kriflow_connectors.runner", "serve", "/run/swarmify/sandbox.sock"]
     security_opt:
       - seccomp=./docker/seccomp-sandbox.json
       # swarmify-sandbox on an Ubuntu 23.10+ host (tools/allow-bwrap-userns.sh), else unconfined

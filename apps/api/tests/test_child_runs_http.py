@@ -9,8 +9,8 @@ from api_fakes import until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 
 LEAF = """name: Trends
 stages:

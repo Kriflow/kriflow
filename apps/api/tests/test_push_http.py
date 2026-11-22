@@ -10,9 +10,9 @@ import pytest
 from api_fakes import studio, until
 from fastapi.testclient import TestClient
 
-from swarmify_api import main
-from swarmify_api.main import create_app
-from swarmify_notifications.push import Target
+from kriflow_api import main
+from kriflow_api.main import create_app
+from kriflow_notifications.push import Target
 
 QUICK = "name: Quick\nstages:\n  - gate: ok\n    ask: Go?\n    kind: confirm\n"
 BOOM = "name: Boom\nstages:\n  - connector: explode\n    calls: studio\n"
