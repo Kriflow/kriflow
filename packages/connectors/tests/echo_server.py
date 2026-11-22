@@ -24,7 +24,7 @@ def echo(text: str = "", idempotency_key: str = "") -> dict[str, Any]:
 
 @mcp.tool(description="Tell whether an environment variable is set, and the leak probe.")
 def env(name: str) -> dict[str, Any]:
-    return {"value": os.environ.get(name), "leak": os.environ.get("SWARMIFY_LEAK_PROBE")}
+    return {"value": os.environ.get(name), "leak": os.environ.get("KRIFLOW_LEAK_PROBE")}
 
 
 @mcp.tool(description="Always fails.")

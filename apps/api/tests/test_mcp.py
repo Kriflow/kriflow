@@ -63,9 +63,10 @@ async def test_world_tools_create_list_get_delete(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_console_script_serves_the_tools_over_stdio(tmp_path: Path) -> None:
-    script = Path(sys.executable).parent / "swarmify-mcp"
-    env = {**os.environ, "SWARMIFY_DATA_DIR": str(tmp_path)}
+@pytest.mark.parametrize("name", ["kriflow-mcp", "swarmify-mcp"])  # the old name until removal
+async def test_console_script_serves_the_tools_over_stdio(tmp_path: Path, name: str) -> None:
+    script = Path(sys.executable).parent / name
+    env = {**os.environ, "KRIFLOW_DATA_DIR": str(tmp_path)}
     async with Client(StdioServerParameters(command=str(script), env=env)) as client:
         created = await client.call_tool("create_world", {"name": "Video"})
         assert created.structured_content and created.structured_content["name"] == "Video"

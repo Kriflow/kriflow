@@ -7,7 +7,7 @@
 name: swarmify
 
 x-env: &env
-  SWARMIFY_DATA_DIR: /data
+  KRIFLOW_DATA_DIR: /data
   # Headless Claude Code on the subscription: `claude setup-token` prints it (ADR 0010).
   # Checked per service by docker/needs.sh.
   CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
@@ -17,8 +17,9 @@ services:
   web:
     build: { context: ., target: web }
     ports:
-      # The LAN sees it on every interface by default; SWARMIFY_BIND=127.0.0.1 keeps it local.
-      - "${SWARMIFY_BIND:-0.0.0.0}:${SWARMIFY_PORT:-8000}:8000"
+      # The LAN sees it on every interface by default; KRIFLOW_BIND=127.0.0.1 keeps it local.
+      # Each KRIFLOW_ setting falls back to the SWARMIFY_ one an older .env holds (kriflow#594).
+      - "${KRIFLOW_BIND:-${SWARMIFY_BIND:-0.0.0.0}}:${KRIFLOW_PORT:-${SWARMIFY_PORT:-8000}}:8000"
     restart: unless-stopped
 
   # Docker's default seccomp and AppArmor profiles: the api holds the Claude token, the sign-in
@@ -33,12 +34,12 @@ services:
       # Claude Code's session transcripts, on the volume, so an agent's session still resumes
       # after the container is recreated (issue 387); the image's own ~/.claude went with it.
       - { type: volume, source: data, target: /root/.claude, volume: { subpath: claude } }
-    entrypoint: ["/app/docker/needs.sh", "CLAUDE_CODE_OAUTH_TOKEN", "SWARMIFY_PASSWORD", "--"]
+    entrypoint: ["/app/docker/needs.sh", "CLAUDE_CODE_OAUTH_TOKEN", "KRIFLOW_PASSWORD", "--"]
     # A compose entrypoint clears the image's CMD, so the start command is repeated here. Open
     # event streams (a phone with the app open) are cut after 5 s on a stop, never waited on, so
     # the drain below runs.
     command: ["uvicorn", "--factory", "kriflow_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
-    # A stop drains (README, Deployment): stages at work finish for up to SWARMIFY_DRAIN_SECONDS
+    # A stop drains (README, Deployment): stages at work finish for up to KRIFLOW_DRAIN_SECONDS
     # (20 min) first. Keep this a minute over it, or Docker kills the drain.
     stop_grace_period: 21m
     depends_on:
@@ -48,23 +49,33 @@ services:
         condition: service_healthy  # it installs the default packages there on startup
     environment:
       <<: *env
-      SWARMIFY_SANDBOX_RUNNER: /run/swarmify/sandbox.sock
-      SWARMIFY_SANDBOX_CLI: /app/docker/claude-in-runner
+      KRIFLOW_SANDBOX_RUNNER: /run/swarmify/sandbox.sock
+      KRIFLOW_SANDBOX_CLI: /app/docker/claude-in-runner
       # The caches this repository's packages install with, where the sandbox service sees them
       UV_CACHE_DIR: /data/sandbox/cache/uv
       npm_config_cache: /data/npm-cache
       # Where a connector process reaches the api (a remote approver's MCP calls), from `sandbox`.
-      SWARMIFY_INTERNAL_URL: http://api:8000
-      SWARMIFY_GRAPH_WRITER: external
-      SWARMIFY_DRAIN_SECONDS: ${SWARMIFY_DRAIN_SECONDS:-1200}
+      KRIFLOW_INTERNAL_URL: http://api:8000
+      KRIFLOW_GRAPH_WRITER: external
+      KRIFLOW_DRAIN_SECONDS: ${KRIFLOW_DRAIN_SECONDS:-${SWARMIFY_DRAIN_SECONDS:-1200}}
       # The operator's sign-in password (README, Sign-in), required, see entrypoint.
-      SWARMIFY_PASSWORD: ${SWARMIFY_PASSWORD:-}
-      SWARMIFY_BASE_URL: ${SWARMIFY_BASE_URL:-http://localhost:8000}
+      KRIFLOW_PASSWORD: ${KRIFLOW_PASSWORD:-${SWARMIFY_PASSWORD:-}}
+      KRIFLOW_BASE_URL: ${KRIFLOW_BASE_URL:-${SWARMIFY_BASE_URL:-http://localhost:8000}}
       # The folders a package installed from a local path must be in (README, Connector Packages)
-      SWARMIFY_PACKAGE_SOURCES: ${SWARMIFY_PACKAGE_SOURCES:-}
+      KRIFLOW_PACKAGE_SOURCES: ${KRIFLOW_PACKAGE_SOURCES:-${SWARMIFY_PACKAGE_SOURCES:-}}
       # Resource Slot counts, as gpu=1,seat=2 (README, Resources); one Slot each when blank.
-      SWARMIFY_RESOURCES: ${SWARMIFY_RESOURCES:-}
+      KRIFLOW_RESOURCES: ${KRIFLOW_RESOURCES:-${SWARMIFY_RESOURCES:-}}
       # Web Push (README, Push notifications); blank makes a pair once in /data/vapid.json.
+      KRIFLOW_VAPID_PUBLIC_KEY: ${KRIFLOW_VAPID_PUBLIC_KEY:-${SWARMIFY_VAPID_PUBLIC_KEY:-}}
+      KRIFLOW_VAPID_PRIVATE_KEY: ${KRIFLOW_VAPID_PRIVATE_KEY:-${SWARMIFY_VAPID_PRIVATE_KEY:-}}
+      KRIFLOW_VAPID_SUBJECT: ${KRIFLOW_VAPID_SUBJECT:-${SWARMIFY_VAPID_SUBJECT:-}}
+      # The old names as .env holds them, unfilled: the api logs at startup which are still set,
+      # to rename before the old names stop working.
+      SWARMIFY_DRAIN_SECONDS: ${SWARMIFY_DRAIN_SECONDS:-}
+      SWARMIFY_PASSWORD: ${SWARMIFY_PASSWORD:-}
+      SWARMIFY_BASE_URL: ${SWARMIFY_BASE_URL:-}
+      SWARMIFY_PACKAGE_SOURCES: ${SWARMIFY_PACKAGE_SOURCES:-}
+      SWARMIFY_RESOURCES: ${SWARMIFY_RESOURCES:-}
       SWARMIFY_VAPID_PUBLIC_KEY: ${SWARMIFY_VAPID_PUBLIC_KEY:-}
       SWARMIFY_VAPID_PRIVATE_KEY: ${SWARMIFY_VAPID_PRIVATE_KEY:-}
       SWARMIFY_VAPID_SUBJECT: ${SWARMIFY_VAPID_SUBJECT:-}
@@ -91,7 +102,7 @@ services:
     security_opt:
       - seccomp=./docker/seccomp-sandbox.json
       # swarmify-sandbox on an Ubuntu 23.10+ host (tools/allow-bwrap-userns.sh), else unconfined
-      - apparmor=${SWARMIFY_SANDBOX_APPARMOR:-unconfined}
+      - apparmor=${KRIFLOW_SANDBOX_APPARMOR:-${SWARMIFY_SANDBOX_APPARMOR:-unconfined}}
       - systempaths=unconfined
     volumes:
       - sandbox-socket:/run/swarmify
@@ -109,7 +120,7 @@ services:
       # 423). Its own subpath: only Build Sessions write here, never the api's agents.
       - { type: volume, source: data, target: /root/.claude, volume: { subpath: claude-builds } }
     environment:
-      SWARMIFY_DATA_DIR: /data
+      KRIFLOW_DATA_DIR: /data
     healthcheck:
       test: ["CMD", "test", "-S", "/run/swarmify/sandbox.sock"]
       interval: 2s
@@ -137,7 +148,7 @@ services:
       - data:/data
     environment: *env
     entrypoint: ["/app/docker/needs.sh", "CLAUDE_CODE_OAUTH_TOKEN", "--"]
-    command: ["swarmify-graph-writer"]
+    command: ["kriflow-graph-writer"]
     healthcheck:
       disable: true
     restart: unless-stopped

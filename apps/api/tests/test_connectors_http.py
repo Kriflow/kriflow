@@ -487,7 +487,7 @@ ref = "v1.0.0"
 permissions = ["network: api.example.org"]
 """
     )
-    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", str(index))
+    monkeypatch.setenv("KRIFLOW_CONNECTOR_INDEX", str(index))
     listed = client.get("/api/packages/index")
     assert listed.status_code == 200, listed.text
     assert listed.json()["url"] == str(index)
@@ -506,7 +506,7 @@ permissions = ["network: api.example.org"]
     newer.write_text(
         index.read_text().replace('ref = "v1.0.0"', 'ref = "echo-v2.0.0"\ncontract = 3')
     )
-    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", str(newer))
+    monkeypatch.setenv("KRIFLOW_CONNECTOR_INDEX", str(newer))
     listed = client.get("/api/packages/index").json()
     assert (listed["oldest_contract"], listed["newest_contract"]) == (1, 2)
     assert {k: listed["packages"][0][k] for k in ("contract", "runnable", "problem")} == {
@@ -517,7 +517,7 @@ permissions = ["network: api.example.org"]
     }
     assert entry["contract"] == 1 and entry["runnable"] and entry["problem"] is None
 
-    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", "http://example.org/index.toml")
+    monkeypatch.setenv("KRIFLOW_CONNECTOR_INDEX", "http://example.org/index.toml")
     down = client.get("/api/packages/index")
     assert down.status_code == 502
     assert down.json()["detail"] == (

@@ -190,17 +190,17 @@ def test_package_sources_limit_local_paths_to_the_listed_folders(
 ) -> None:
     source = copy_echo(tmp_path, '["python3", "-c", "pass"]')
     allowed = tmp_path / "sources"
-    monkeypatch.setenv("SWARMIFY_PACKAGE_SOURCES", f"{tmp_path / 'other'}:{allowed}")
-    with pytest.raises(InstallError, match="not in SWARMIFY_PACKAGE_SOURCES"):
+    monkeypatch.setenv("KRIFLOW_PACKAGE_SOURCES", f"{tmp_path / 'other'}:{allowed}")
+    with pytest.raises(InstallError, match="not in KRIFLOW_PACKAGE_SOURCES"):
         packages.review(str(source))
-    with pytest.raises(InstallError, match="not in SWARMIFY_PACKAGE_SOURCES"):
+    with pytest.raises(InstallError, match="not in KRIFLOW_PACKAGE_SOURCES"):
         packages.install(str(source), ref="main")
     # this repository's own folders and a package Swarmify writes still install
     assert packages.install("packages/echo").version == "1.0.0"
     assert packages.install_local({**read_manifest(source), "name": "drafted"}).version == "0.0.1"
     allowed.mkdir()
     shutil.move(source, allowed / "echo")
-    monkeypatch.setenv("SWARMIFY_PACKAGE_SOURCES", f"{allowed}/")
+    monkeypatch.setenv("KRIFLOW_PACKAGE_SOURCES", f"{allowed}/")
     with pytest.raises(InstallError, match="already installed"):  # past the source check
         packages.review(str(allowed / "echo"))
 

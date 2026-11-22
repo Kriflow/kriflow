@@ -74,7 +74,7 @@ def test_domains_follow_the_sandboxs_rules(domain: str, ok: bool) -> None:
 
 
 def test_loopback_is_allowed_under_the_test_flag_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SWARMIFY_LOGIN_ALLOW_LOOPBACK", "1")
+    monkeypatch.setenv("KRIFLOW_LOGIN_ALLOW_LOOPBACK", "1")
     assert domain_problem("127.0.0.1:8123") is None
 
 

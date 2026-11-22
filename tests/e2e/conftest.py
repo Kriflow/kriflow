@@ -24,7 +24,7 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="session")
 def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    return tmp_path_factory.mktemp("swarmify")
+    return tmp_path_factory.mktemp("kriflow")
 
 
 @contextmanager
@@ -36,10 +36,10 @@ def _serve(data_dir: Path, **env: str) -> Iterator[str]:
     url = f"http://127.0.0.1:{port}"
     env = {
         **os.environ,
-        "SWARMIFY_WEB_DIST": str(WEB_DIST),
-        "SWARMIFY_DATA_DIR": str(data_dir),
+        "KRIFLOW_WEB_DIST": str(WEB_DIST),
+        "KRIFLOW_DATA_DIR": str(data_dir),
         "PYTHONPATH": str(Path(__file__).parent),
-        "SWARMIFY_DRAIN_SECONDS": "0",  # a stopped server does not wait for stages at work
+        "KRIFLOW_DRAIN_SECONDS": "0",  # a stopped server does not wait for stages at work
         **env,
     }
     cmd = [
@@ -81,8 +81,8 @@ def base_url(data_dir: Path) -> Iterator[str]:
 @pytest.fixture(scope="session")
 def locked_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """A second app behind the operator's sign-in, with its own data folder."""
-    data = tmp_path_factory.mktemp("swarmify-locked")
-    with _serve(data, SWARMIFY_PASSWORD="aviato") as url:
+    data = tmp_path_factory.mktemp("kriflow-locked")
+    with _serve(data, KRIFLOW_PASSWORD="aviato") as url:
         yield url
 
 

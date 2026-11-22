@@ -37,7 +37,7 @@ def site() -> Iterator[FakeSite]:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    monkeypatch.setenv("SWARMIFY_LOGIN_ALLOW_LOOPBACK", "1")  # the fake site is on loopback
+    monkeypatch.setenv("KRIFLOW_LOGIN_ALLOW_LOOPBACK", "1")  # the fake site is on loopback
     with TestClient(create_app(tmp_path / "data", poll_seconds=0.05, retro=False)) as c:
         yield c
 

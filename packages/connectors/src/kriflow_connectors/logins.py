@@ -15,7 +15,6 @@ import binascii
 import hashlib
 import hmac
 import ipaddress
-import os
 import re
 import struct
 import time
@@ -26,11 +25,13 @@ from typing import Any, Protocol
 
 from kriflow_connectors.setup import PrivateJson
 from kriflow_kernel import Event
+from kriflow_kernel.settings import setting
 
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 """A login's name, short enough to write unquoted in a stage: `login: shop_admin`."""
 _HOST = re.compile(r"^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*(:\d{1,5})?$")
-ALLOW_LOOPBACK = "SWARMIFY_LOGIN_ALLOW_LOOPBACK"
+ALLOW_LOOPBACK = "LOGIN_ALLOW_LOOPBACK"
+"""A setting (KRIFLOW_ or SWARMIFY_), for tests."""
 """Set to 1 by tests only: a login may then name a loopback host, as the fake site serves on."""
 RESULTS = ("signed_in", "reused_session", "person_check", "refused_origin", "failed", "received")
 """What a stage's use of a login came to, as its `login.used` event says."""
@@ -99,7 +100,7 @@ def domain_problem(domain: str) -> str | None:
             and (address.is_loopback or address.is_link_local or address.is_unspecified)
         )
     )
-    if inside and os.environ.get(ALLOW_LOOPBACK) != "1":
+    if inside and setting(ALLOW_LOOPBACK) != "1":
         return f"{domain} is this box itself, which a login never reaches"
     return None
 

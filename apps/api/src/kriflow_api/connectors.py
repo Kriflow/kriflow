@@ -2,7 +2,6 @@
 Connector Packages installed for the whole install."""
 
 import hashlib
-import os
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Annotated, Any, Literal
@@ -31,6 +30,7 @@ from kriflow_connectors.index import INDEX_URL, IndexUnavailable, read_index
 from kriflow_connectors.oauth import CALLBACK, SignInNeeded
 from kriflow_connectors.packages import NEWEST_CONTRACT, OLDEST_CONTRACT, contract_problem
 from kriflow_connectors.setup import env_name, fields, needs_sign_in, scope, secret
+from kriflow_kernel.settings import setting
 from kriflow_workflows import Workflows
 from kriflow_worlds import Worlds
 
@@ -409,7 +409,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         """The curated index of known packages, read from `SWARMIFY_CONNECTOR_INDEX` (an https
         URL or a local file; by default Kriflow/packages' `index.toml`). 502
         saying why when it cannot be fetched or read."""
-        url = os.environ.get("SWARMIFY_CONNECTOR_INDEX") or INDEX_URL
+        url = setting("CONNECTOR_INDEX", INDEX_URL)
         try:
             entries = read_index(url)
         except IndexUnavailable as exc:

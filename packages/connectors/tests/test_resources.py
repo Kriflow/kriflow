@@ -125,7 +125,7 @@ def test_two_holders_of_a_one_slot_resource_take_turns(tmp_path: Path) -> None:
 def test_two_slots_let_two_holders_in_at_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_RESOURCES", "gpu=1, seat=2")
+    monkeypatch.setenv("KRIFLOW_RESOURCES", "gpu=1, seat=2")
     first, second = _overlap(tmp_path)
     assert second[1] < first[2]
 

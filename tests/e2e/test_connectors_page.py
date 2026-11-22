@@ -398,7 +398,7 @@ ref = "v1.0.0"
 permissions = []
 """
     )
-    with serve(tmp_path / "data", SWARMIFY_CONNECTOR_INDEX=str(index)) as url:
+    with serve(tmp_path / "data", KRIFLOW_CONNECTOR_INDEX=str(index)) as url:
         world = httpx.post(f"{url}/api/worlds", json={"name": "Index"}).json()
         page.goto(f"{url}/worlds/{world['id']}/connectors")
         page.get_by_role("button", name="Browse the index").click()

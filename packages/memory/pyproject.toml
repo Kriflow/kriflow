@@ -7,7 +7,8 @@ license = "AGPL-3.0-only"
 dependencies = ["graphifyy[mcp]==0.9.95", "mcp>=2.3", "pyyaml>=6.0", "kriflow-kernel"]
 
 [project.scripts]
-swarmify-graph-writer = "kriflow_memory.writer:main"
+kriflow-graph-writer = "kriflow_memory.writer:main"
+swarmify-graph-writer = "kriflow_memory.writer:main"  # the old name, until the alias removal
 
 [build-system]
 requires = ["uv_build>=0.9,<0.14"]

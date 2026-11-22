@@ -18,14 +18,17 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, TextIO
 
+from kriflow_kernel.settings import setting
+
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
-COUNTS = "SWARMIFY_RESOURCES"
-"""The operator's Slot counts, as `gpu=1,seat=2`; a Resource it does not name has one."""
+COUNTS = "RESOURCES"
+"""The setting (KRIFLOW_ or SWARMIFY_) of the operator's Slot counts, as `gpu=1,seat=2`; a
+Resource it does not name has one."""
 
 
 def counts() -> dict[str, int]:
     out: dict[str, int] = {}
-    for pair in os.environ.get(COUNTS, "").split(","):
+    for pair in setting(COUNTS).split(","):
         name, _, n = pair.strip().partition("=")
         if NAME.match(name) and n.strip().isdigit() and int(n) > 0:
             out[name] = int(n)

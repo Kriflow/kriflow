@@ -35,7 +35,7 @@ def fixture_defaults(
     """The app's defaults come from `fixture_list`, and their install steps (python_script's)
     are skipped: the API starts the app ~200 times. A module that needs an install step to run
     sets `real_default_installs = True`."""
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(fixture_list))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(fixture_list))
     if getattr(request.module, "real_default_installs", False):
         return
     real = Connectors.install_defaults
@@ -73,7 +73,7 @@ def script() -> Script:
 def no_drain_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """An app stopped with a stage still at work stops at once, as before the Drain; a drain
     test sets its own limit."""
-    monkeypatch.setenv("SWARMIFY_DRAIN_SECONDS", "0")
+    monkeypatch.setenv("KRIFLOW_DRAIN_SECONDS", "0")
 
 
 @pytest.fixture(autouse=True)

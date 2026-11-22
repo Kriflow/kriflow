@@ -39,7 +39,7 @@ def test_lists_the_tools_of_a_started_server(tmp_path: Path) -> None:
 def test_credentials_reach_the_connector_process_and_the_api_environment_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_LEAK_PROBE", "api-only")
+    monkeypatch.setenv("KRIFLOW_LEAK_PROBE", "api-only")
     answer = McpTransport().call(echo(tmp_path), "env", {"name": "FAL_KEY"}, {"FAL_KEY": "k"})
     assert answer == {"value": "k", "leak": None}
 

@@ -24,7 +24,7 @@ def repo(tmp_path: Path, connectors: Connectors, monkeypatch: pytest.MonkeyPatch
     file.write_text(
         file.read_text().replace("]", '  { name = "broken", ref = "broken-v1.0.0" },\n]')
     )
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(file))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(file))
     return tmp_path / "packages/repo"
 
 

@@ -3,7 +3,7 @@ offers Ask for a change and Rerun from scratch, naming the later stages that run
 gate that waits again before you send. A Follow-up continues the stage as Attempt 2, a tab with
 its time and spend, your words pinned on it. Nothing runs wide and every tap is 44 px. On a
 desktop the box sits at the foot of the stage card, Rerun from scratch beside Ask for a change.
-Set SWARMIFY_SHOTS to a folder to keep screenshots."""
+Set KRIFLOW_SHOTS to a folder to keep screenshots."""
 
 import os
 import re
@@ -27,7 +27,7 @@ stages:
     ask: Read them. Approve or send back.
     kind: approve
 """
-SHOTS = os.environ.get("SWARMIFY_SHOTS")
+SHOTS = os.environ.get("KRIFLOW_SHOTS")
 WORDS = "Drop the second idea and add sources to the first."
 
 

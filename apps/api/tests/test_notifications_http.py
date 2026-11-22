@@ -28,7 +28,7 @@ def slack() -> Iterator[FakeSlack]:
 def running(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """The app with its default Notifier, the Slack adapter, and a connector that fails on
     a stage named explode."""
-    monkeypatch.setenv("SWARMIFY_BASE_URL", f"{BASE}/")
+    monkeypatch.setenv("KRIFLOW_BASE_URL", f"{BASE}/")
 
     def connector(_run: object, _id: str, stage: object) -> None:
         if getattr(stage, "name", "") == "explode":

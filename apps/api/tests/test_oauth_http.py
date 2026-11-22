@@ -27,7 +27,7 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, transport: FakeTranspor
     dist.mkdir()
     (dist / "index.html").write_text("<div id=root></div>")
     monkeypatch.setattr(main, "WEB_DIST", dist)
-    monkeypatch.setenv("SWARMIFY_PASSWORD", PASSWORD)
+    monkeypatch.setenv("KRIFLOW_PASSWORD", PASSWORD)
     return main.create_app(tmp_path / "data", transport=transport, retro=False)
 
 

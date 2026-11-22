@@ -406,7 +406,7 @@ def test_an_unsafe_an_over_cap_or_an_incomplete_zip_is_refused_and_leaves_nothin
     ]:
         refused = client.put(url, content=bad)
         assert refused.status_code == 422 and problem in refused.json()["detail"], refused.json()
-    monkeypatch.setenv("SWARMIFY_TEMPLATE_MAX_BYTES", "1000000")
+    monkeypatch.setenv("KRIFLOW_TEMPLATE_MAX_BYTES", "1000000")
     big = zipped({**PROJECT, "public/big.bin": bytes(1_000_001)})
     assert len(big) < 1_000_000  # zeros compress: the cap is on what it unpacks to
     over = client.put(url, content=big)

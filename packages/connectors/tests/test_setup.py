@@ -204,7 +204,7 @@ def test_deleting_a_world_drops_its_values(probe: Connectors) -> None:
 def test_each_process_gets_exactly_its_own_values_and_never_another_packages(
     tmp_path: Path, db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_LEAK_PROBE", "from the api process")
+    monkeypatch.setenv("KRIFLOW_LEAK_PROBE", "from the api process")
     real = Connectors(SqliteStorage(db), McpTransport(), Credentials(tmp_path / ".env"), 0.05)
     real.credentials.set({"FAL_KEY": "a V1 key"})
     install(real, tmp_path)
@@ -231,4 +231,4 @@ def test_each_process_gets_exactly_its_own_values_and_never_another_packages(
         assert {k: env.get(k) for k in mine} == mine
         assert not set(env) & (set(foreign) - set(mine))
         assert not {foreign[k] for k in set(foreign) - set(mine)} & set(env.values())
-        assert "SWARMIFY_LEAK_PROBE" not in env and "a V1 key" not in env.values()
+        assert "KRIFLOW_LEAK_PROBE" not in env and "a V1 key" not in env.values()

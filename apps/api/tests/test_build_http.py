@@ -117,7 +117,7 @@ stages:
 
 def settled(client: TestClient, run_id: str, send_backs: int = 0) -> dict:
     """The run once it ended or waits at a gate, after `send_backs` send-backs."""
-    deadline = time.monotonic() + float(os.environ.get("SWARMIFY_BUILD_WAIT", 60))
+    deadline = time.monotonic() + float(os.environ.get("KRIFLOW_BUILD_WAIT", 60))
     while True:
         run = client.get(f"/api/runs/{run_id}").json()
         if run["send_backs"] == send_backs and run["status"] in ("done", "failed", "waiting_gate"):
@@ -161,7 +161,7 @@ def test_the_builder_writes_the_build_and_the_render_makes_the_video(
     (options,) = script.sessions
     assert options.cwd == project
     assert (options.sandbox or {}).get("allowUnsandboxedCommands") is False
-    assert options.env["SWARMIFY_PASSWORD"] == ""
+    assert options.env["KRIFLOW_PASSWORD"] == options.env["SWARMIFY_PASSWORD"] == ""
     store = str((tmp_path / "data/pnpm-store").resolve())  # one pnpm store for every build
     assert options.env["pnpm_config_store_dir"].endswith("/data/pnpm-store")
     filesystem: Any = (options.sandbox or {}).get("filesystem") or {}
@@ -317,7 +317,7 @@ def test_a_rerun_of_a_build_whose_render_failed_revises_it_in_place(
 
 
 def until(client: TestClient, run_id: str, ready: Callable[[dict], bool]) -> dict:
-    deadline = time.monotonic() + float(os.environ.get("SWARMIFY_BUILD_WAIT", 60))
+    deadline = time.monotonic() + float(os.environ.get("KRIFLOW_BUILD_WAIT", 60))
     while not ready(run := client.get(f"/api/runs/{run_id}").json()):
         assert time.monotonic() < deadline, run
         time.sleep(0.05)

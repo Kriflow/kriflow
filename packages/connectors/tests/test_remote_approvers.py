@@ -19,7 +19,7 @@ def test_a_remote_approver_is_used_only_where_its_setup_is_done(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     listed = default_list(tmp_path / "packages", {"pager": FIXTURES / "packages/pager"})
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(listed))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(listed))
     assert connectors.install_defaults() == {}  # installed, but no world is given it
     connectors.offer_defaults("w1")
     assert connectors.enabled("w1") == {}

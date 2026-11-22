@@ -43,7 +43,7 @@ def with_echo(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.Monk
     """echo is a default too, standing in for a V1 built-in with a Setting and a Credential."""
     names = (*FIXTURE_DEFAULTS, "echo")
     listed = default_list(tmp_path_factory.mktemp("list"), {n: FIXTURES / n for n in names})
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(listed))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(listed))
 
 
 def writes(args: dict[str, Any]) -> dict[str, Any]:

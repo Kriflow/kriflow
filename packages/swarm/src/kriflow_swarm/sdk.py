@@ -7,7 +7,6 @@ that returns a scripted transport, which the SDK drives exactly like the CLI.
 """
 
 import asyncio
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -27,6 +26,7 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import McpServerConfig
 
+from kriflow_kernel.settings import setting
 from kriflow_swarm.model import TOKENS
 from kriflow_swarm.ports import (
     TOOL_SERVER,
@@ -47,7 +47,7 @@ it."""
 
 
 def default_model() -> str:
-    return os.environ.get("SWARMIFY_MODEL") or DEFAULT_MODEL
+    return setting("MODEL", DEFAULT_MODEL)
 
 
 # Dollars per million tokens of each model the operator can choose. The SDK prices only the whole

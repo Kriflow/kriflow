@@ -1,7 +1,7 @@
 """The run page's open stage card and side column (issue 532), at phone size first: tabs fitted to
 the stage's kind, a pick gate's cards with their scored chips, the gate's answer bar pinned over
 the tab bar whichever tab is open, and under the card what the run made and what each stage
-spent. Set SWARMIFY_SHOTS to a folder to keep screenshots of each state."""
+spent. Set KRIFLOW_SHOTS to a folder to keep screenshots of each state."""
 
 import os
 import re
@@ -37,7 +37,7 @@ stages:
     output: short.mp4
     params: {project: shorts, composition: Short}
 """
-SHOTS = os.environ.get("SWARMIFY_SHOTS")
+SHOTS = os.environ.get("KRIFLOW_SHOTS")
 
 
 @pytest.fixture(scope="module")

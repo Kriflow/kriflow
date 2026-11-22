@@ -85,7 +85,7 @@ from kriflow_connectors import (
     resources,
 )
 from kriflow_connectors import SqliteStorage as ConnectorStorage
-from kriflow_kernel import AGENT_TOOLS, Event, scrub
+from kriflow_kernel import AGENT_TOOLS, Event, scrub, settings
 from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
 from kriflow_kernel.sqlite import connect, migrate
 from kriflow_learning import MIGRATIONS as LEARNING_MIGRATIONS
@@ -142,11 +142,11 @@ log = logging.getLogger(__name__)
 VERSION = version("kriflow-api")
 REPO = Path(__file__).parents[4]
 """This repository, whose `connectors/` folder holds the core's own package, python_script."""
-WEB_DIST = Path(os.environ.get("SWARMIFY_WEB_DIST", REPO / "apps/web/dist"))
+WEB_DIST = Path(settings.setting("WEB_DIST") or REPO / "apps/web/dist")
 
 
 def data_dir() -> Path:
-    return Path(os.environ.get("SWARMIFY_DATA_DIR", Path.home() / ".swarmify"))
+    return settings.data_dir()
 
 
 def migrated_db(root: Path) -> Path:
@@ -275,18 +275,18 @@ def world_deleter(
 
 
 def drain_seconds() -> float:
-    return float(os.environ.get("SWARMIFY_DRAIN_SECONDS") or DRAIN_SECONDS)
+    return float(settings.setting("DRAIN_SECONDS") or DRAIN_SECONDS)
 
 
 def base_url() -> str:
     """Where deep links in Notifications point: the web skin as the operator reaches it."""
-    return os.environ.get("SWARMIFY_BASE_URL", "http://localhost:8000")
+    return settings.setting("BASE_URL", "http://localhost:8000")
 
 
 def internal_url() -> str:
     """Where a connector process reaches the API: `SWARMIFY_INTERNAL_URL`, as `http://api:8000`
     from the sandbox runner in Docker, else the operator's own `base_url`."""
-    return os.environ.get("SWARMIFY_INTERNAL_URL") or base_url()
+    return settings.setting("INTERNAL_URL") or base_url()
 
 
 def learning_service(root: Path) -> Learning:
@@ -733,7 +733,10 @@ def create_app(
             cache, store = root / "npm-cache", root / "pnpm-store"
             for made_here in (store, build.PNPM_LOCKS):
                 made_here.mkdir(mode=0o700, exist_ok=True)
-            secrets = registry.secret_names(run.world_id) + ["SWARMIFY_PASSWORD"]
+            secrets = registry.secret_names(run.world_id) + [
+                "KRIFLOW_PASSWORD",
+                "SWARMIFY_PASSWORD",
+            ]
             domains = package.manifest.get("permissions", {}).get("network", [])
             revises = [previous] if previous else []
             if previous and made:
@@ -947,7 +950,7 @@ def create_app(
 
     swarm = Swarm(
         whiteboard,
-        runtime or SdkRuntime(sandboxed_cli=os.environ.get("SWARMIFY_SANDBOX_CLI") or None),
+        runtime or SdkRuntime(sandboxed_cli=settings.setting("SANDBOX_CLI") or None),
         memory,
         graphs=graph.WorldGraphs(world_svc, index),
         servers=stage_servers,
@@ -1212,7 +1215,7 @@ def create_app(
         rebuilds = threading.Thread(
             target=writer.run, args=(stop, graph_poll), name="graph-writer", daemon=True
         )
-        if os.environ.get("SWARMIFY_GRAPH_WRITER") != "external":
+        if settings.setting("GRAPH_WRITER") != "external":
             rebuilds.start()
         # A session manager runs once, and a test may enter the lifespan twice: a fresh one each.
         for server in (tools, approvals):
@@ -1363,7 +1366,9 @@ def create_app(
         lambda name: operator.provision(f"{name} remote approvals", remote.SCOPE),
         internal_url().rstrip("/") + remote.PATH,
     )
-    if password := os.environ.get("SWARMIFY_PASSWORD"):
+    if old := settings.old_settings_line():
+        log.warning(old)
+    if password := settings.setting("PASSWORD"):
         operator.set_password(password)
     app.include_router(auth.router(operator, world_exists=lambda w: world_svc.get(w) is not None))
     if WEB_DIST.is_dir():

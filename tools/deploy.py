@@ -4,7 +4,7 @@
     python3 tools/deploy.py --web-only
 
 Builds every image while the api still serves, drains the api (no new stage starts; those at
-work finish, up to --seconds, SWARMIFY_DRAIN_SECONDS by default), stops the api, recreates the
+work finish, up to --seconds, KRIFLOW_DRAIN_SECONDS by default), stops the api, recreates the
 services and waits until the new api serves. Runs at a gate, waiting for a time, on a child run
 or queued never hold it up; they go on after the update. At the limit it cancels the drain and
 stops, deploying nothing, unless --cut: then the stages still at work are stopped and run again
@@ -12,15 +12,17 @@ after the update. The api stops before the sandbox, so a cut connector stage rep
 failing. --backup takes the slim backup first (tools/backup_data.py, only when the deploy
 changes stored data). --web-only recreates only web, with no drain.
 
-SWARMIFY_API_TOKEN must hold an API token of the whole MCP server (Tokens page): the drain is
-asked through `swarmify-drain` inside the api container. Pull the code first. Host Python,
-stdlib only.
+KRIFLOW_API_TOKEN (or the old SWARMIFY_API_TOKEN) must hold an API token of the whole MCP server
+(Tokens page): the drain is asked through `swarmify-drain` inside the api container, the name
+every build has, the one running now too, with the token as SWARMIFY_API_TOKEN, which every
+build reads. Pull the code first. Host Python, stdlib only.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -56,6 +58,8 @@ def deploy(
     parser.add_argument("--seconds", type=float)
     parser.add_argument("--cut", action="store_true")
     args = parser.parse_args(argv)
+    if token := os.environ.get("KRIFLOW_API_TOKEN") or os.environ.get("SWARMIFY_API_TOKEN"):
+        os.environ["SWARMIFY_API_TOKEN"] = token  # handed on by name below, never on a command line
     compose = ["docker", "compose", "-f", "compose.yaml"]
     if (root / "compose.gpu.yaml").exists():
         compose += ["-f", "compose.gpu.yaml"]
@@ -69,7 +73,7 @@ def deploy(
         code, out = run([*cmd, *words])
         if code:
             raise Failed(
-                f"the api did not answer `swarmify-drain {words[0]}` (is SWARMIFY_API_TOKEN set?)"
+                f"the api did not answer `swarmify-drain {words[0]}` (is KRIFLOW_API_TOKEN set?)"
             )
         return json.loads(out)
 

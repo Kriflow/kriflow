@@ -1,9 +1,12 @@
 """compose.yaml checks required variables per service, so one service can start alone."""
 
+import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,3 +66,43 @@ def test_claude_transcripts_live_on_the_volume_in_the_api_and_the_sandbox() -> N
     assert subpaths == {"api": "claude", "sandbox": "claude-builds"}
     made = compose["folders"]["entrypoint"]
     assert all(f"/data/{s}" in made for s in subpaths.values())
+
+
+@pytest.mark.skipif(not shutil.which("docker"), reason="needs the docker compose CLI")
+def test_an_env_of_old_names_fills_the_new_ones_on_the_same_project(tmp_path: Path) -> None:
+    """The box's .env says SWARMIFY_* (kriflow#594): the api gets KRIFLOW_* from it, the old
+    names stay beside them for the startup log, and the project, volumes and network are the
+    same."""
+    old = {
+        "SWARMIFY_PASSWORD": "aviato",
+        "SWARMIFY_BIND": "127.0.0.1",
+        "SWARMIFY_RESOURCES": "gpu=1",
+        "SWARMIFY_VAPID_PUBLIC_KEY": "pub",
+        "SWARMIFY_SANDBOX_APPARMOR": "swarmify-sandbox",
+    }
+    (tmp_path / ".env").write_text("".join(f"{k}={v}\n" for k, v in old.items()))
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("COMPOSE_", "KRIFLOW_", "SWARMIFY_"))
+    }
+    out = subprocess.run(
+        ["docker", "compose", "-f", str(ROOT / "compose.yaml"), "--project-directory",
+         str(tmp_path), "config", "--format", "json"],
+        capture_output=True, text=True, env=env, check=True,
+    )  # fmt: skip
+    rendered = json.loads(out.stdout)
+    assert rendered["name"] == "swarmify"
+    assert {v["name"] for v in rendered["volumes"].values()} == {
+        "swarmify_data",
+        "swarmify_sandbox-socket",
+    }
+    assert rendered["networks"]["default"]["name"] == "swarmify"
+    api = rendered["services"]["api"]["environment"]
+    assert api["KRIFLOW_PASSWORD"] == api["SWARMIFY_PASSWORD"] == "aviato"
+    assert api["KRIFLOW_RESOURCES"] == "gpu=1" and api["KRIFLOW_VAPID_PUBLIC_KEY"] == "pub"
+    assert api["KRIFLOW_DRAIN_SECONDS"] == "1200" and api["SWARMIFY_DRAIN_SECONDS"] == ""
+    assert api["KRIFLOW_DATA_DIR"] == "/data"
+    [port] = rendered["services"]["web"]["ports"]
+    assert port["host_ip"] == "127.0.0.1"
+    assert "apparmor=swarmify-sandbox" in rendered["services"]["sandbox"]["security_opt"]

@@ -35,6 +35,7 @@ from jsonschema.validators import Draft202012Validator, validator_for
 from kriflow_connectors import setup
 from kriflow_connectors.model import KINDS, STAGE_TYPES
 from kriflow_connectors.sandbox import REGISTRIES, Grants, Sandbox, domain
+from kriflow_kernel.settings import setting
 
 log = logging.getLogger(__name__)
 
@@ -620,7 +621,7 @@ def _escaping(folder: Path) -> str | None:
 
 def _listed_sources() -> list[str]:
     """The folders SWARMIFY_PACKAGE_SOURCES lists, separated as PATH is; none when unset."""
-    return [f for f in os.environ.get("SWARMIFY_PACKAGE_SOURCES", "").split(os.pathsep) if f]
+    return [f for f in setting("PACKAGE_SOURCES").split(os.pathsep) if f]
 
 
 def _git(*args: str) -> str:
@@ -787,7 +788,7 @@ class Packages:
         if listed and not real.is_relative_to(self.repo.resolve()):
             if not any(real.is_relative_to(f) for f in listed):
                 where = os.pathsep.join(map(str, listed))
-                raise InstallError(f"{path} is not in SWARMIFY_PACKAGE_SOURCES ({where})")
+                raise InstallError(f"{path} is not in KRIFLOW_PACKAGE_SOURCES ({where})")
         return path
 
     def install_local(self, manifest: dict[str, Any]) -> Package:

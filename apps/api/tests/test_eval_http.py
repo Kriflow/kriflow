@@ -205,7 +205,7 @@ def test_the_command_line_runs_one_task_kind_and_talks_to_the_api(
     monkeypatch.setattr(
         "kriflow_api.eval_harness.sign_in", lambda http, pw: seen.update(password=pw)
     )
-    monkeypatch.setenv("SWARMIFY_PASSWORD", "pw")
+    monkeypatch.setenv("KRIFLOW_PASSWORD", "pw")
     argv = ["--api", "http://box:8000", "--kind", "typed-lists", "--k", "1", "--tasks", "3"]
     main([*argv, "--budget", "1.5", "--clean"])
     assert seen["base"] == "http://box:8000" and seen["password"] == "pw"

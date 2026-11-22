@@ -1,7 +1,10 @@
 """tools/deploy.py against a fake box: what it runs, in which order, and when it stops."""
 
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from tools import deploy
 
@@ -94,7 +97,18 @@ def test_a_refused_token_stops_before_anything_changes() -> None:
     box = Box(fails=("swarmify-drain",))
     assert box.deploy() == 1
     assert box.steps() == ["drain status"]
-    assert "SWARMIFY_API_TOKEN" in box.said[-1]
+    assert "KRIFLOW_API_TOKEN" in box.said[-1]
+
+
+def test_the_token_reaches_the_drain_as_swarmify_api_token_from_either_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SWARMIFY_API_TOKEN", "")  # restored after the test
+    monkeypatch.setenv("KRIFLOW_API_TOKEN", "swm_new")
+    box = Box(state("drained", 480.0), state("serving"))
+    assert box.deploy() == 0
+    assert os.environ["SWARMIFY_API_TOKEN"] == "swm_new"  # read by the old and the new drain
+    assert "swm_new" not in str(box.cmds)
 
 
 def test_at_the_limit_it_cancels_the_drain_and_stops_by_default() -> None:

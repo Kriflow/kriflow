@@ -78,6 +78,7 @@ from kriflow_connectors.sandbox import (
 from kriflow_connectors.setup import SetupStore
 from kriflow_connectors.sqlite import MIGRATIONS, SqliteStorage
 from kriflow_kernel import AGENT_TOOLS, new_id, posts_privately, scrub
+from kriflow_kernel import settings as kernel_settings
 
 __all__ = [
     "CURVES",
@@ -127,7 +128,7 @@ def default_list() -> tuple[str, list[tuple[str, str, str]]]:
     """The Default List `SWARMIFY_DEFAULT_PACKAGES` names, else DEFAULT_LIST: its git URL and
     each package's name, release tag and the version that tag names (`<name>-v<version>`), so
     an installed version is known without a fetch. Raises ValueError saying what is wrong."""
-    file = Path(os.environ.get("SWARMIFY_DEFAULT_PACKAGES") or DEFAULT_LIST).expanduser()
+    file = Path(kernel_settings.setting("DEFAULT_PACKAGES") or DEFAULT_LIST).expanduser()
     try:
         data = tomllib.loads(file.read_text())
         git, entries = str(data["git"]), data.get("packages", [])

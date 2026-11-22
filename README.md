@@ -1257,7 +1257,7 @@ dependency of `packages/memory`) from the world's files.
   It shows a shrink refusal with an "Accept the shrink" button, and reloads on `graph.rebuilt`
   and `graph.failed`.
 - Real graphify runs only in the opt-in test, which spends Claude subscription tokens:
-  `SWARMIFY_GRAPHIFY=1 uv run pytest packages/memory/tests/test_graphify_live.py --no-cov`.
+  `KRIFLOW_GRAPHIFY=1 uv run pytest packages/memory/tests/test_graphify_live.py --no-cov`.
 
 In Docker the graph writer is its own container; see Deployment.
 

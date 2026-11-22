@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
+from kriflow_kernel.settings import setting
 from kriflow_swarm.ports import AgentRuntime, SessionEnd, SessionHooks, SessionInit, SessionSpec
 
 MARKERS = (
@@ -119,7 +120,7 @@ def _span(seconds: float) -> str:
 
 
 def _limit() -> float:
-    return float(os.environ.get("SWARMIFY_NETWORK_WAIT_HOURS") or HOURS) * 3600
+    return float(setting("NETWORK_WAIT_HOURS") or HOURS) * 3600
 
 
 class NetworkDown(Exception):

@@ -43,13 +43,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from kriflow_connectors import resources
+from kriflow_kernel.settings import setting
 
 HERE = Path(__file__).parent
 LAUNCHER = HERE.parents[1] / "sandbox" / "launcher.mjs"
 OBSERVER = HERE / "observe.py"
 SECCOMP = LAUNCHER.parent / "node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp"
 """sandbox-runtime's `apply-seccomp` helpers, which bubblewrap starts in the sandbox on Linux."""
-RUNNER = "SWARMIFY_SANDBOX_RUNNER"
+RUNNER = "SANDBOX_RUNNER"
+"""A setting (KRIFLOW_ or SWARMIFY_)."""
 GPU_LOCK = "SWARMIFY_GPU_LOCK"
 """Names, to a process granted the GPU, the gpu Resource's first Slot file (`gpu/0.lock`): a
 package from before Resources holds an exclusive `flock` on it around each process it runs on the
@@ -195,7 +197,7 @@ class Sandbox:
         self.data_dir = data_dir.resolve()
         self.scratch = self.data_dir / "sandbox"
         self.resources = self.scratch / "resources"
-        self.runner = os.environ.get(RUNNER) or None
+        self.runner = setting(RUNNER) or None
 
     def wrap(
         self,
@@ -292,7 +294,7 @@ class Sandbox:
         roots = [self.data_dir, Path.home(), Path(tempfile.gettempdir()), Path("/tmp")]
         roots += [Path(p) for p in ("/Users", "/Volumes", "/var/folders", "/home", "/root")]
         roots += [Path(p) for p in ("/mnt", "/media", "/srv")]  # a server's own data
-        if runner := os.environ.get(RUNNER):  # its socket runs any command it is handed
+        if runner := setting(RUNNER):  # its socket runs any command it is handed
             roots.append(Path(runner).parent)
         return list(dict.fromkeys(p.resolve() for p in roots if p.exists()))
 

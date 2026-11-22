@@ -160,7 +160,7 @@ class LogNotifier:
     """The adapter when no other is given: one log line per notification. The API passes the
     Slack adapter of the Notifications context."""
 
-    log = logging.getLogger("swarmify.notify")
+    log = logging.getLogger("kriflow.notify")
 
     def notify(self, event: Event) -> None:
         self.log.info("%s %s", event.type, event.payload)

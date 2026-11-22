@@ -30,6 +30,7 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from kriflow_connectors import Call, Connector, InstallError, build_session
+from kriflow_kernel.settings import setting
 from kriflow_memory import ASSETS, ArtifactFile, CardStatus, Memory, card_status
 from kriflow_runs import Run
 from kriflow_workflows import ConnectorStage, Workflows
@@ -41,7 +42,7 @@ _TEMPLATE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$")
 
 def template_cap() -> int:
     """The most bytes a Template upload may unpack to: `SWARMIFY_TEMPLATE_MAX_BYTES`, else 1 GB."""
-    return int(os.environ.get("SWARMIFY_TEMPLATE_MAX_BYTES") or 10**9)
+    return int(setting("TEMPLATE_MAX_BYTES") or 10**9)
 
 
 @dataclass(frozen=True)

@@ -41,6 +41,7 @@ from pathlib import Path
 
 from kriflow_kernel import Event
 from kriflow_kernel.events import append
+from kriflow_kernel.settings import data_dir
 from kriflow_kernel.sqlite import connect
 from kriflow_memory.ports import ASSETS, GRAPH_OUT, OUTCOMES, graph_file, graph_size
 
@@ -346,9 +347,8 @@ def _deleted(conn: sqlite3.Connection, world_id: str) -> bool:
 def main() -> None:
     """`swarmify-graph-writer`: the GraphWriter as its own process over `SWARMIFY_DATA_DIR`, for
     hosts that run it beside the API (which then sets SWARMIFY_GRAPH_WRITER=external)."""
-    import os
 
     logging.basicConfig(level=logging.INFO)
-    root = Path(os.environ.get("SWARMIFY_DATA_DIR", Path.home() / ".swarmify"))
+    root = data_dir()
     (root / "worlds").mkdir(parents=True, exist_ok=True)
     GraphWriter(root / "swarmify.db", root / "worlds").run(threading.Event())

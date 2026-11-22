@@ -1,4 +1,4 @@
-"""`swarmify-eval`: run each eval task's starter workflow as baseline and as swarm, against a
+"""`kriflow-eval`: run each eval task's starter workflow as baseline and as swarm, against a
 running swarmify API (with the real model behind it), and store the report in the eval world.
 
 Each trial gets a fresh world, its own copy of the workflow and one run; the outputs it left
@@ -10,14 +10,13 @@ timeout aborts the trial, which then fails.
 The baseline arm runs every swarm stage with one agent, the swarm arm with `swarm_agents`
 (ADR 0020); otherwise the two runs are the same. One eval is one task kind:
 
-    uv run swarmify-eval --kind research-briefs          # its 8 tasks, 2 trials an arm
-    uv run swarmify-eval --kind typed-lists --tasks 2 --k 1   # a smoke run
+    uv run kriflow-eval --kind research-briefs          # its 8 tasks, 2 trials an arm
+    uv run kriflow-eval --kind typed-lists --tasks 2 --k 1   # a smoke run
 
 When `SWARMIFY_PASSWORD` is set the harness signs in with it first, as a browser does.
 """
 
 import argparse
-import os
 import sys
 import time
 from collections.abc import Callable
@@ -26,6 +25,7 @@ from typing import Any
 
 import httpx2 as httpx
 
+from kriflow_kernel.settings import setting
 from kriflow_learning.evals import ARMS, KINDS, TASKS, EvalTask, Trial, grade, workflow_yaml
 from kriflow_learning.scorecard import duration
 
@@ -167,10 +167,10 @@ def sign_in(http: httpx.Client, password: str) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
-        prog="swarmify-eval",
+        prog="kriflow-eval",
         description="Run the swarm evidence eval of one task kind: one agent against a swarm.",
     )
-    p.add_argument("--api", default=os.environ.get("SWARMIFY_BASE_URL", "http://localhost:8000"))
+    p.add_argument("--api", default=setting("BASE_URL", "http://localhost:8000"))
     kinds = {k.replace(" ", "-"): k for k in KINDS}
     p.add_argument("--kind", required=True, choices=kinds, help="the task kind to run")
     p.add_argument("--k", type=int, default=2, help="trials an arm per task (default 2)")
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> None:
     # a judge session answers within minutes; every other call within seconds
     timeout = httpx.Timeout(60, read=600)
     with httpx.Client(base_url=a.api, timeout=timeout) as http:
-        if password := os.environ.get("SWARMIFY_PASSWORD"):
+        if password := setting("PASSWORD"):
             sign_in(http, password)
         kind = kinds[a.kind]
         report = run_eval(

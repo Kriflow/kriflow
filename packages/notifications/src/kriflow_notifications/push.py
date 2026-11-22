@@ -29,6 +29,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from py_vapid import Vapid02
 
 from kriflow_kernel import Event
+from kriflow_kernel.settings import setting
 from kriflow_notifications.sqlite import PushStorage
 
 log = logging.getLogger(__name__)
@@ -75,10 +76,10 @@ def load_keys(data_dir: Path, env: dict[str, str], base_url: str) -> Keys:
     mailto placeholder (Apple may refuse that one: set the subject for iPhones)."""
     url = urlparse(base_url)
     https = url.scheme == "https" and url.hostname and url.port is None
-    subject = env.get("SWARMIFY_VAPID_SUBJECT") or (
-        f"https://{url.hostname}" if https else "mailto:swarmify@localhost"
+    subject = setting("VAPID_SUBJECT", env=env) or (
+        f"https://{url.hostname}" if https else "mailto:kriflow@localhost"
     )
-    public, private = env.get("SWARMIFY_VAPID_PUBLIC_KEY"), env.get("SWARMIFY_VAPID_PRIVATE_KEY")
+    public, private = setting("VAPID_PUBLIC_KEY", env=env), setting("VAPID_PRIVATE_KEY", env=env)
     if public and private:
         return Keys(public, private, subject)
     file = data_dir / "vapid.json"

@@ -44,7 +44,9 @@ def violations(packages_dir: Path) -> list[Violation]:
             tree = ast.parse(file.read_text(), filename=str(file))
             for line, module in _imported_modules(tree):
                 top = module.split(".")[0]
-                if top.startswith(OLD) or (top.startswith("kriflow_") and top not in (KERNEL, package)):
+                if top.startswith(OLD) or (
+                    top.startswith("kriflow_") and top not in (KERNEL, package)
+                ):
                     found.append(Violation(package, file, line, module))
     return found
 

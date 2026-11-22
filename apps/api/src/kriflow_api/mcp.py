@@ -1,6 +1,6 @@
 """The swarmify MCP server: the same actions as the HTTP API, for Claude Code and the planner.
 
-Run over stdio with `uv run swarmify-mcp`. Reads the same `SWARMIFY_DATA_DIR` as the API, so a
+Run over stdio with `uv run kriflow-mcp`. Reads the same `SWARMIFY_DATA_DIR` as the API, so a
 world created here appears on the API's event stream.
 """
 
@@ -56,7 +56,7 @@ def server(
     pin = control.pin = pinner(workflows)
     control.check = checker(workflows)
     mcp = MCPServer(
-        "swarmify",
+        "kriflow",
         instructions="Drive swarmify: worlds, workflows, runs (start, fork, artifacts, Run"
         " Changes, the Run Assistant), swarm stage whiteboards, the gates runs wait at, and each"
         " world's World Lists of Entries.",
@@ -603,7 +603,7 @@ def approvals_server(control: RunControl, asker: RunAssistant, registry: Connect
     connector that also offers the `run_assistant` Capability, enabled in the run's world,
     forwards replies to the run's assistant and applies or dismisses its proposals."""
     mcp = MCPServer(
-        "swarmify-remote-approvals",
+        "kriflow-remote-approvals",
         instructions="Answer a gate Kriflow posted to you, as the person who answered it.",
     )
 
@@ -710,7 +710,7 @@ def approvals_server(control: RunControl, asker: RunAssistant, registry: Connect
 
 
 def stdio_server(root: Path, control: RunControl) -> MCPServer:
-    """The server `swarmify-mcp` runs over `root`, deleting worlds as the API does."""
+    """The server `kriflow-mcp` runs over `root`, deleting worlds as the API does."""
     from kriflow_api.main import (
         connector_service,
         learning_service,

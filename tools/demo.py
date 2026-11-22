@@ -76,8 +76,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the app with a seeded demo world.")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    data = Path(tempfile.mkdtemp(prefix="swarmify-demo-"))
-    env = {**os.environ, "SWARMIFY_DATA_DIR": str(data), "PYTHONPATH": str(REPO / "tests/e2e")}
+    data = Path(tempfile.mkdtemp(prefix="kriflow-demo-"))
+    env = {**os.environ, "KRIFLOW_DATA_DIR": str(data), "PYTHONPATH": str(REPO / "tests/e2e")}
     app = "scripted_app:create_app"
     cmd = [sys.executable, "-m", "uvicorn", "--factory", app, "--port", str(args.port)]
     url = f"http://127.0.0.1:{args.port}"
