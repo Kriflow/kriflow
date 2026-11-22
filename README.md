@@ -329,6 +329,17 @@ with no package, version or credentials. A swarm stage lists them in `tools` lik
 connector (`tools: [web_search, graph]`); the Connectors page does not show them and no connector
 may take their names.
 
+`lists` is the Agent Tool of the world's World Lists: a stage that names it gets `read_list`
+(statuses and Entries, filtered by status and fields, ordered by `score`, `time` or a numeric
+field, `-` for descending), `add_entry` (a key already in the list returns its Entry unchanged,
+`added` false), `set_entry_status` and `set_entry_fields`. A World List is declared per world with
+its statuses (the first is where an Entry starts) and which count as done and rejected:
+`PUT /api/worlds/<w>/lists/<name>`, then `GET|POST .../entries`, `POST .../status` (several keys
+at once, with a note), `GET|PATCH .../entries/<key>` (the Entry with its history). The MCP server
+has the same calls (`declare_list`, `list_lists`, `read_list`, `get_entry`, `add_entry`,
+`set_entry_status`, `set_entry_fields`). Every add and change is an `entry.added` or
+`entry.changed` event on the world's stream with who and the note.
+
 A connector's keys are Credentials of its package's Setup (see Connector Packages), stored in
 `<data dir>/setup.json` with mode 600; the app refuses to read it when group or others can.
 Values never enter the database, a run, a workflow or an API response. A command connector gets
