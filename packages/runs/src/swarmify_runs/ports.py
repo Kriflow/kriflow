@@ -76,6 +76,11 @@ class Storage(Protocol):
         run, which has no workflow to be measured against."""
         ...
 
+    def last_run_seconds(self, run: Run) -> float | None:
+        """How long the newest done run of `run`'s workflow created before it took, baselines
+        aside. None for an ad hoc run or a first run."""
+        ...
+
     def spent_in_month(self, world_id: str, month: str) -> float:
         """The estimated spend of the world's top runs created in `month` (`YYYY-MM`). Child
         runs are counted through their parent's spend (ADR 0013)."""

@@ -282,6 +282,9 @@ class Run:
     """The Run Change, applied to `forked_from`, that made this Fork."""
     budget_warn_usd: float | None = None
     """The spend at which `budget.warning` fires, on the top run only; None warns at 80 percent."""
+    last_run_seconds: float | None = None
+    """How long the previous finished run of the same workflow took, first stage start to last
+    stage end; None on a first run. Filled only when one run is served, not on events."""
 
     def send_back_note(self, stage_name: str) -> str:
         """The note of the send-back or Rerun that caused this visit, when it named

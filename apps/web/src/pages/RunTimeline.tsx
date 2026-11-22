@@ -4,8 +4,6 @@ import { createPortal } from "react-dom";
 
 import { api } from "../api/client";
 import { useKeyboardInset } from "../Chat";
-import { CountTick } from "../CountTick";
-import { Elapsed } from "../Elapsed";
 import { Icon, type IconName } from "../Icon";
 import { moment, MOMENTS } from "../moments";
 import { useConfirm } from "../Dialog";
@@ -29,8 +27,8 @@ import { type Answer, GateCard } from "./Gates";
 import { RunAssistant } from "./RunAssistant";
 import { RunRef, version } from "./Runs";
 import { type MenuItem, Menu } from "./Menu";
-import { kindOf, mainArtifact, Result, resultStage, StagePanel, stepMeta } from "./StagePanel";
-import { TimeStrip } from "./TimeStrip";
+import { mainArtifact, Result, resultStage, StagePanel } from "./StagePanel";
+import { RunHero, StageRail } from "./RunHero";
 import { PullToRefresh } from "../PullToRefresh";
 
 type World = components["schemas"]["World"];
@@ -78,7 +76,6 @@ export function RunTimeline() {
   const [baseline, setBaseline] = useState<Run | null>(null);
   // The gate answered here last: its step shows what you decided until you move on yourself.
   const [answered, setAnswered] = useState<{ stageId: string; said: string; at: string } | null>(null);
-  const [stepsOpen, setStepsOpen] = useState(false);
   // The step whose Stage Edit card is open, and whether the run's changes are listed.
   const [editing, setEditing] = useState<{ stageId: string; kind: ChangeKind } | null>(null);
   // The file whose Artifact Edit card is open.
@@ -130,7 +127,8 @@ export function RunTimeline() {
     "run.updated": (update) => {
       if (update.id !== runId) return;
       // The stream starts at the oldest snapshot: an older run never replaces a newer one.
-      setRun((prev) => (prev && prev.updated_at > update.updated_at ? prev : update));
+      // How long the last run took comes with the run only, never on the stream: keep it.
+      setRun((prev) => (prev && prev.updated_at > update.updated_at ? prev : { ...update, last_run_seconds: update.last_run_seconds ?? prev?.last_run_seconds }));
       // A connector stage that just started or ended has a call to (re)load.
       setCalls((prev) => Object.fromEntries(Object.entries(prev).filter(([, c]) => c !== null)));
     },
@@ -372,15 +370,12 @@ export function RunTimeline() {
   const post = artifacts.filter((a) => a.type === "publish").at(-1);
   const postLink = post ? Object.values((post.fields.links as Record<string, string> | undefined) ?? {})[0] : undefined;
   const made = stage ? artifacts.filter((a) => a.stage === stage.id) : [];
-  const kind = (s: Stage) => kindOf(s, artifacts.filter((a) => a.stage === s.id), connectors[s.calls ?? ""]);
   const gateStage = gate ? run.stages.find((s) => s.id === gate.stage_id) : undefined;
   const open = gate && gate.stage_id === stageId ? gate : null;
   const done = !open && answered && answered.stageId === stageId ? answered : null;
   const isResult = !open && !done && !!stage && resultStage(run, artifacts)?.id === stage.id;
-  const started = run.stages.find((s) => s.started_at)?.started_at;
-  // The latest thing the live step's agents did, under the strip while you watch that step.
+  // The latest thing the live step's agents did, under the rail while you watch that step.
   const lastLine = run.status === "running" && live && live.id === stageId ? log.at(-1) : undefined;
-  const seconds = duration(run);
   const items: MenuItem[] = [];
   if (!ended) {
     items.push(
@@ -424,45 +419,57 @@ export function RunTimeline() {
   if (run.status === "done") {
     items.push({ label: "Save as workflow", note: "Saves the steps it ran as a new workflow; you stay on this run", onSelect: saveAsWorkflow });
   }
+  // Rarely needed, so in the menu rather than on the page.
+  items.push({ label: "Copy run id", note: run.id, onSelect: () => void navigator.clipboard?.writeText(run.id) });
   if (!ended) {
     items.push({ label: "Abort run", note: "Stops every agent; finished steps keep their artifacts", danger: true, onSelect: () => act("abort") });
   }
-  /** The step list and spend: beside the step on a wide screen, in the steps sheet on a phone. */
-  const side = (pick: (id: string) => void) => (
-    <aside className="run-side">
-      <nav className="panel steps" aria-label="Steps">
-        <ol data-testid="timeline">
-          {run.stages.map((s) => {
-            const now = run.status === "queued" ? s.index === 0 : s.status === "running" || s.status === "waiting";
-            const meta = stepMeta(s, run.status === "queued");
-            const edit = changes.filter((c) => c.stage_id === s.id).at(-1);
-            return (
-              <li key={s.id} data-status={s.status} className={`step step-${s.status}`}>
-                <button
-                  type="button"
-                  aria-pressed={s.id === stageId}
-                  aria-current={now ? "step" : undefined}
-                  aria-label={`Step ${s.index + 1}, ${s.name}, ${meta}`}
-                  onClick={() => pick(s.id)}
-                >
-                  <Glyph status={s.status} />
-                  <span className="step-name">
-                    {s.name}
-                    <small>
-                      {s.status === "waiting" ? "waiting for you" : kind(s)}
-                      {edit && <span className="edited"> · {changed(edit.kind)} by {who(edit.by)} {hhmm(edit.at)}</span>}
-                    </small>
-                  </span>
-                  <span className="step-meta">{s.status === "pending" ? "-" : meta}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-      <Spend run={run} baseline={baseline} asked={askedUsd} />
-    </aside>
-  );
+  const failedStage = run.status === "failed" ? run.stages.find((s) => s.status === "failed" && s.type !== "retro") : undefined;
+  const main = run.status === "done" ? mainArtifact(run, artifacts) : undefined;
+  /** The one action that matters now, beside the status line. */
+  const action = gateStage && gateStage.id !== stageId ? (
+    <button type="button" className="primary" onClick={() => select(gateStage.id)}>
+      <Icon name="gate" />
+      Answer {gateStage.name}
+    </button>
+  ) : run.status === "running" ? (
+    <button type="button" onClick={() => act("pause")}>
+      <Icon name="pause" />
+      Pause
+    </button>
+  ) : run.status === "paused" ? (
+    <button type="button" className="primary" onClick={() => act("resume")}>
+      <Icon name="play" />
+      Resume
+    </button>
+  ) : failedStage ? (
+    <button
+      type="button"
+      className="primary"
+      onClick={() => {
+        select(failedStage.id);
+        setEditing(null);
+        setStepping({ id: failedStage.id, kind: "rerun" });
+      }}
+    >
+      <Icon name="retry" />
+      Retry {failedStage.name}
+    </button>
+  ) : run.status === "done" && (postLink || main) ? (
+    <>
+      {postLink && (
+        <a href={postLink} target="_blank" rel="noreferrer" className={main ? "button" : "button primary"}>
+          Open the post
+        </a>
+      )}
+      {main && (
+        <FileLink a={main} worldId={worldId} className="button primary">
+          <Icon name="doc" />
+          Open {main.name}
+        </FileLink>
+      )}
+    </>
+  ) : undefined;
   return (
     <main className="run-page enter">
       <PullToRefresh />
@@ -476,11 +483,6 @@ export function RunTimeline() {
             {PILL_ICON[run.status] && <Icon name={PILL_ICON[run.status]!} live={run.status === "running"} />}
             {STATUS_LABEL[run.status]}
           </span>
-          <p role="status" data-testid="status-line" className={`status-line state-${run.status}`}>
-            {statusLine(run, gate?.ask, connectors)}
-            {run.send_backs > 0 && ` Sent back ${run.send_backs === 1 ? "once" : `${run.send_backs} times`}.`}
-            {run.status === "done" && post && ` Posted to ${labelOf(connectors, String(post.fields.connector))}.`}
-          </p>
           <Lineage run={run} worldId={worldId} />
         </div>
         <div className="row run-actions" data-testid="run-actions">
@@ -491,16 +493,6 @@ export function RunTimeline() {
                 Go there
               </button>
             </span>
-          )}
-          {gateStage && gateStage.id !== stageId && (
-            <button type="button" className="primary" onClick={() => select(gateStage.id)}>
-              Answer {gateStage.name}
-            </button>
-          )}
-          {run.status === "done" && postLink && (
-            <a href={postLink} target="_blank" rel="noreferrer" className="button">
-              Open the post
-            </a>
           )}
           <button type="button" aria-expanded={askOpen} onClick={() => setAskOpen(!askOpen)}>
             Ask this run
@@ -533,21 +525,28 @@ export function RunTimeline() {
           </ol>
         </section>
       )}
-      {run.status === "done" && <DoneRow run={run} artifacts={artifacts} worldId={worldId} seconds={seconds} />}
-      <TimeStrip stages={run.stages} selected={stageId} onSelect={select} />
-      <div className="strip-axis">
-        <span>{started ? new Date(started).toLocaleTimeString([], { timeStyle: "short" }) : "Not started"}</span>
-        {seconds !== null && (
-          <span className="axis-time">
-            {ended ? took(seconds) : <><Elapsed run={run} /> so far</>}
-          </span>
-        )}
-        {/* On a phone the strip carries the spend too; it ticks as it rises. */}
-        <span className="axis-spend" data-testid="strip-spend">
-          <CountTick value={run.spent_usd ?? 0} format={money} />
-          {run.budget_usd != null ? ` of ${money(run.budget_usd)}` : " spent"}
-        </span>
-      </div>
+      <RunHero
+        run={run}
+        agents={Object.values(agents)}
+        action={action}
+        line={
+          <p role="status" data-testid="status-line" className={`status-line state-${run.status}`}>
+            {statusLine(run, gate?.ask, connectors)}
+            {run.send_backs > 0 && ` Sent back ${run.send_backs === 1 ? "once" : `${run.send_backs} times`}.`}
+            {run.status === "done" && (post ? ` Posted to ${labelOf(connectors, String(post.fields.connector))}.` : main && ` Made ${main.name}.`)}
+          </p>
+        }
+      />
+      <StageRail
+        run={run}
+        selected={stageId}
+        onSelect={select}
+        connectors={connectors}
+        note={(s) => {
+          const edit = changes.filter((c) => c.stage_id === s.id).at(-1);
+          return edit && { mark: changed(edit.kind), label: `${changed(edit.kind)} by ${who(edit.by)} ${hhmm(edit.at)}` };
+        }}
+      />
       {lastLine && (
         <p className="live-line" data-testid="live-line">
           <Icon name="play" live />
@@ -556,30 +555,10 @@ export function RunTimeline() {
           </span>
         </p>
       )}
-      {stage && (
-        <button type="button" className="step-button" aria-haspopup="dialog" aria-expanded={stepsOpen} onClick={() => setStepsOpen(true)}>
-          <span>
-            <small>
-              Step {stage.index + 1} of {run.stages.length} · {kind(stage)}
-            </small>
-            <b>{stage.name}</b>
-          </span>
-          <small>
-            All steps <Icon name="chevron" />
-          </small>
-        </button>
-      )}
-      <Sheet open={stepsOpen} onClose={() => setStepsOpen(false)} label="All steps">
-        {side((id) => {
-          setStepsOpen(false);
-          select(id);
-        })}
-      </Sheet>
       <Sheet open={askOpen && phone} onClose={() => setAskOpen(false)} label="Ask this run" className="chat-sheet" head={false}>
         <RunAssistant run={run} onSpent={setAskedUsd} onClose={() => setAskOpen(false)} files={files} />
       </Sheet>
       <div className={askOpen && !phone ? "run-grid asking" : "run-grid"}>
-        {side(select)}
         {stage && (
           <StagePanel
             run={run}
@@ -633,6 +612,9 @@ export function RunTimeline() {
           />
         )}
         {askOpen && !phone && <RunAssistant run={run} onSpent={setAskedUsd} onClose={() => setAskOpen(false)} files={files} />}
+        <aside className="run-side">
+          <Spend run={run} baseline={baseline} asked={askedUsd} />
+        </aside>
       </div>
     </main>
   );
@@ -648,26 +630,6 @@ const PILL_ICON: Partial<Record<Run["status"], IconName>> = {
   aborted: "stop",
 };
 
-/** A done run's summary: how long it took, what it spent, what it made, and the way to open it. */
-function DoneRow({ run, artifacts, worldId, seconds }: { run: Run; artifacts: ArtifactFile[]; worldId: string; seconds: number | null }) {
-  const main = mainArtifact(run, artifacts);
-  return (
-    <section className="done-row" aria-label="Summary" data-testid="done-row">
-      <Icon name="check" size={20} className="i-pop" />
-      <p>
-        {seconds !== null && <>Took {took(seconds)} · </>}
-        Spent {money(run.spent_usd ?? 0)}
-        {main && <> · Made {main.name}</>}
-      </p>
-      {main && (
-        <FileLink a={main} worldId={worldId} className="button primary">
-          Open {main.name}
-        </FileLink>
-      )}
-    </section>
-  );
-}
-
 /** How long the answered gate's action bar takes to slide out: motion.css's `--dur-base`. */
 const BAR_OUT_MS = 200;
 
@@ -678,15 +640,11 @@ function RunSkeleton() {
       <header className="page">
         <div>
           <Skeleton className="sk-title" w="16ch" />
-          <Skeleton className="sk-status" w="70%" />
         </div>
         <Skeleton className="sk-ask" w={108} />
       </header>
-      <Skeleton className="sk-strip" />
-      <div className="strip-axis">
-        <Skeleton w="6ch" />
-      </div>
-      <Skeleton className="sk-step" />
+      <Skeleton className="sk-hero" />
+      <Skeleton className="sk-rail" />
       <div className="run-grid">
         <Skeleton className="run-side" h={320} />
         <Skeleton className="sk-panel" h={240} />
@@ -828,9 +786,6 @@ function Spend({ run, baseline, asked }: { run: Run; baseline: Run | null; asked
           Assistant {money(asked)}, from the world's budget, not this run's.
         </span>
       )}
-      <span className="faint run-id">
-        Run id <code>{run.id}</code>
-      </span>
       {run.baseline ? (
         <span className="faint" data-testid="baseline">
           This is a one-agent baseline, with no graph, to measure the swarm against.
@@ -845,16 +800,6 @@ function Spend({ run, baseline, asked }: { run: Run; baseline: Run | null; asked
       )}
     </section>
   );
-}
-
-/** A step's state at a glance: a check when done, else a dot coloured by its state. */
-function Glyph({ status }: { status: string }) {
-  if (status === "done") {
-    return (
-      <Icon name="check" className="glyph" />
-    );
-  }
-  return <span className={`glyph dot dot-${status}`} aria-hidden="true" />;
 }
 
 /** Items of both lists by a numeric key, each once (the later wins), oldest first. */

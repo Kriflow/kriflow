@@ -301,6 +301,21 @@ class SqliteStorage:
             ).fetchone()
             return self._read(conn, row[0]) if row else None
 
+    def last_run_seconds(self, run: Run) -> float | None:
+        if run.workflow_id is None:
+            return None
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT min(s.started_at), max(s.ended_at) FROM run_stages s WHERE s.run_id = ("
+                " SELECT id FROM runs WHERE workflow_id = ? AND baseline = 0 AND status = 'done'"
+                " AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT 1)",
+                (run.workflow_id, run.created_at, run.id),
+            ).fetchone()
+        if not row or not row[0] or not row[1]:
+            return None
+        took = datetime.fromisoformat(row[1]) - datetime.fromisoformat(row[0])
+        return max(0.0, took.total_seconds())
+
     def spent_in_month(self, world_id: str, month: str) -> float:
         with self._conn() as conn:
             (total,) = conn.execute(

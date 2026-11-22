@@ -48,7 +48,7 @@ def test_answer_a_gate_from_the_inbox_and_watch_the_run_finish(page: Page, base_
 
         page.goto(f"{base_url}/worlds/{world['id']}/runs/{run.json()['id']}")
         expect(page.get_by_test_id("status-line")).to_have_text(
-            re.compile(r"^Done in .*\. Sent back once\.$"), timeout=15_000
+            re.compile(r"^Done in .*\. Sent back once\.( Made .*\.)?$"), timeout=15_000
         )
         rail = page.get_by_test_id("timeline")
         rail.get_by_role("button", name=re.compile(r"^Step 1,")).click()

@@ -79,7 +79,9 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
 
         page.get_by_role("button", name="Answer review").click()
         page.get_by_role("button", name="Approve").click()
-        expect(status).to_have_text(re.compile(r"^Done in \d+ s\.$"), timeout=20_000)
+        expect(status).to_have_text(
+            re.compile(r"^Done in \d+ s\. Made video\.mp4\.$"), timeout=20_000
+        )
         rail.get_by_role("button", name=re.compile("^Step 4, review")).click()
         expect(page.get_by_test_id("decision")).to_have_text('You approved "video.mp4".')
     finally:

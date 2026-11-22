@@ -246,7 +246,7 @@ export function Runs() {
                           </span>
                         </td>
                         <td className="run-strip">
-                          <TimeStrip stages={r.stages} labels={false} />
+                          <TimeStrip stages={r.stages} />
                         </td>
                         <td className="num">
                           <time dateTime={r.created_at}>{when(r.created_at)}</time>

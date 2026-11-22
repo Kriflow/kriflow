@@ -15,8 +15,6 @@
 @keyframes pulse { 50% { opacity: 0.35; } }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-up { from { opacity: 0; transform: translateY(4px); } }
-@keyframes beckon { 50% { opacity: 0.62; } } /* a waiting step asks to be looked at */
-@keyframes sheen { to { transform: translateX(100%) scaleX(0.35); } } /* a running step's light passes */
 @keyframes bar-up { from { transform: translateY(100%); } } /* a pinned bar rises on first show */
 
 /* Data that replaces a skeleton fades in where it stands, nothing moves. */
@@ -159,7 +157,4 @@ details[open] > summary::before { transform: rotate(90deg); }
   .i-spinning { animation: none; }
   /* An empty place's glyph, the sign-in mark and a refused password: already in place, still. */
   .i-enter, .mark-in svg, .shake { animation: none; }
-  /* The time strip holds still: no sheen on a running step, a waiting one at full colour. */
-  .strip-seg.seg-running::before { animation: none; opacity: 0; }
-  .strip-seg.seg-waiting { animation: none; }
 }

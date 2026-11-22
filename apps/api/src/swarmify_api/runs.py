@@ -543,6 +543,7 @@ def router(
             for w in resource_waits()
             if w.get("run") == run_id and w.get("stage") in running
         }
+        run = replace(run, last_run_seconds=runner.storage.last_run_seconds(run))
         if not notes and not waits:
             return run
         stages = [replace(s, network=notes.get(s.id), waiting=waits.get(s.id)) for s in run.stages]

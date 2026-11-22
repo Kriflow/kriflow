@@ -71,6 +71,9 @@ function sentence(run: Run, ask: string | null | undefined, connectors: Connecto
       if (!at) return "Running.";
       // The time so far ticks under the strip (Elapsed), so the sentence leaves it out.
       const step = ` · step ${at.index + 1} of ${total}`;
+      const items = at.items ?? [];
+      const settled = items.filter((i) => ["done", "failed", "aborted"].includes(i.status)).length;
+      if (items.length) return `${at.name} is working: ${settled} of ${items.length} done${step}`;
       if (at.child) return `${at.name} waits on its child run ${at.child.name}${step}`;
       return `${at.name} is working${step}`;
     }

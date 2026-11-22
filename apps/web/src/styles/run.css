@@ -1,4 +1,4 @@
-/* Run page: title row with the run menu, the time strip, the step list and spend beside the selected step */
+/* Run page: title row with the run menu, the status hero, the stage rail, then the selected step */
 .run-page header.page { align-items: flex-start; }
 .run-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .follow { display: inline-flex; align-items: center; gap: 8px; padding: 3px 3px 3px 12px; border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 0.75rem; }
@@ -7,92 +7,96 @@ p.status-line { margin: 6px 0 0; font-size: 0.875rem; line-height: 1.4; color: v
 p.status-line.state-waiting_gate { color: var(--warning); }
 p.status-line.state-failed, p.status-line.state-aborted { color: var(--negative); }
 .saved { margin: 0 0 16px; color: var(--muted); }
-/* Phone only: the state pill, the spend under the strip, and the button that opens the steps sheet */
-.run-pill, .axis-spend, .step-button, .run-topbar { display: none; }
+/* Phone only: the state pill and the top bar's way back */
+.run-pill, .run-topbar { display: none; }
 .run-topbar { flex: 1; justify-content: space-between; align-items: center; gap: 12px; }
 .run-topbar a { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin-left: -6px; font-weight: 600; text-decoration: none; }
-.step-button small { display: inline-flex; align-items: center; gap: 4px; }
-.step-button { width: 100%; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; margin-bottom: var(--gap); padding: 8px 12px; border: 0; border-radius: 10px; background: var(--raised); text-align: left; font-weight: 400; }
-.step-button > span { display: grid; min-width: 0; }
-.step-button b { font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.step-button small { color: var(--faint); font-size: 0.75rem; white-space: nowrap; }
 /* The run's menu button: a quiet glyph, its 44px tap kept */
 .run-topbar button.icon, .run-actions button.icon { border-color: transparent; border-radius: 999px; }
 
 /* Before the run loads: its parts at their size (RunSkeleton) */
 .run-loading .sk-title { font-size: var(--fs-title); --sk-h: 1.2em; margin-bottom: 6px; }
-.run-loading .sk-status { font-size: 0.875rem; --sk-h: 1.4em; margin-top: 6px; }
-.run-loading .sk-strip { --sk-h: 40px; margin: 4px 0 6px; }
-.run-loading .sk-step { display: none; --sk-h: 52px; margin-bottom: var(--gap); border-radius: 10px; }
+.run-loading .sk-hero { --sk-h: 150px; margin-bottom: 18px; border-radius: 12px; }
+.run-loading .sk-rail { --sk-h: 84px; margin-bottom: var(--gap); }
 .run-loading .sk-ask { --sk-h: 34px; border-radius: 999px; }
 .run-loading .sk-panel { border-radius: var(--radius-card); }
 
-/* The time strip: each step as wide as its time; the bare variant is a list row's small strip */
-.strip-wrap { margin: 4px 0 6px; min-width: 0; }
-.strip { display: flex; gap: 2px; height: 40px; margin: 4px 0 6px; min-width: 0; }
-.strip-wrap .strip { margin: 0; }
-.strip-seg { position: relative; display: block; flex: 0 1 56px; min-width: 34px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--raised); color: var(--muted); font-size: 0.6875rem; font-weight: 500; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.strip-seg span { display: block; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; }
+/* A run list row's small strip: each step as wide as its time */
+.strip { display: flex; height: 8px; margin: 0; gap: 1px; min-width: 0; }
+.strip-seg { display: block; flex: 0 1 12px; min-width: 3px; background: var(--raised); }
 .strip-seg:first-child { border-radius: 4px 0 0 4px; }
 .strip-seg:last-child { border-radius: 0 4px 4px 0; }
-.strip-seg:hover { background: var(--control); }
-.seg-done { background: #23322a; color: #cfe9da; }
+.seg-done { background: #23322a; }
 .seg-done.seg-gate { background: #1e2a24; }
-.seg-running { background: #1d3a2b; color: #e8fff2; }
-.seg-waiting { background: color-mix(in srgb, var(--warning) 46%, var(--surface)); color: var(--text); }
-/* Now: the live step's end is marked; a running step carries a sheen, a waiting one breathes. */
-.seg-now { box-shadow: inset -2px 0 0 var(--text); }
-.strip-seg.seg-running::before { content: ""; position: absolute; inset: 0; background: rgb(255 255 255 / 0.1); transform-origin: left; transform: translateX(-35%) scaleX(0.35); animation: sheen 2.4s var(--ease-in-out) infinite; pointer-events: none; }
-.strip-seg.seg-waiting { animation: beckon 2.4s ease-in-out infinite; }
-/* The phone's key under the strip: the step that is now by name, the others as dots. */
-.strip-key { display: none; gap: 2px; height: 18px; margin-top: 6px; font-size: 0.75rem; line-height: 18px; }
-.strip-key > span { position: relative; display: flex; justify-content: center; align-items: center; flex: 0 1 56px; min-width: 24px; }
-.strip-key i { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
-.strip-key .key-done i { background: var(--accent); }
-.strip-key .key-failed i { background: var(--negative); }
-.strip-key .key-pending i, .strip-key .key-skipped i { background: none; box-shadow: inset 0 0 0 1px var(--faint); }
-.strip-key b { position: absolute; z-index: 1; left: 0; top: 0; max-width: calc(50vw - 16px); padding-right: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; background: var(--ground); } /* the ground masks the dots it passes over */
-.strip-key b.key-end { padding: 0 0 0 6px; }
-.strip-key b.key-end { left: auto; right: 0; }
-.strip-key .key-waiting b { color: var(--warning); }
-.strip-key .key-failed b { color: var(--negative); }
-.seg-failed { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
+.seg-running { background: #1d3a2b; }
+.seg-waiting { background: color-mix(in srgb, var(--warning) 46%, var(--surface)); }
+.seg-failed { background: var(--pill-negative-bg); }
 .seg-pending, .seg-skipped { background: transparent; border: 1px dashed var(--control); }
-.strip-seg[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--accent); }
-.strip-bare { height: 8px; margin: 0; gap: 1px; }
-.strip-bare .strip-seg { min-width: 3px; flex-basis: 12px; }
-.strip-axis { display: flex; justify-content: space-between; gap: 12px; color: var(--faint); font-size: 0.6875rem; font-variant-numeric: tabular-nums; margin-bottom: var(--gap); }
+
+/* The status hero: the status line and its one action, then four numbers each with its anchor */
+.hero { --glow: transparent; position: relative; overflow: hidden; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 18px; align-items: center; margin: 0 0 22px; padding: 18px 20px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+.hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(80% 140% at 0% 0%, var(--glow), transparent 55%); }
+.hero > * { position: relative; }
+.hero[data-tone="warn"] { --glow: #d9a44122; --tone-bg: var(--pill-warning-bg); --tone-ink: var(--pill-warning-ink); border-color: #3a3020; }
+.hero[data-tone="pos"] { --glow: #2ec27e1f; --tone-bg: var(--pill-positive-bg); --tone-ink: var(--pill-positive-ink); border-color: #1f3a2b; }
+.hero[data-tone="live"] { --glow: #4a90e21c; --tone-bg: #132233; --tone-ink: #7cb8ff; border-color: #1f2c3d; }
+.hero[data-tone="neg"] { --glow: #e5566f1c; --tone-bg: var(--pill-negative-bg); --tone-ink: var(--pill-negative-ink); border-color: #3a2228; }
+.hero-badge { grid-row: span 2; width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--tone-bg, var(--raised)); color: var(--tone-ink, var(--muted)); }
+.hero-line p.status-line { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; margin: 0; max-width: none; font-size: 1.0625rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: var(--text); }
+.hero-go { grid-row: span 2; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.hero-go > * { display: inline-flex; align-items: center; gap: 8px; }
+.hero-sub { grid-column: 2; margin: 0; color: var(--muted); }
+.hero .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
+.hero .stat { display: flex; gap: 10px; align-items: center; min-width: 0; padding: 10px 12px; border-radius: 8px; background: var(--well); border: 1px solid var(--rule); }
+.hero .stat dt { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--raised); color: var(--muted); }
+.hero .stat dd { flex: 1; min-width: 0; margin: 0; }
+.hero .stat b { display: flex; align-items: center; gap: 0.3em; font-size: 0.9375rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hero .stat b small { color: var(--faint); font-weight: 400; font-size: 0.75rem; }
+.hero .stat dd > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: 0.75rem; }
+.hero .stat .mini { height: 4px; margin-top: 5px; border-radius: 9px; background: var(--raised); overflow: hidden; }
+.hero .stat .mini i { display: block; height: 100%; border-radius: 9px; background: var(--accent); }
+.faces { display: inline-flex; margin-left: 4px; }
+.face { width: 22px; height: 22px; margin-left: -7px; border-radius: 50%; border: 2px solid var(--well); display: inline-grid; place-items: center; font-size: 0.59rem; font-weight: 700; color: #0b0b0d; }
+.face:first-child { margin-left: 0; }
+
+/* The stage rail: each stage an icon tile, joined by a line that turns green as stages finish.
+   State is told twice: colour and a mark (a tick, a cross, a dashed edge, its word under it). */
+.rail { list-style: none; display: flex; margin: 0 0 var(--gap); padding: 8px 2px 10px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; }
+.rail::-webkit-scrollbar { display: none; }
+.rail .node { position: relative; flex: 1 0 92px; display: flex; justify-content: center; scroll-snap-align: center; }
+.rail .node::before { content: ""; position: absolute; top: 22px; left: -50%; width: 100%; height: 2px; background: var(--control); }
+.rail .node:first-child::before { display: none; }
+.rail .node-done::before, .rail .node.now::before { background: var(--accent); }
+.rail .node button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 100%; min-height: 44px; padding: 0 4px; border: 0; background: none; font-weight: 400; }
+.rail .tile { position: relative; z-index: 1; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--control); background: var(--raised); color: var(--muted); transition: transform var(--dur-fast) var(--ease-out); }
+.rail .tile img { width: 22px; height: 22px; object-fit: contain; }
+.rail .node-done .tile { border-color: #2c4a3a; }
+.rail .node-pending .tile, .rail .node-skipped .tile { opacity: 0.45; border-style: dashed; }
+.rail .node-waiting .tile { border-color: var(--warning); box-shadow: 0 0 0 4px #d9a44122; color: var(--pill-warning-ink); }
+.rail .node-running .tile { border-color: #4a90e2; box-shadow: 0 0 0 4px #4a90e222; color: #7cb8ff; animation: breathe 2s ease-in-out infinite; }
+.rail .node-failed .tile { border-color: var(--negative); color: var(--pill-negative-ink); }
+@keyframes breathe { 50% { box-shadow: 0 0 0 7px #4a90e211; } }
+.rail .node button[aria-pressed="true"] .tile { transform: translateY(-2px); outline: 2px solid var(--text); outline-offset: 3px; }
+.rail .mark { position: absolute; right: -5px; bottom: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--ground); }
+.rail .mark svg { width: 10px; height: 10px; stroke-width: 3; }
+.rail .mark-done { background: var(--accent); color: var(--primary-ink); }
+.rail .mark-failed { background: var(--negative); color: #fff; }
+.rail .count { position: absolute; right: -8px; top: -7px; height: 17px; padding: 0 5px; display: grid; place-items: center; border-radius: 99px; border: 2px solid var(--ground); background: var(--text); color: #0b0b0d; font-size: 0.625rem; font-weight: 700; }
+.rail .node .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; font-weight: 550; }
+.rail .node .dt { margin-top: -6px; min-height: 1.3em; color: var(--faint); font-size: 0.6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rail .node-waiting .dt { color: var(--pill-warning-ink); }
+.rail .node-running .dt { color: #7cb8ff; }
+.rail .node-failed .dt { color: var(--pill-negative-ink); }
+/* With reduced motion a running tile keeps its ring but does not breathe (after the rule above,
+   which motion.css would lose to). */
+@media (prefers-reduced-motion: reduce) { .rail .node-running .tile { animation: none; } }
 .elapsed[data-live] { color: var(--text); }
 /* The live step's latest line, under the strip while you watch it */
 .live-line { display: flex; align-items: center; gap: 8px; margin: calc(-1 * var(--gap) + 8px) 0 var(--gap); color: var(--muted); font-size: 0.8125rem; min-width: 0; }
 .live-line .icon { flex: none; color: var(--accent); }
 .live-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A done run's summary: the check, took, spent, made, and the one file to open */
-.done-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 16px; padding: 10px 12px; border-radius: var(--radius-card); background: var(--pill-positive-bg); font-size: 0.875rem; }
-.done-row > .icon { color: var(--accent); flex: none; }
-.done-row p { flex: 1 1 12rem; margin: 0; font-variant-numeric: tabular-nums; }
-.run-id code { font-size: 0.75rem; overflow-wrap: anywhere; }
-
-.run-grid { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.run-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); align-items: start; }
 .run-side { display: grid; gap: var(--gap); }
-.steps { padding: 8px; }
-.steps ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.step button { position: relative; width: 100%; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; justify-content: stretch; gap: 10px; min-height: 44px; padding: 6px 8px; border: 0; border-radius: 6px; text-align: left; font-weight: 400; }
-.step button[aria-pressed="true"] { background: var(--raised); }
-.step button[aria-pressed="true"]::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: var(--accent); }
-.step-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.step-name small { display: block; color: var(--faint); font-size: 0.6875rem; }
-.step-meta { color: var(--faint); font-size: 0.75rem; font-variant-numeric: tabular-nums; text-align: right; }
-.step-waiting .step-meta { color: var(--warning); }
-.step-failed .step-meta { color: var(--negative); }
-.glyph { justify-self: center; }
-svg.glyph { color: var(--accent); }
-.dot-running { background: var(--accent); }
-.dot-waiting { background: var(--warning); }
-.dot-failed { background: var(--negative); }
-.dot-pending, .dot-skipped { background: transparent; border: 1px solid var(--faint); }
-.step-running .dot, .step-waiting .dot { animation: pulse 1.6s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .step-running .dot, .step-waiting .dot { animation: none; } }
 .spend { display: grid; gap: 8px; }
 .run-page .spend .panel-head { justify-content: space-between; }
 .spend meter { width: 100%; }
@@ -131,8 +135,6 @@ svg.glyph { color: var(--accent); }
 .run-page .panel-head { justify-content: flex-start; margin: 0; }
 .run-page .panel p { margin: 0; }
 .stage-failure { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-radius: var(--radius-card); background: var(--pill-negative-bg); color: var(--text); }
-/* The failed step's block says why; the status line above would only say it again. */
-.run-page:has(.stage-failure) p.status-line.state-failed { display: none; }
 .failure-line { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9375rem; line-height: 1.45; }
 .failure-line .icon { flex: none; color: var(--negative); margin-top: 1px; }
 .item-error { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
@@ -191,17 +193,27 @@ svg.glyph { color: var(--accent); }
 
 @media (max-width: 48rem) {
   .run-grid, .result-one, .inline-gate .gate:has(> .artifact-view) { grid-template-columns: minmax(0, 1fr); }
-  .run-grid > .run-side { display: none; } /* the steps and spend move to the sheet */
   .run-page header.page > div:first-child { flex: 1 1 100%; } /* the title block takes the row; Ask this run sits under it */
   .run-pill { display: inline-flex; margin: 6px 8px 0 0; }
   .run-pill .icon { margin-left: -2px; }
-  /* The question is asked once, by the gate's card below; a done run's summary says the rest. */
-  .run-page:has(.inline-gate) p.status-line.state-waiting_gate, .run-page p.status-line.state-done { display: none; }
-  .strip-key { display: flex; }
-  .strip-axis { font-size: 0.75rem; }
-  .run-pill + p.status-line { display: inline; }
-  .axis-spend, .step-button, .run-topbar { display: flex; }
-  .axis-spend { gap: 0.3em; }
+  .run-topbar { display: flex; }
+  /* The hero stacks: badge and line, the sub line, the numbers in a row, the action full width */
+  .hero { grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; padding: 14px; margin-bottom: 16px; }
+  .hero-badge { grid-row: auto; width: 42px; height: 42px; }
+  .hero-line p.status-line { font-size: 0.9375rem; }
+  .hero-sub { grid-column: 1 / -1; }
+  .hero-go { grid-row: auto; grid-column: 1 / -1; order: 9; justify-content: stretch; }
+  .hero-go > * { flex: 1; justify-content: center; min-height: 44px; }
+  .hero .stats { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 4px; }
+  .hero .stat { padding: 0; gap: 6px; background: none; border: 0; }
+  .hero .stat dt { width: auto; height: auto; background: none; }
+  .hero .stat b { font-size: 0.8125rem; }
+  .hero .stat dd > span, .hero .stat .mini, .hero .stat .faces { display: none; }
+  .hero .stat dd { display: flex; align-items: baseline; gap: 5px; }
+  .hero .stat dd > span[data-testid="last-run"] { display: inline; }
+  .rail { margin: 0 -16px var(--gap); padding: 8px 16px 10px; }
+  .rail .node { flex: 0 0 78px; }
+  .run-grid > .run-side { order: 9; }
   /* The back link and the run menu take the top bar from the world chip; the compact title
      fades in between them. */
   .topbar:has(.run-topbar) .world-chip, .run-actions .menu-wrap { display: none; }
@@ -210,12 +222,7 @@ svg.glyph { color: var(--accent); }
   .topbar .run-topbar > :not(a) { flex: none; }
   .topbar .run-topbar button.icon { display: inline-flex; }
   .run-loading .sk-title { font-size: 1.375rem; }
-  .run-loading .sk-step { display: block; }
   .run-loading .sk-ask { --sk-h: 44px; }
-  /* Each segment a 24px tap at least; a long run's strip scrolls inside itself */
-  .strip-wrap { overflow-x: auto; scrollbar-width: none; }
-  .strip:not(.strip-bare) .strip-seg { min-width: 24px; }
-  .strip-seg span { display: none; }
   .take-list li { grid-template-columns: minmax(0, 1fr) auto; }
   .take-list audio { grid-column: 1 / -1; }
   .board { grid-template-columns: 1fr; }
@@ -244,4 +251,4 @@ svg.glyph { color: var(--accent); }
 .diff ins { text-decoration: none; background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .edited { color: var(--accent); }
 .changes { margin: 0; padding-left: 20px; font-size: 0.8125rem; }
-.run-grid.asking { grid-template-columns: 264px minmax(0, 1fr) minmax(320px, 440px); }
+.run-grid.asking { grid-template-columns: minmax(0, 1fr) minmax(320px, 440px) 264px; }

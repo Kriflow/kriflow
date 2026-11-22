@@ -251,9 +251,9 @@ def test_the_answer_is_on_screen_above_the_tab_bar(phone: Page, ids: dict, where
     if where == "gates":  # several wait: the kinds as chips with counts, and where this one sits
         expect(phone.get_by_test_id("kinds")).to_contain_text("All")
         expect(phone.get_by_test_id("place")).to_contain_text(re.compile(r"\d of \d"))
-    else:  # seven steps not started still fit the strip (issue 175)
-        expect(phone.get_by_test_id("strip")).to_be_visible()
-        assert phone.get_by_test_id("strip").bounding_box()["width"] <= PHONE["width"]  # type: ignore[index]
+    else:  # seven steps not started still fit the rail (issue 175)
+        expect(phone.get_by_test_id("timeline")).to_be_visible()
+        assert phone.get_by_test_id("timeline").bounding_box()["width"] <= PHONE["width"]  # type: ignore[index]
     _fits(phone)
 
 
@@ -289,9 +289,7 @@ def test_a_running_run_and_a_done_run_with_its_video(phone: Page, ids: dict) -> 
     player = phone.get_by_test_id("result").get_by_test_id("player")
     expect(player).to_be_visible()
     assert player.bounding_box()["height"] <= 300  # type: ignore[index]
-    phone.get_by_role("button", name="All steps").click()
-    sheet = phone.get_by_role("dialog", name="All steps")
-    expect(sheet.get_by_test_id("timeline").locator("li")).to_have_count(3)  # and the retro
+    expect(phone.get_by_test_id("timeline").locator("li")).to_have_count(3)  # and the retro
     _fits(phone)
 
 

@@ -3935,6 +3935,8 @@ export interface components {
             forked_by?: components["schemas"]["AppliedChange"] | null;
             /** Budget Warn Usd */
             budget_warn_usd?: number | null;
+            /** Last Run Seconds */
+            last_run_seconds?: number | null;
         };
         /**
          * RunChange
