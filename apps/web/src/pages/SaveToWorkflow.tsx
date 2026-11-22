@@ -26,7 +26,7 @@ export function SaveToWorkflow({ run, change }: { run: Run; change: AppliedChang
   const asked = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const configId = useId();
-  if (!run.workflow_id || change.kind === "rerun") return null;
+  if (!run.workflow_id || change.kind === "rerun" || change.kind === "follow_up") return null;
 
   function post(save: boolean, confirmed: boolean, cfg: Record<string, unknown> | null) {
     return api.POST("/api/runs/{run_id}/changes/{change_id}/save-to-workflow", {

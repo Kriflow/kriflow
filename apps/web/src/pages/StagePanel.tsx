@@ -19,6 +19,7 @@ import { Whiteboard } from "./Whiteboard";
 import { StageLook } from "./RunHero";
 import { ActivityViews } from "./Transcript";
 import { MessageBox, messageable } from "./Message";
+import { AttemptPin, AttemptTabs, attemptLog, attemptSeconds, FollowUpBox, followable, useAttemptFiles, useAttempts } from "./Attempts";
 import { cap } from "../skin";
 
 type Stage = Run["stages"][number];
@@ -717,14 +718,24 @@ function Tabs({ tabs, label }: { tabs: Tab[]; label: string }) {
  * All and Ask; an agent stage's Activity, Items, Files and Details; a connector's Result,
  * Inputs and Details. */
 export function StagePanel(p: PanelProps) {
-  const { run, stage, worldId, made, call } = p;
+  const { run, stage, worldId, call } = p;
+  // A swarm stage's Attempts: the latest shows unless you pick another; an earlier one shows
+  // its own log lines and the files it left.
+  const attempts = useAttempts(run, stage);
+  const [picked, setPicked] = useState<{ stage: string; n: number } | null>(null);
+  const last = attempts.at(-1)?.number ?? 1;
+  const on = picked?.stage === stage.id && attempts.some((a) => a.number === picked.n) ? picked.n : last;
+  const attempt = attempts.find((a) => a.number === on);
+  const kept = useAttemptFiles(run, stage, attempts.length > 1 && on !== last ? on : null);
+  const made = kept ?? p.made;
   const connectorOf = p.connectors[stage.calls ?? ""];
   const kind = kindOf(stage, made, connectorOf);
   const timings = kind === "audio" ? made.find((a) => a.name === "timings.json") : undefined;
   const connector = stage.type === "connector";
   // A build step's panel shows its builder's steps; anything else logged there (the sandbox
   // blocking its render) still gets the live log.
-  const shownLog = kind === "build" ? p.log.filter((e) => e.agent !== "builder") : p.log;
+  const log = attemptLog(p.log, attempts, on);
+  const shownLog = kind === "build" ? log.filter((e) => e.agent !== "builder") : log;
   const working = p.agents.filter((a) => a.status === "working");
   const prev = run.stages[stage.index - 1];
   const next = run.stages[stage.index + 1];
@@ -825,7 +836,7 @@ export function StagePanel(p: PanelProps) {
     const summary =
       stage.type === "swarm" ? (
         <>
-          <AgentCards agents={p.agents} log={p.log} tasks={p.tasks} />
+          <AgentCards agents={p.agents} log={log} tasks={p.tasks} />
           <StageOutput verdicts={p.verdicts} artifacts={made} />
           <LiveLog log={shownLog} tasks={p.tasks} />
         </>
@@ -882,7 +893,13 @@ export function StagePanel(p: PanelProps) {
         <div>
           <h2>{stage.name}</h2>
           <p className="stage-meta" data-testid="stage-meta">
-            {[kindLabel(stage, kind), `step ${stage.index + 1} of ${run.stages.length}`, stepMeta(stage, run.status === "queued")].map((part, i) => (
+            {[
+              kindLabel(stage, kind),
+              `step ${stage.index + 1} of ${run.stages.length}`,
+              attempts.length > 1 && stage.status !== "running"
+                ? `${attempts.length} attempts, ${clock(attempts.reduce((sum, a) => sum + attemptSeconds(a), 0))}`
+                : stepMeta(stage, run.status === "queued"),
+            ].map((part, i) => (
               <span key={i}>
                 {i > 0 && <Icon name="next" size={16} />}
                 {part}
@@ -901,7 +918,9 @@ export function StagePanel(p: PanelProps) {
           </div>
         )}
       </div>
+      {attempts.length > 1 && <AttemptTabs attempts={attempts} on={on} onPick={(n) => setPicked({ stage: stage.id, n })} running={stage.status === "running"} />}
       {p.lead}
+      {attempt && <AttemptPin attempt={attempt} />}
       {/* A budget gate opens on whatever stage ran out: its answer leads that stage's card. */}
       {stage.type !== "gate" && p.decision}
       {stage.child && (
@@ -912,11 +931,13 @@ export function StagePanel(p: PanelProps) {
           </Link>
         </p>
       )}
-      {(stage.notes ?? []).map((note, i) => (
-        <p className="faint" key={i}>
-          Sent back with: {note}
-        </p>
-      ))}
+      {/* A swarm stage pins each Attempt's words above; any other stage lists its notes. */}
+      {stage.type !== "swarm" &&
+        (stage.notes ?? []).map((note, i) => (
+          <p className="faint" key={i}>
+            Sent back with: {note}
+          </p>
+        ))}
       {stage.network && (
         <p className="notice" role="status" data-testid="stage-network">
           {stage.network}
@@ -930,6 +951,7 @@ export function StagePanel(p: PanelProps) {
       {stage.status === "failed" && stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}
       <Tabs key={stage.id} tabs={tabs} label={`${stage.name} views`} />
       {messageable(stage, working) && <MessageBox run={run} stage={stage} working={working} />}
+      {followable(stage) && <FollowUpBox key={`follow ${stage.id}`} run={run} stage={stage} />}
     </section>
   );
 }

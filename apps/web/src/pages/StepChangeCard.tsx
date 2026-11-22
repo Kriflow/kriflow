@@ -11,10 +11,12 @@ type Proposal = components["schemas"]["ChangeProposal"];
 export type StepKind = "rerun" | "skip";
 
 /** What an applied change did, as the Timeline and the change list say it. */
-export const changed = (kind: string) => ({ rerun: "Re-run", skip: "Skipped", message: "Messaged" })[kind] ?? "Edited";
+export const changed = (kind: string) => ({ rerun: "Re-run", follow_up: "Changed", skip: "Skipped", message: "Messaged" })[kind] ?? "Edited";
 export const changedStage = (c: AppliedChange) =>
   c.kind === "rerun"
     ? `Re-run from ${c.stage_name}`
+    : c.kind === "follow_up"
+      ? `Asked ${c.stage_name} for a change`
     : c.kind === "artifact_edit"
       ? `Edited ${String(c.payload.path)} of ${c.stage_name}`
       : `${changed(c.kind)} ${c.stage_name}`;

@@ -371,3 +371,32 @@ a.made-file:hover { background: var(--raised); }
   .you { max-width: 88%; }
   main:has(.msg-box) { padding-bottom: 150px; }
 }
+
+/* Attempts and Follow-ups (issue 535): each Attempt a tab with its time and spend, the words
+   that started it pinned above, and Ask for a change or Rerun from scratch on a finished stage */
+.attempts { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.attempts button.att { flex: none; border-color: var(--rule); display: grid; gap: 1px; justify-items: start; min-height: 44px; padding: 6px 12px; border-radius: 9px; background: none; text-align: left; color: var(--text); }
+.att b { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; font-weight: 600; }
+.att span { font-size: 0.6875rem; color: var(--faint); white-space: nowrap; }
+.attempts button.att[aria-pressed="true"] { border-color: var(--text); background: var(--raised); }
+.att .dot.live { background: #4a90e2; animation: breathe 2s infinite; }
+.attempt-pin { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 10px 12px; border: 1px solid #284636; border-radius: 10px; background: #1a2620; }
+.attempt-pin .pin-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #24382d; color: var(--accent); }
+.attempt-pin p { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.attempt-pin b { font-weight: 600; }
+.pin-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pin-chips .chip { font-size: 0.6875rem; color: var(--faint); background: #0f1813; }
+.warnline { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 8px 10px; border-radius: 8px; font-size: 0.75rem; line-height: 1.45; color: var(--pill-warning-ink); background: var(--pill-warning-bg); }
+.warnline svg { flex: none; margin-top: 1px; }
+.warnline.bad { color: var(--negative); background: color-mix(in srgb, var(--negative) 12%, transparent); }
+.msg-done { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 0.75rem; color: var(--accent); }
+.follow-box .msg-row { flex-wrap: wrap; justify-content: flex-start; }
+@media (prefers-reduced-motion: reduce) {
+  .att .dot.live { animation: none; }
+}
+@media (max-width: 48rem) {
+  .attempts { margin: 0 -16px; padding: 0 16px; }
+  .follow-box .warnline { font-size: 0.71875rem; padding: 6px 10px; }
+  .follow button { min-height: 44px; } /* "Go there", shown whenever a finished stage is open */
+  .msg-box .field button.icon[aria-pressed="true"] { border-color: var(--text); color: var(--text); background: var(--raised); }
+}
