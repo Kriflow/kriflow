@@ -1646,6 +1646,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/worlds/{world_id}/runs/{run_id}/review-feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Feed */
+        get: operations["run_feed_api_worlds__world_id__runs__run_id__review_feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/worlds/{world_id}/library": {
         parameters: {
             query?: never;
@@ -3831,13 +3848,15 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review";
+            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review" | "feed";
             /** Text */
             text: string;
             /** World Id */
             world_id?: string | null;
             /** Run Id */
             run_id?: string | null;
+            /** Url */
+            url?: string | null;
         };
         /**
          * OwnedFolder
@@ -4384,6 +4403,18 @@ export interface components {
             payload?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * RunFeed
+         * @description A feed's items from one run's family, for its run page.
+         */
+        RunFeed: {
+            /** Label */
+            label: string;
+            /** Count */
+            count: number;
+            /** Open Url */
+            open_url: string | null;
         };
         /**
          * RunLink
@@ -8729,6 +8760,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Notice"][];
+                };
+            };
+        };
+    };
+    run_feed_api_worlds__world_id__runs__run_id__review_feed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunFeed"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

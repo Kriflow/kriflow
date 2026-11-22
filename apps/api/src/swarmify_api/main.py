@@ -54,6 +54,7 @@ from swarmify_api import (
     notifications,
     planner,
     remote,
+    review_feeds,
     runs,
     save_to_workflow,
     tasks,
@@ -1049,6 +1050,20 @@ def create_app(
                 log.exception("sweep failed, retrying next tick")
             await asyncio.sleep(sweep_seconds)
 
+    def run_name(world_id: str, run_id: str) -> str | None:
+        run = runner.get(run_id)
+        return run.name if run and run.world_id == world_id else None
+
+    def family(run_id: str) -> set[str]:
+        """The run's id and those of the runs it came from."""
+        ids: set[str] = set()
+        run = runner.get(run_id)
+        while run and run.id not in ids:
+            ids.add(run.id)
+            run = runner.get(run.parent_run_id) if run.parent_run_id else None
+        return ids or {run_id}
+
+    feeds = review_feeds.ReviewFeeds(world_svc, registry, run_name)
     outcome_notices: dict[str, str] = {}  # by connector, from the last upkeep
     notices = upkeep.notice_source(
         world_svc,
@@ -1059,6 +1074,7 @@ def create_app(
         clock,
         swarm.waiting,
         lists_svc,
+        feeds.notices,
     )
 
     def upkeep_once() -> None:
@@ -1069,9 +1085,16 @@ def create_app(
         """New Needs-you notices go to the browsers that asked for them."""
         while True:
             try:
+                # Review Feeds are read here, never on a page load: Needs you shows the last.
+                if text := await to_thread.run_sync(feeds.refresh):
+                    web_push.alert(text)
                 if await to_thread.run_sync(lambda: web_push.storage.targets("notices")):
                     found = await to_thread.run_sync(notices)
-                    web_push.notices(push.Notice(**n.model_dump()) for n in found)
+                    web_push.notices(
+                        push.Notice(**n.model_dump(exclude={"url"}))
+                        for n in found
+                        if n.kind != "feed"  # pushed by item, above
+                    )
             except Exception:
                 log.exception("checking notices to push failed, retrying next tick")
             await asyncio.sleep(PUSH_NOTICE_SECONDS)
@@ -1190,6 +1213,7 @@ def create_app(
     app.include_router(graph.router(world_svc, index, writer))
     app.include_router(graph.stalled_router(world_svc, writer))
     app.include_router(upkeep.notices_router(notices))
+    app.include_router(review_feeds.router(feeds, family))
     app.include_router(
         library.router(
             memory,

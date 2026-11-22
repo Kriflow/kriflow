@@ -1037,3 +1037,20 @@ test("only a gate's send-backs read as Sent back: a Follow-up or Rerun is no sen
   FakeEventSource.emit("run.updated", { payload: { ...followed, send_backs: 2, revision: 9, updated_at: "2026-10-26T10:09:00+00:00" } });
   await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/Sent back once\.\s*$/);
 });
+
+test("on a 390 px phone a run whose family made things a package's app holds says so in one small line", async () => {
+  await page.viewport(390, 844);
+  const open = "https://tray.example.ts.net:8765/#/review";
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(run("done", [research("done", timed(0, 1))])),
+    "GET /api/worlds/world_1": () => Response.json(world),
+    "GET /api/worlds/world_1/runs/run_1/review-feed": () => Response.json([{ label: "Tray things", count: 2, open_url: open }]),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  const line = screen.getByTestId("feed-line");
+  await expect.element(line).toMatchTextContent(/^2 Tray things from this run need review\.Open$/);
+  const link = line.getByRole("link", { name: "Open" });
+  await expect.element(link).toHaveAttribute("href", open);
+  expect(link.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});

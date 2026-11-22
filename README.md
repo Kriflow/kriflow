@@ -601,6 +601,11 @@ name = "echo_service"
 url = "endpoint"                  # the [[config]] key holding its URL
 health = "/health"
 
+[reviews]                         # its Review Feed: what waits on the operator in its own app
+label = "Echo things"             # Needs you says "3 Echo things need you"
+url = "endpoint"                  # the [[config]] key holding its base URL
+path = "/api/review-feed"         # added to it; the JSON it answers: swarmify_api/review_feeds.py
+
 [permissions]                     # Credentials come from secret [[config]] fields, never listed
 network = ["api.example.org"]     # hosts it reaches; "localhost" alone: its own loopback servers
 services = ["echo_service"]       # Services whose URLs (its Setting's) it reaches

@@ -1,0 +1,12 @@
+# error: reviews.url: feed_url is not a [[config]] key
+name = "bad"
+version = "1.0.0"
+label = "Bad"
+about = "A fixture."
+kind = "stage"
+stage_types = ["connector"]
+runtime = "uv"
+command = ["uv", "run", "server.py"]
+[reviews]
+label = "Bad things"
+url = "feed_url"

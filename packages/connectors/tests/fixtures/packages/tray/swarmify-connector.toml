@@ -1,0 +1,21 @@
+# A fixture Connector Package with a Review Feed: its own app lists what waits on the operator, and
+# Needs you shows it. Its server is never started.
+name = "tray"
+version = "1.0.0"
+label = "Tray"
+about = "Keeps things for the operator to review in its own app. A fixture."
+kind = "stage"
+stage_types = ["connector"]
+runtime = "uv"
+command = ["python3", "server.py"]
+
+[[config]]
+key = "app_url"
+label = "App URL"
+type = "url"
+scope = "world"
+
+[reviews]
+label = "Tray things"
+url = "app_url"
+path = "/api/review-feed"

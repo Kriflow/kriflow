@@ -264,6 +264,11 @@ class WebPush:
             msg = Message("notices", "Needs you", text, url, tag)
             self.jobs.put(lambda msg=msg: self._push(msg))
 
+    def alert(self, text: str) -> None:
+        """Push `text` as a Needs-you notice now: what a Review Feed newly has."""
+        msg = Message("notices", "Needs you", text, "/gates", "review-feed", True)
+        self.jobs.put(lambda: self._push(msg))
+
     def test(self, id: str) -> int:
         """Send a test to one device now. Returns its push service's status; KeyError when there
         is no such device."""
