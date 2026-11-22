@@ -57,10 +57,11 @@ export const gatesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/gates",
   component: Gates,
-  // The open gate, the world filter and the kind filter live in the address.
-  validateSearch: (search: Record<string, unknown>): { gate?: string; world?: string; kind?: Gate["kind"] } =>
+  // The open gate, the world filter and the kind filter live in the address; `notice` is the
+  // kind of notice a push opened (a Review Feed's), shown open with its link in focus.
+  validateSearch: (search: Record<string, unknown>): { gate?: string; world?: string; kind?: Gate["kind"]; notice?: string } =>
     Object.fromEntries(
-      (["gate", "world", "kind"] as const).flatMap((k) => (typeof search[k] === "string" ? [[k, search[k]]] : [])),
+      (["gate", "world", "kind", "notice"] as const).flatMap((k) => (typeof search[k] === "string" ? [[k, search[k]]] : [])),
     ),
 });
 

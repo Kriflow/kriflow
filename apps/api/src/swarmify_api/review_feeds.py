@@ -57,17 +57,33 @@ class RunFeed(BaseModel):
     open_url: str | None
 
 
+SHOWN_WORKFLOWS = 3
+"""How many workflows a notice names before "and N more"."""
+
+
+def plural(word: str, n: int) -> str:
+    """`word` for `n` things: "prop", "props", "boxes", "stories"."""
+    if n == 1 or word.endswith("s"):
+        return word
+    if word.endswith(("x", "ch", "sh", "z")):
+        return word + "es"
+    if word.endswith("y") and word[-2:-1] not in ("a", "e", "i", "o", "u", ""):
+        return word[:-1] + "ies"
+    return word + "s"
+
+
 class ReviewFeeds:
-    """`run_name(world_id, run_id)` is that world's run's name, else None."""
+    """`workflow_of(world_id, run_id)` is the name of that world's run's workflow, else None
+    (never the run's own name, which an Ad Hoc Run takes from its free-text goal)."""
 
     def __init__(
         self,
         worlds: Worlds,
         registry: Connectors,
-        run_name: Callable[[str, str], str | None],
+        workflow_of: Callable[[str, str], str | None],
         get: Callable[[str], Any] | None = None,
     ) -> None:
-        self.worlds, self.registry, self.run_name = worlds, registry, run_name
+        self.worlds, self.registry, self.workflow_of = worlds, registry, workflow_of
         self.get = get or fetch
         self.found: list[Feed] = []
         # ponytail: in memory like WebPush.seen; a restart takes the first answer as the baseline,
@@ -114,22 +130,25 @@ class ReviewFeeds:
         return Feed(world_id, url, label, open_url, items)
 
     def notices(self) -> list[Notice]:
-        """One notice a feed with items: "3 Things need you: 2 move, 1 prop. 3 from Daily cut." """
+        """One notice a feed with items: "3 Things need you: 2 moves, 1 prop. 3 from Daily cut."
+        Runs are named by their workflow, the top three, then how many more."""
         out = []
         for f in self.found:
             if not f.items:
                 continue
             kinds = Counter(str(i.get("kind") or "other") for i in f.items)
-            runs = Counter(str(i["run_id"]) for i in f.items if i.get("run_id"))
+            flows = Counter(
+                name
+                for i in f.items
+                if i.get("run_id") and (name := self.workflow_of(f.world_id, str(i["run_id"])))
+            )
             text = f"{len(f.items)} {f.label} need you: "
-            text += ", ".join(f"{n} {k}" for k, n in kinds.most_common()) + "."
-            named = [
-                f"{n} from {name}"
-                for run, n in runs.most_common()
-                if (name := self.run_name(f.world_id, run))
-            ]
-            if named:
-                text += " " + ", ".join(named) + "."
+            text += ", ".join(f"{n} {plural(k, n)}" for k, n in kinds.most_common()) + "."
+            top = flows.most_common(SHOWN_WORKFLOWS)
+            if top:
+                text += " " + ", ".join(f"{n} from {name}" for name, n in top)
+                more = flows.total() - sum(n for _, n in top)
+                text += f" and {more} more." if more else "."
             out.append(Notice(kind="feed", text=text, world_id=f.world_id, url=f.open_url))
         return out
 
