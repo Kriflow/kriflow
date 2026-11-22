@@ -12,7 +12,8 @@ plugin; the opt-in real-CLI smoke test is where it gets pinned) (plus `host-skil
 settings are on, standing in for `~/.claude/skills` leaking in), the session runs on the model the
 options name, `resume` keeps the session id,
 each tool call's step carries `usage` (one message id per step), and the result carries `cost`
-as the session's estimated total.
+as the session's estimated total; as the real CLI does, a resumed session's total adds the totals
+of the sessions it continues.
 """
 
 import contextlib
@@ -108,6 +109,8 @@ class Script:
         """The prompt each session was started with."""
         self.outcomes: list[Outcome] = []
         self.last_id: str | None = None
+        self.totals: dict[str, float] = {}
+        """Each session id's total so far, which a resumed session's result reports."""
 
     def transport(self, options: ClaudeAgentOptions) -> "ScriptedTransport":
         n = len(self.sessions)
@@ -320,10 +323,15 @@ class ScriptedTransport(Transport):
             "is_error": False,
             "num_turns": len(self.steps),
             "session_id": sid,
-            "total_cost_usd": self.script.cost,
+            "total_cost_usd": self._total(sid),
             "result": last,
             "structured_output": answer,
         }
+
+    def _total(self, sid: str) -> float:
+        totals = self.script.totals
+        totals[sid] = totals.get(sid, 0.0) + self.script.cost
+        return totals[sid]
 
     async def _run_tool(self, step: Call) -> AsyncIterator[dict[str, Any] | tuple[str, bool]]:
         """Yields control requests to the SDK, then one (text, is_error) answer."""

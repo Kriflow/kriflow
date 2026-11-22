@@ -67,7 +67,7 @@ class _NoTools:
     def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
         return "The judge decides from the prompt alone."
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         return None
 
 

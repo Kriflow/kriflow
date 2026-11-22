@@ -94,7 +94,7 @@ class _Hooks:
     def before_tool(self, tool: str, input: dict) -> str | None:
         return None
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         return None
 
 
