@@ -27,3 +27,7 @@ button.entry-open:hover { background: var(--raised); }
 .entry-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 0.8125rem; }
 .entry-history li { display: flex; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
 .entry-history small { flex: none; }
+.list-end { margin: calc(var(--gap) * 2) 0 0; }
+.new-list { display: grid; gap: 14px; }
+.new-list > small { margin-top: -8px; }
+.new-list button[type="submit"] { justify-self: start; }

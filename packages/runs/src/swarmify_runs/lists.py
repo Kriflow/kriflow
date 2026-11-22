@@ -36,6 +36,10 @@ ORDERS = ("score", "time")
 """What an order may name besides a numeric field; a leading `-` makes it descending."""
 
 
+class Held(ValueError):
+    """Refused: a run that has not ended holds the Entry."""
+
+
 @dataclass(frozen=True)
 class WorldList:
     """A list as the world declared it. `statuses` keeps its order: the first is where an added
@@ -673,6 +677,62 @@ class WorldLists:
                 if n:
                     out.append((declared, n))
         return out
+
+    @staticmethod
+    def _unheld(conn: sqlite3.Connection, world_id: str, name: str, key: str | None) -> None:
+        """Raise Held when a run that has not ended holds the Entry `key`, or any of the list's
+        when None. A holder with no run row, or one that ended, holds nothing."""
+        row = conn.execute(
+            "SELECT e.key, r.id FROM list_entries e JOIN runs r ON r.id = e.claimed_by"
+            " WHERE e.world_id = ? AND e.list = ? AND (? IS NULL OR e.key = ?)"
+            " AND r.status NOT IN ('done', 'failed', 'aborted') LIMIT 1",
+            (world_id, name, key, key),
+        ).fetchone()
+        if row is not None:
+            raise Held(f"Entry {row[0]!r} of {name} is held by run {row[1]}, which has not ended")
+
+    def delete_entry(self, world_id: str, name: str, key: str, *, by: str = "operator") -> None:
+        """Delete an Entry. Refused (Held) while a run that has not ended holds it."""
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._declared(conn, world_id, name)
+                entry = self._row(conn, world_id, name, key)
+                if entry is None:
+                    raise KeyError(f"no Entry {key!r} in {name}")
+                self._unheld(conn, world_id, name, key)
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            conn.execute(
+                "DELETE FROM list_entries WHERE world_id = ? AND list = ? AND key = ?",
+                (world_id, name, key),
+            )
+            payload = {"list": name, "key": key, "title": entry.title, "by": by}
+            append(conn, Event.new("entry.deleted", world_id=world_id, payload=payload))
+            conn.execute("COMMIT")
+
+    def delete_list(self, world_id: str, name: str, *, by: str = "operator") -> int:
+        """Delete a list and its Entries; how many Entries went. Refused (Held) while a run
+        that has not ended holds one of them."""
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._declared(conn, world_id, name)
+                self._unheld(conn, world_id, name, None)
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            gone = conn.execute(
+                "DELETE FROM list_entries WHERE world_id = ? AND list = ?", (world_id, name)
+            ).rowcount
+            conn.execute(
+                "DELETE FROM world_lists WHERE world_id = ? AND name = ?", (world_id, name)
+            )
+            payload = {"list": name, "entries": gone, "by": by}
+            append(conn, Event.new("list.deleted", world_id=world_id, payload=payload))
+            conn.execute("COMMIT")
+        return gone
 
     def delete_world(self, world_id: str) -> None:
         with self._conn() as conn:

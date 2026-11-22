@@ -16,7 +16,7 @@ from swarmify_runs.control import (
     run_folder,
     stage_folder,
 )
-from swarmify_runs.lists import Entry, WorldList, WorldLists
+from swarmify_runs.lists import Entry, Held, WorldList, WorldLists
 from swarmify_runs.machine import (
     MAX_SEND_BACKS,
     RUN_STATUSES,
@@ -78,6 +78,7 @@ __all__ = [
     "Decision",
     "Entry",
     "Gate",
+    "Held",
     "Item",
     "ItemView",
     "Items",

@@ -487,6 +487,14 @@ def server(
             ),
         )
 
+    @mcp.tool(
+        description="Delete an Entry of a World List. Refused while a run that has not ended"
+        " holds it."
+    )
+    def delete_entry(world_id: str, list: str, key: str) -> dict[str, Any]:
+        listed(world_id, lambda: world_lists.delete_entry(world_id, list, key, by=who()))
+        return {"deleted": key}
+
     @mcp.tool(description="List every open gate across all worlds and runs, newest first.")
     def list_gates() -> list[dict[str, Any]]:
         return [asdict(g) for g in control.gates() if scope() in (None, g.world_id)]
