@@ -1,6 +1,11 @@
 # The same file on the Mac and on a Debian VM: `docker compose up -d --build`, settings in `.env`
 # next to it (README, Deployment). `web` serves the skin and proxies /api to `api`, so a UI-only
 # change rebuilds and restarts only `web`. api and graph-writer share the one `data` volume.
+
+# Pinned, never the folder's name: it names the `swarmify_data` volume the app's data lives on,
+# so a checkout in another folder (a `kriflow` one) still starts on it. Kept through the rename.
+name: swarmify
+
 x-env: &env
   SWARMIFY_DATA_DIR: /data
   # Headless Claude Code on the subscription: `claude setup-token` prints it (ADR 0010).
