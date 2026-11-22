@@ -108,6 +108,25 @@ def test_a_phone_reads_the_summary_first_then_the_transcript(
     _shot(phone, "transcript-one-agent")
 
 
+def test_the_audit_measures_the_follow_up_box_where_it_comes_to_rest(
+    phone: Page, ids: dict[str, str]
+) -> None:
+    """The box rises from behind the tab bar as it mounts; an audit taken mid rise waits for it
+    to land on the bar's top instead of calling it over the bar (a CI flake, 1 run in 3)."""
+    slow = ".canvas main .action-bar { animation-duration: 3s !important; }"
+    phone.add_init_script(
+        "addEventListener('DOMContentLoaded', () => document.head.append("
+        f"Object.assign(document.createElement('style'), {{textContent: {slow!r}}})))"
+    )
+    _research(phone, ids)
+    box = phone.get_by_test_id("follow-up-box")
+    rising = "e => e.getAnimations().some(a => a.playState === 'running')"
+    assert box.evaluate(rising)
+    _audit(phone)
+    rest, bar = box.bounding_box(), phone.locator(".tabbar").bounding_box()
+    assert rest and bar and abs(rest["y"] + rest["height"] - bar["y"]) <= 1
+
+
 def test_a_desktop_opens_on_the_transcript(browser: Browser, base_url: str, ids: dict) -> None:
     context = browser.new_context(viewport={"width": 1280, "height": 800}, base_url=base_url)
     page = context.new_page()
