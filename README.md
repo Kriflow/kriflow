@@ -1,9 +1,12 @@
-# Swarmify
+# Kriflow
+
+Kriflow was called Swarmify until November 2026; code names (`swarmify_*` packages, `SWARMIFY_*`
+settings, containers, the repository) keep the old name for now.
 
 A swarm of Claude Code agents sharing one graphify memory per world, running gated workflows.
 Use it for research briefs with cited sources, drafts you approve or send back, scheduled
 monitors that return a typed list of what changed, or a weekly short video; what a workflow makes
-comes from its stages and the connectors a world has, not from Swarmify itself.
+comes from its stages and the connectors a world has, not from Kriflow itself.
 
 Python core (FastAPI, uv workspace, one package per bounded context), React web skin (Vite, pnpm
 workspace), one monorepo. Domain docs live in the Obsidian vault, see `CONTEXT.md`.
@@ -449,7 +452,7 @@ installs only when every declared permission is in `approved` (422 naming the re
 reviewed commit; the Connectors page's Install a package form does both. It checks the
 Manifest, copies the folder to
 `<data dir>/packages/<name>/<version>/` and runs its `install` step there in the connector sandbox
-with a bare environment (PATH and uv's Python, none of Swarmify's keys), so its dependencies land
+with a bare environment (PATH and uv's Python, none of Kriflow's keys), so its dependencies land
 beside it: it writes only that folder and reaches only its runtime's registry (PyPI for `uv`, npm
 for `npm`) and the hosts `permissions.install_network` adds. A package of this repository shares
 uv's and npm's caches; any other starts with empty ones, so it cannot plant a poisoned download
@@ -476,7 +479,7 @@ docker compose cp private_tool api:/data/sources/private_tool # in Docker; nativ
 
 then review and install `/data/sources/private_tool` at `v1.2.0` from the Install a package form
 (or `POST /api/packages/review` with `{"source": "/data/sources/private_tool", "ref": "v1.2.0"}`).
-Swarmify clones the folder at that ref as it would a URL, running none of it, so uncommitted
+Kriflow clones the folder at that ref as it would a URL, running none of it, so uncommitted
 changes there do not install. `docker compose cp` makes the copy root's, the user the api runs as,
 so git does not refuse it as another user's repository. `SWARMIFY_PACKAGE_SOURCES`, when set, limits local
 paths to the folders it lists, separated as `PATH` is (`/data/sources`): any other is refused
@@ -497,7 +500,7 @@ the index lists them with a search, and installing one opens the usual review: t
 permissions are only a summary, and the operator approves what the clone declares.
 
 Default packages (ADR 0023, issue 213): every package in this repository's `connectors/` folder.
-On startup Swarmify installs each whose version is not installed yet, and gives it to every
+On startup Kriflow installs each whose version is not installed yet, and gives it to every
 world once, enabled at that version: the worlds there on upgrade, and each new world as it is
 made. A world's choice after that stands (disabling one keeps it disabled through restarts), and
 a newer default version installs beside the old one without moving a world's pin. The first
@@ -521,7 +524,7 @@ Setup fields and permissions) and is refused while a newly required Setup field 
 every world that pins it and every workflow version saved with it. On startup, versions saved
 before versions were recorded are stamped with their world's pins.
 
-The Manifest, every section checked at install even where Swarmify does not act on it yet:
+The Manifest, every section checked at install even where Kriflow does not act on it yet:
 
 ```toml
 name = "echo"                     # lower_snake_case; workflows call the connector by it
@@ -635,7 +638,7 @@ or a folder holding it or the home folder.
 
 #### OAuth sign-in
 
-A field of `type = "oauth"` is an account Swarmify signs in to for the connector. Its
+A field of `type = "oauth"` is an account Kriflow signs in to for the connector. Its
 `[config.oauth]` table gives `authorize_url`, `token_url`, `scopes`, `pkce` (true unless set
 false), `client = "operator"` and optionally `authorize_params`, extra query parameters for the
 provider's sign-in page (some providers issue a refresh token only when asked this way), and
@@ -644,8 +647,8 @@ package, by key, as Meta's `authorize_settings = { config_id = "meta_config_id" 
 resolves each for the world (the world's value, else the shared one) and refuses to start,
 naming the field, while one is empty. You register your own app with the provider; its client ID and secret are two
 shared Credentials the form adds before the field, `<key>_client_id` and `<key>_client_secret`,
-which only Swarmify uses. Register the redirect URI the form shows,
-`<the address you open Swarmify at>/api/setup/oauth/callback`: Swarmify takes it from the
+which only Kriflow uses. Register the redirect URI the form shows,
+`<the address you open Kriflow at>/api/setup/oauth/callback`: Kriflow takes it from the
 request (with `X-Forwarded-Host` and `X-Forwarded-Proto` behind Caddy or Tailscale Serve), so
 sign in from the same address you registered.
 
@@ -662,7 +665,7 @@ the Python MCP SDK. Signing in again clears it. Tokens are never logged.
 
 A package can finish its own sign-in (ADR 0029), for a provider whose flow ends past the token
 exchange, as Meta's does with a long-lived token swapped for a Page's. With `finish = true` in
-`[config.oauth]`, after the exchange Swarmify calls the package's MCP tool `signed_in` with
+`[config.oauth]`, after the exchange Kriflow calls the package's MCP tool `signed_in` with
 `{"access_token": <the provider's>, "client_id": ..., "client_secret": ...}`, in the package's
 sandbox with its declared network and its other Setup values in its environment (not the field
 being signed in). It answers `{"access_token": "<the Credential to keep>", "expires_at": <unix
@@ -685,8 +688,8 @@ Every connector process (a stage's call and its polls, a publish preview, a Setu
 a health or world types call, a swarm stage's MCP server, a remote approver's listener) and every
 install step runs in an OS sandbox, Anthropic's sandbox-runtime (ADR 0021): Seatbelt on macOS;
 bubblewrap, socat and a seccomp filter on Linux, where `bwrap`, `socat` and `rg` must be installed
-(the image has them). `packages/connectors/sandbox/launcher.mjs` starts it with what Swarmify
-grants (`swarmify_connectors/sandbox.py`), and Swarmify refuses to start a connector it cannot
+(the image has them). `packages/connectors/sandbox/launcher.mjs` starts it with what Kriflow
+grants (`swarmify_connectors/sandbox.py`), and Kriflow refuses to start a connector it cannot
 sandbox.
 
 On Ubuntu 23.10 and later the host must also let bubblewrap make user namespaces with
@@ -720,7 +723,7 @@ sandboxed command any user namespace of its own.
   rendering it. A Node command reaches the network through the proxy too, which Node does
   only from 22.21 (`NODE_USE_ENV_PROXY`): the sandbox refuses to start a command whose PATH
   holds an older Node, which would fail every download with `ENOTFOUND`. A remote approver's
-  listener also reaches Swarmify's `/mcp/remote_approvals` (at
+  listener also reaches Kriflow's `/mcp/remote_approvals` (at
   `SWARMIFY_INTERNAL_URL`, else `SWARMIFY_BASE_URL`).
 - GPU: with `permissions.gpu`, on Linux, the GPU device files where the sandbox starts
   (`/dev/nvidia*`, `/dev/dri/renderD*` and `card*`, those there are) bound into its sandbox, and
@@ -904,7 +907,7 @@ the fixture package, `test_build_http.py` with a default package).
 ## Default packages
 
 This repository's `connectors/` folder holds the first-party Connector Packages, each a separate
-work with its Manifest, code, tests and README. Swarmify installs them on startup and enables
+work with its Manifest, code, tests and README. Kriflow installs them on startup and enables
 them for every world (but for one whose Manifest says `enable_by_default = false`), so workflows
 call them by name with no setup beyond each one's Setup form. Each README covers its Setup, the
 stage and its params, what it answers, the Services it calls and how its V1 settings carry over:
@@ -933,7 +936,7 @@ stage and its params, what it answers, the Services it calls and how its V1 sett
 ### Owned Folders on the Assets page
 
 A package may own folders of each world's assets (`[[owned_folders]]` in its Manifest, ADR 0025),
-as a voice package owns `voices/`, its clips and a file describing them. Swarmify knows nothing of what they mean; it lists, plays, uploads, renames and deletes
+as a voice package owns `voices/`, its clips and a file describing them. Kriflow knows nothing of what they mean; it lists, plays, uploads, renames and deletes
 their files, and the package reads the folder through `assets_path` as before.
 - Files the operator copies into an Owned Folder by hand (not through the Assets page) must be
   owned by the user the sandbox maps the connector to, `root` in the Docker setup
@@ -1278,7 +1281,7 @@ The Office skin draws the cast from a sprite pack: a folder named by the pack's 
 `pack.toml` manifest (`name`, `licence`, `author`, `frame = [w, h]`, `[characters.<id>]` with a
 `name` and `[characters.<id>.poses]` listing frame files per pose, idle required, and an
 optional `[casting.<agent name or role>]` of `character`, `name`, `colour`, `catchphrase`) and
-one folder of transparent PNG frames per character. Swarmify ships one,
+one folder of transparent PNG frames per character. Kriflow ships one,
 `packages/worlds/src/swarmify_worlds/sprite_packs/kenney-toon` (Kenney Toon Characters, CC0);
 install another by copying its folder into `<data dir>/sprite-packs/`, where a pack of the same
 id wins over the bundled one. Packs with art you may not redistribute stay there, never in this
@@ -1733,17 +1736,17 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   context's rows.
 - `apps/web` React skin with a typed client generated by openapi-typescript.
 - `connectors/` the first-party Connector Packages, each with its Manifest, code, tests, README
-  and any compose file for the Services it calls, outside the uv workspace; Swarmify installs
+  and any compose file for the Services it calls, outside the uv workspace; Kriflow installs
   them as default packages (see Default packages).
 - `tests/e2e` Playwright for Python against the real API. `test_phone.py` opens every page at
   390 by 844 signed in and fails if any scrolls sideways.
 
 ## License
 
-Swarmify is licensed under the GNU Affero General Public License 3.0 (`AGPL-3.0-only`, see
-`LICENSE`, ADR 0022): use, change and self-host it freely, and if you run a modified Swarmify as a
+Kriflow is licensed under the GNU Affero General Public License 3.0 (`AGPL-3.0-only`, see
+`LICENSE`, ADR 0022): use, change and self-host it freely, and if you run a modified Kriflow as a
 network service, publish your changes under the same license.
 
-A Connector Package is a separate program that talks to Swarmify over MCP, so it is a separate
+A Connector Package is a separate program that talks to Kriflow over MCP, so it is a separate
 work under its own license. Connector authors choose that license themselves and may publish
 their packages under MIT or any other license.

@@ -60,7 +60,7 @@ class Notifications:
         if not webhook:
             raise LookupError("no Slack webhook is set for this world")
         gates = f"{self.base_url.rstrip('/')}/gates"
-        slack.post(webhook, f"Swarmify is connected. <{gates}|Open gates>")
+        slack.post(webhook, f"Kriflow is connected. <{gates}|Open gates>")
 
     def delete_world(self, world_id: str) -> None:
         self.storage.set_webhook(world_id, None)

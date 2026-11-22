@@ -19,5 +19,5 @@ def test_a_multi_pick_gate_offers_no_buttons_and_a_single_pick_keeps_them() -> N
     assert answers(gate(3), CARDS) == []
     assert [a["label"] for a in answers(gate(1), CARDS)] == ["Card 1", "Card 2", "Card 3"]
     several = {"outcome": "picked", "choice": "Card 2", "picked": ["Card 2", "Card 1"]}
-    assert said(several) == "Picked Card 2 and Card 1 in Swarmify."
-    assert said({"outcome": "picked", "choice": "Card 2"}) == "Picked Card 2 in Swarmify."
+    assert said(several) == "Picked Card 2 and Card 1 in Kriflow."
+    assert said({"outcome": "picked", "choice": "Card 2"}) == "Picked Card 2 in Kriflow."

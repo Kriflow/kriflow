@@ -5,6 +5,7 @@ import { useConfirm } from "./Dialog";
 import { type Device, disablePush, enablePush, type Here, snoozed, snoozePrompt, thisDevice } from "./push";
 import { usePwa } from "./pwa";
 import { Skeleton } from "./Skeleton";
+import { APP } from "./skin";
 
 type Kind = "gates" | "failures" | "budget" | "notices";
 const KINDS: { kind: Kind; label: string; about: string }[] = [
@@ -18,8 +19,8 @@ const STATE: Record<Exclude<Here["state"], "on">, string> = {
   off: "Off on this device.",
   blocked: "Blocked by the browser. Allow notifications for this site in the browser's site settings, then reload.",
   "ios-install":
-    "On iPhone and iPad, notifications work only in the installed app. In Safari, tap Share, then Add to Home Screen, and open Swarmify from there.",
-  unsupported: "This browser cannot get notifications from Swarmify. Open it over https in Chrome, Edge, Firefox or Safari.",
+    `On iPhone and iPad, notifications work only in the installed app. In Safari, tap Share, then Add to Home Screen, and open ${APP} from there.`,
+  unsupported: `This browser cannot get notifications from ${APP}. Open it over https in Chrome, Edge, Firefox or Safari.`,
 };
 
 const when = (iso: string | null) => (iso ? `last delivered ${new Date(iso).toLocaleDateString()}` : "nothing delivered yet");
@@ -216,7 +217,7 @@ export function PushPrompt({ hidden }: { hidden: boolean }) {
         <strong>Get a nudge when a run needs you next?</strong>
         <span className="sub">
           {state === "ios-install"
-            ? "On iPhone, first add Swarmify to the Home Screen: in Safari tap Share, then Add to Home Screen. Turn it on in the app's Settings."
+            ? `On iPhone, first add ${APP} to the Home Screen: in Safari tap Share, then Add to Home Screen. Turn it on in the app's Settings.`
             : "Only when a gate opens or something needs fixing. Change it any time in Settings."}
         </span>
       </p>

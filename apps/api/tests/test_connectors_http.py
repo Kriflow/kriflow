@@ -131,7 +131,7 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
         ("python_script", "1.0.0", "connectors/python_script"),
         ("remotion_build", "1.0.4", "connectors/remotion_build"),
         ("remotion_render", "1.0.9", "connectors/remotion_render"),
-        ("slack", "1.1.1", "connectors/slack"),
+        ("slack", "1.1.2", "connectors/slack"),
         ("speech", "1.3.1", "connectors/speech"),
         ("upload_post", "1.0.1", "connectors/upload_post"),
         ("youtube", "1.6.0", "connectors/youtube"),

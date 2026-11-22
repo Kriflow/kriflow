@@ -1177,7 +1177,7 @@ def create_app(
         await to_thread.run_sync(index.close)
         await to_thread.run_sync(runner.shutdown)
 
-    app = FastAPI(title="Swarmify", version=VERSION, lifespan=lifespan)
+    app = FastAPI(title="Kriflow", version=VERSION, lifespan=lifespan)
 
     @app.get("/api/health")
     def health() -> Health:

@@ -61,7 +61,7 @@ def said(resolution: dict[str, Any]) -> str:
     else:
         what = SAID.get(outcome, "Answered")
     by = resolution.get("by")
-    return f"{what} by {by}." if by else f"{what} in Swarmify."
+    return f"{what} by {by}." if by else f"{what} in Kriflow."
 
 
 def answers(gate: Gate, cards: list[ArtifactFile]) -> list[dict[str, Any]]:

@@ -60,7 +60,11 @@ export const worldHome = (world?: { skin?: { view: View } }) =>
 
 export type Skin = components["schemas"]["Skin"];
 
-/** The sprite pack shipped with Swarmify, which a world draws with until it picks its own. */
+/** The app's name wherever the page shows it. index.html, the manifest and sw.js repeat it;
+ * brand.test.tsx keeps them in step. */
+export const APP = "Kriflow";
+
+/** The sprite pack shipped with the app, which a world draws with until it picks its own. */
 export const BUNDLED_PACK = "kenney-toon";
 
 /** Save the world's skin, replaced whole, so a caller changing one part sends the rest as it is.
