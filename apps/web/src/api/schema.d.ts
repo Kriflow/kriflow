@@ -5245,6 +5245,8 @@ export interface components {
          * @description The settings to change; a field left out keeps its value.
          */
         WorldSettings: {
+            /** Name */
+            name?: string | null;
             /** Monthly Budget Usd */
             monthly_budget_usd?: number | null;
             /** Run Cap */

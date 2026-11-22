@@ -17,13 +17,15 @@ from swarmify_worlds.model import MODEL_ROLES, CastEdit, Skin, World
 from swarmify_worlds.packs import Casting
 
 MIGRATIONS = Path(__file__).parent / "migrations"
+MODELS = ("model", *(f"{role}_model" for role in MODEL_ROLES))
+"""The world's model and each role's."""
 SETTINGS = (
+    "name",
     "retention_days",
     "monthly_budget_usd",
     "run_cap",
     "agent_count",
-    "model",
-    *(f"{role}_model" for role in MODEL_ROLES),
+    *MODELS,
     "skin",
 )
 """The columns `update_settings` may write."""
@@ -39,7 +41,7 @@ def _world(row: sqlite3.Row) -> World:
         row["monthly_budget_usd"],
         row["run_cap"],
         row["agent_count"],
-        *(row[k] for k in SETTINGS[4:-1]),
+        *(row[k] for k in MODELS),
         skin=_skin(json.loads(row["skin"])) if row["skin"] else Skin(),
     )
 

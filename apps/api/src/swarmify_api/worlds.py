@@ -69,6 +69,11 @@ class SkinSetting(BaseModel):
 class WorldSettings(BaseModel):
     """The settings to change; a field left out keeps its value."""
 
+    name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+        | None
+    ) = None
+    """The world's new name. Its id, folder and links stay as they are."""
     monthly_budget_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     """The world's spend ceiling per calendar month; null removes it."""
     run_cap: int | None = Field(default=None, ge=1, le=MAX_RUN_CAP)

@@ -129,6 +129,20 @@ def test_settings_have_defaults_change_one_at_a_time_and_reach_the_run_queue(
     assert running.patch("/api/worlds/world_nope", json={"run_cap": 2}).status_code == 404
 
 
+def test_a_world_is_renamed_through_its_settings(running: TestClient, tmp_path: Path) -> None:
+    world = _world(running)
+    renamed = running.patch(f"/api/worlds/{world}", json={"name": "  Bowl Cut Science "})
+    assert renamed.status_code == 200 and renamed.json()["name"] == "Bowl Cut Science"
+    assert renamed.json()["id"] == world
+    assert running.get(f"/api/worlds/{world}").json()["name"] == "Bowl Cut Science"
+    assert "Bowl Cut Science" in [w["name"] for w in running.get("/api/worlds").json()]
+    (event,) = [e for e in world_service(tmp_path).events_after(world) if e.type == "world.updated"]
+    assert event.payload == {"id": world, "name": "Bowl Cut Science"}
+    for bad in ("", "   ", "x" * 121, None):
+        assert running.patch(f"/api/worlds/{world}", json={"name": bad}).status_code == 422
+    assert running.get(f"/api/worlds/{world}").json()["name"] == "Bowl Cut Science"
+
+
 def test_the_skin_view_is_read_and_written_through_the_settings(running: TestClient) -> None:
     world = running.post("/api/worlds", json={"name": "Video"}).json()
     plain = {"view": "plain", "pack": "kenney-toon", "cast": {}}
