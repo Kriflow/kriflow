@@ -306,6 +306,28 @@ export function RunTimeline() {
     if (refused) setError(refused);
   }
 
+  /** Archive (after a confirm) or restore a finished run and its child runs. You stay here. */
+  async function setArchived(archive: boolean) {
+    if (!run) return;
+    if (
+      archive &&
+      !(await confirm({
+        title: `Archive ${run.name}?`,
+        lines: ["It leaves the runs list and its figures, with any child runs.", "Its link still opens it here, and Restore brings it back."],
+        action: "Archive",
+      }))
+    )
+      return;
+    setError(null);
+    const call = archive ? "/api/runs/{run_id}/archive" : "/api/runs/{run_id}/restore";
+    const { data, error, response } = await api.POST(call, { params: { path: { run_id: run.id } } });
+    if (error || !data) {
+      const detail = (error as { detail?: unknown } | undefined)?.detail;
+      return setError(typeof detail === "string" ? detail : `Could not ${archive ? "archive" : "restore"} the run (${response.status}).`);
+    }
+    setRun((prev) => prev && { ...prev, archived_at: data.archived_at });
+  }
+
   /** A Fork: a new run that keeps every stage before `index` and runs this one anew. */
   async function fork(index: number) {
     if (!run) return;
@@ -450,6 +472,13 @@ export function RunTimeline() {
     items.push({ label: "Compare with one agent", note: "Shows what one agent with no graph spent on this; you stay here", onSelect: () => setComparing(!comparing) });
   }
   items.push({ label: "Copy run id", note: run.id, onSelect: () => void navigator.clipboard?.writeText(run.id) });
+  if (ended) {
+    items.push(
+      run.archived_at
+        ? { label: "Restore", note: "Puts it back in the runs list, with its child runs", onSelect: () => setArchived(false) }
+        : { label: "Archive run", note: "Hides it and its child runs from the runs list; its link still opens it", onSelect: () => setArchived(true) },
+    );
+  }
   if (!ended) {
     items.push({ label: "Abort run", note: "Stops every agent; finished steps keep their artifacts", danger: true, onSelect: () => act("abort") });
   }
@@ -541,6 +570,14 @@ export function RunTimeline() {
       )}
       {dialog}
       {error && <p role="alert">{error}</p>}
+      {run.archived_at && (
+        <p className="saved" role="status" data-testid="archived">
+          <span className="chip">archived</span> Left out of the runs list.{" "}
+          <button type="button" onClick={() => setArchived(false)}>
+            Restore
+          </button>
+        </p>
+      )}
       {saved && (
         <p className="saved" role="status" data-testid="saved">
           Saved as a workflow.{" "}
