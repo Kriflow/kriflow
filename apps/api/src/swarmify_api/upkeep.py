@@ -60,9 +60,10 @@ def record_outcomes(
     from several connectors add up; its Primary Metric is its own connector's when that one
     answered, else the first that did; whether everyone can see it (`visible`, with the
     platform's `visibility_label`) is what the first connector to say reported. Its `curves` are
-    stored as answered, never added up: a later connector's curve of the same name wins. A
-    connector that cannot answer (its Setup not done) is logged and skipped. What a connector
-    says it could not read goes in `notices` by connector name, logged once, gone once it can."""
+    stored as answered, never added up: a later connector's curve of the same name wins, and a
+    stored curve no connector drew this pass is kept. A connector that cannot answer (its Setup
+    not done) is logged and skipped. What a connector says it could not read goes in `notices`
+    by connector name, logged once, gone once it can."""
     changed = 0
     noticed: dict[str, str] = {}
     for world in worlds.list_all():
@@ -107,8 +108,10 @@ def record_outcomes(
                 if post not in primary or made_by[post] == connector.name:
                     primary[post] = connector.manifest["primary_metric"]
         for (path, fields), post in zip(records, posts, strict=True):
-            metrics, drawn = found.get(post["id"]), curves.get(post["id"])
-            if not metrics and not drawn:
+            stored = fields.get(CURVES) if isinstance(fields.get(CURVES), dict) else {}
+            drawn = {**stored, **curves.get(post["id"], {})} or None
+            metrics = found.get(post["id"])
+            if not metrics and not curves.get(post["id"]):
                 continue
             ranked_by, shown = primary[post["id"]], seen.get(post["id"], {})
             was = {k: fields[k] for k in (VISIBLE, VISIBILITY_LABEL) if k in fields}

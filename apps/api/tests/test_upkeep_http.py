@@ -135,6 +135,14 @@ def test_a_connector_reporting_clicks_shows_in_the_record_and_the_scorecard(
     until(lambda: json.loads(outcomes.read_text()).get("curves") == later)
     assert json.loads(outcomes.read_text())["outcomes"] == {"clicks": 12, "views": 300}
 
+    # numbers with no curve (an empty one, or a short outage): the stored curve is kept
+    transport.outputs["clicks.outcomes"] = [{"p1": {"clicks": 13, "views": 300, "curves": {}}}]
+    until(lambda: json.loads(outcomes.read_text())["outcomes"]["clicks"] == 13)
+    assert json.loads(outcomes.read_text())["curves"] == later
+    seen, written = len(transport.calls), outcomes.stat().st_mtime_ns
+    until(lambda: len(transport.calls) > seen + 2)
+    assert outcomes.stat().st_mtime_ns == written  # nothing changed, nothing written
+
 
 def test_retention_deletes_old_binaries_and_keeps_their_markdown(
     running: TestClient, tmp_path: Path
