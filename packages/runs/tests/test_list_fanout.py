@@ -117,10 +117,13 @@ def test_two_overlapping_runs_never_claim_the_same_entry(runner: Runner, lists: 
     library(runner, wf_reply=[WORK, CHECK])
     first = runner.start(WORLD, "wf_p", 1, "Inbox", [fan(take=2)])
     second = runner.start(WORLD, "wf_p", 1, "Inbox", [fan(take=2)])
-    wait_for(lambda: len(kids(runner, first.id)) + len(kids(runner, second.id)) == 3)
-    held = [lists.get(WORLD, "tickets", k).claimed_by or "" for k in ("t-a", "t-b", "t-c")]
-    owners = {c.id: p for p in (first.id, second.id) for c in kids(runner, p)}
-    assert sorted(held) == sorted(owners)  # every Entry with one child, none twice
+
+    def handed() -> bool:  # a child's row lands before its Entry is handed to it
+        held = [lists.get(WORLD, "tickets", k).claimed_by or "" for k in ("t-a", "t-b", "t-c")]
+        owners = {c.id: p for p in (first.id, second.id) for c in kids(runner, p)}
+        return len(owners) == 3 and sorted(held) == sorted(owners)
+
+    wait_for(handed)  # every Entry with one child, none twice
 
 
 def test_claims_are_atomic_under_threads(lists: WorldLists) -> None:

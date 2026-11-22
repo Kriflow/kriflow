@@ -17,6 +17,7 @@ command.
 
 import os
 import re
+import sys
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
@@ -62,9 +63,15 @@ def readable(build: Path, world_folder: Path) -> list[Path]:
     return ([assets] if assets.is_dir() else []) + others
 
 
-PNPM_LOCKS = Path(f"/tmp/pnpm-store-operation-locks-{os.getuid()}")
-"""Where pnpm locks its store while it writes to it, a fixed path no setting moves: writable in the
-session, and made before it, since bubblewrap cannot bind a folder that is not there."""
+_RUNTIME = os.environ.get("XDG_RUNTIME_DIR") if sys.platform == "linux" else None
+PNPM_LOCKS = (
+    Path(_RUNTIME) / "pnpm-store-operation-locks"
+    if _RUNTIME
+    else Path(f"/tmp/pnpm-store-operation-locks-{os.getuid()}")
+)
+"""Where pnpm locks its store while it writes to it, a path no setting moves (on Linux under
+XDG_RUNTIME_DIR when that is set): writable in the session, and made before it, since bubblewrap
+cannot bind a folder that is not there."""
 
 
 def pnpm_env(store: Path) -> dict[str, str]:
