@@ -17,6 +17,7 @@ import { PublishValue } from "./Connectors";
 import { SaveAsTemplate, StageOutput } from "./StageOutput";
 import { Whiteboard } from "./Whiteboard";
 import { StageLook } from "./RunHero";
+import { ActivityViews } from "./Transcript";
 import { cap } from "../skin";
 
 type Stage = Run["stages"][number];
@@ -819,7 +820,7 @@ export function StagePanel(p: PanelProps) {
   } else {
     // An agent stage: a swarm, a workflow or fan-out over child runs, the retro.
     const items = stage.items ?? [];
-    const activity =
+    const summary =
       stage.type === "swarm" ? (
         <>
           <AgentCards agents={p.agents} log={p.log} tasks={p.tasks} />
@@ -837,6 +838,8 @@ export function StagePanel(p: PanelProps) {
           {shownLog.length > 0 && <LiveLog log={shownLog} tasks={p.tasks} />}
         </>
       );
+    // A workflow or fan-out with no agent of its own has nothing to transcribe.
+    const activity = stage.type === "swarm" || stage.type === "retro" || shownLog.length > 0 ? <ActivityViews summary={summary} log={shownLog} /> : summary;
     const spent = p.agents.reduce((sum, a) => sum + a.cost_usd, 0);
     tabs = [
       { id: "activity", label: "Activity", body: activity },

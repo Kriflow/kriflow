@@ -43,7 +43,7 @@ class Refused(ValueError):
 
 AgentRole = Literal["planner", "worker", "judge"]
 AgentStatus = Literal["working", "done", "failed"]
-LogKind = Literal["session", "tool", "denied", "result", "error"]
+LogKind = Literal["session", "tool", "denied", "result", "error", "text", "output"]
 
 
 @dataclass(frozen=True)
@@ -70,8 +70,11 @@ class Agent:
 
 @dataclass(frozen=True)
 class LogEntry:
-    """One line of a stage's live log: a session starting or ending, or one tool call the hooks
-    saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`)."""
+    """One line of a stage's live log: a session starting or ending, one tool call the hooks
+    saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`), what the agent
+    said (`text`), or an allowed call's result (`output`: a capped excerpt in `detail`, its
+    full size and error flag in `input`). `ref` is the tool use id pairing a call with its
+    output."""
 
     seq: int
     agent: str
@@ -81,6 +84,7 @@ class LogEntry:
     tool: str | None = None
     input: dict[str, Any] | None = None
     detail: str = ""
+    ref: str | None = None
 
 
 @dataclass(frozen=True)

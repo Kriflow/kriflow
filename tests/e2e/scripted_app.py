@@ -57,6 +57,7 @@ ffmpeg -i take.mp4 -vf scale=1080:1920,setsar=1 -c:v libx264 -preset slow -crf 1
 """The worker's ideas.md: a wide code block and a wide table for the phone reader, then the list."""
 PLANNER = [Answer({"tasks": [{"title": "Pull this week's top shorts"}]})]
 WORKER = [
+    Say("I'll check what the world already knows, then claim the task."),
     Call(tool_id("query_graph"), {"question": "What do we know already?"}),
     Call(tool_id("claim_task")),
     Call("Bash", {"command": "ls"}),

@@ -64,7 +64,11 @@ class _NoTools:
 
     def started(self, init: SessionInit) -> None: ...
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
+    def said(self, text: str) -> None: ...
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None: ...
+
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
         return "The judge decides from the prompt alone."
 
     def cost(self, usd: float) -> str | None:

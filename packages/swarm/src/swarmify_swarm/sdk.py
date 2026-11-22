@@ -18,6 +18,9 @@ from claude_agent_sdk import (
     HookMatcher,
     ResultMessage,
     SystemMessage,
+    TextBlock,
+    ToolResultBlock,
+    UserMessage,
     create_sdk_mcp_server,
     tool,
 )
@@ -116,16 +119,26 @@ def _sdk_tool(spec: AgentTool) -> Any:
     return tool(spec.name, spec.description, spec.schema)(handler)
 
 
+def result_text(content: str | list[dict[str, Any]] | None) -> str:
+    """A tool result's text; an image or other non-text part shows as its type in brackets."""
+    if not isinstance(content, list):
+        return content or ""
+    return "\n".join(
+        str(c.get("text", "")) if c.get("type") == "text" else f"[{c.get('type')}]" for c in content
+    )
+
+
 def options(
     spec: SessionSpec,
     hooks: SessionHooks,
     model: str | None = None,
     sandboxed_cli: str | None = None,
 ) -> ClaudeAgentOptions:
-    async def pre_tool(data: Any, _tool_use_id: str | None, _context: Any) -> Any:
+    async def pre_tool(data: Any, tool_use_id: str | None, _context: Any) -> Any:
         if data["tool_name"] in HARNESS:
             return {}
-        reason = hooks.before_tool(data["tool_name"], data.get("tool_input") or {})
+        ref = tool_use_id or data.get("tool_use_id")
+        reason = hooks.before_tool(data["tool_name"], data.get("tool_input") or {}, ref)
         if reason is None:
             return {}
         return {
@@ -194,6 +207,16 @@ class SdkRuntime:
         async with ClaudeSDKClient(opts, transport=custom) as client:
             await client.query(spec.prompt)
             async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage | UserMessage) and isinstance(
+                    msg.content, list
+                ):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock) and block.text.strip():
+                            hooks.said(block.text)
+                        elif isinstance(block, ToolResultBlock):
+                            hooks.tool_result(
+                                block.tool_use_id, result_text(block.content), bool(block.is_error)
+                            )
                 if isinstance(msg, AssistantMessage):
                     # One model step arrives as one message per content block, each carrying the
                     # step's usage, so a step is charged once, by its message id.

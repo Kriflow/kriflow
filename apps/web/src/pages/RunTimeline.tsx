@@ -21,7 +21,7 @@ import { cap } from "../skin";
 import { usePhone } from "../usePhone";
 import { ChangeCard, type ChangeKind, changeLabel, hhmm, who } from "./ChangeCard";
 import { changed, changedStage, StepChangeCard, type StepKind } from "./StepChangeCard";
-import { describe } from "./AgentLog";
+import { describe, summaryOf } from "./AgentLog";
 import { FileLink } from "./Artifacts";
 import { type Answer, GateCard } from "./Gates";
 import { RunAssistant } from "./RunAssistant";
@@ -380,7 +380,7 @@ export function RunTimeline() {
   const done = !open && answered && answered.stageId === stageId ? answered : null;
   const isResult = !open && !done && !!stage && resultStage(run, artifacts)?.id === stage.id;
   // The latest thing the live step's agents did, under the rail while you watch that step.
-  const lastLine = run.status === "running" && live && live.id === stageId ? log.at(-1) : undefined;
+  const lastLine = run.status === "running" && live && live.id === stageId ? summaryOf(log).at(-1) : undefined;
   const items: MenuItem[] = [];
   if (!ended) {
     items.push(

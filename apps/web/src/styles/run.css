@@ -303,3 +303,40 @@ a.made-file:hover { background: var(--raised); }
 .edited { color: var(--accent); }
 .changes { margin: 0; padding-left: 20px; font-size: 0.8125rem; }
 .run-grid.asking { grid-template-columns: minmax(0, 1fr) minmax(320px, 440px) 264px; }
+
+/* An agent stage's Activity: Summary or Transcript, a transcript like Claude Code's */
+.seg { display: inline-flex; justify-self: start; padding: 2px; border: 1px solid var(--rule); border-radius: 99px; background: var(--well); }
+.seg button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 99px; background: none; color: var(--faint); font-weight: 550; }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.activity-view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.activity-view[hidden] { display: none; }
+.transcript { display: grid; gap: 10px; min-width: 0; }
+.tx-who { display: flex; align-items: center; gap: 8px; color: var(--faint); font-size: 0.8125rem; }
+.tx-who select { min-height: 44px; }
+.tx { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.tx > li { min-width: 0; }
+.say { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; }
+.say .face { margin: 0; width: 24px; height: 24px; }
+.say .who { font-size: 0.75rem; color: var(--faint); margin-bottom: 2px; }
+.say .who b { color: var(--text); font-weight: 600; margin-right: 6px; }
+.say .txt { line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tx-note { margin: 0 0 0 34px; color: var(--faint); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.tx-note.warn { color: var(--warn-ink, var(--warning)); }
+.toolrow { margin-left: 34px; border: 1px solid var(--rule); border-radius: 8px; background: var(--well); min-width: 0; }
+.toolrow.failed { border-color: color-mix(in srgb, var(--warning) 40%, var(--rule)); }
+.toolrow summary { list-style: none; display: flex; gap: 8px; align-items: center; min-height: 44px; margin: 0; padding: 0 10px; cursor: pointer; font-size: 0.75rem; color: var(--muted); min-width: 0; }
+.toolrow summary::-webkit-details-marker { display: none; }
+.toolrow summary::before { flex: none; margin: 0; color: var(--faint); }
+.toolrow summary code { flex: none; font-family: var(--mono); color: var(--text); }
+.toolrow summary .arg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+.toolrow summary .ms { flex: none; margin-left: auto; color: var(--faint); font-family: var(--mono); font-size: 0.6875rem; white-space: nowrap; }
+.toolrow pre { margin: 0; border: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: 8px 12px; background: none; font: 0.72rem/1.6 var(--mono); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow-y: auto; }
+/* The same colours as a chat change card's diff */
+.toolrow .diff { display: block; border-top: 1px solid var(--rule); padding: 6px 0; font: 400 0.75rem/18px var(--mono); }
+.toolrow .diff > div { padding: 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.toolrow .diff .add { background: rgb(46 194 126 / 0.1); color: #c9f0dc; }
+.toolrow .diff .del { background: rgb(229 86 111 / 0.09); color: #d9a1ab; }
+@media (max-width: 48rem) {
+  .toolrow, .tx-note { margin-left: 0; }
+  .seg button { min-height: 44px; }
+}

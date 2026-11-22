@@ -3152,8 +3152,11 @@ export interface components {
         };
         /**
          * LogEntry
-         * @description One line of a stage's live log: a session starting or ending, or one tool call the hooks
-         *     saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`).
+         * @description One line of a stage's live log: a session starting or ending, one tool call the hooks
+         *     saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`), what the agent
+         *     said (`text`), or an allowed call's result (`output`: a capped excerpt in `detail`, its
+         *     full size and error flag in `input`). `ref` is the tool use id pairing a call with its
+         *     output.
          */
         LogEntry: {
             /** Seq */
@@ -3166,7 +3169,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "session" | "tool" | "denied" | "result" | "error";
+            kind: "session" | "tool" | "denied" | "result" | "error" | "text" | "output";
             /** Ts */
             ts: string;
             /** Tool */
@@ -3180,6 +3183,8 @@ export interface components {
              * @default
              */
             detail: string;
+            /** Ref */
+            ref?: string | null;
         };
         /**
          * LookSetting

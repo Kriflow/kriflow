@@ -127,6 +127,7 @@ class Storage(Protocol):
         detail: str = "",
         tool: str | None = None,
         input: dict[str, Any] | None = None,
+        ref: str | None = None,
     ) -> LogEntry:
         """Append one line to the stage's live log for `agent`, which must exist."""
         ...
@@ -218,8 +219,17 @@ class SessionHooks(Protocol):
 
     def started(self, init: SessionInit) -> None: ...
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
-        """Every tool call, before it runs. A returned reason denies the call."""
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
+        """Every tool call, before it runs. A returned reason denies the call. `ref` is the
+        call's tool use id, which its `tool_result` names."""
+        ...
+
+    def said(self, text: str) -> None:
+        """A text block the agent wrote."""
+        ...
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None:
+        """What a call answered: the text of its result, images left out."""
         ...
 
     def cost(self, usd: float) -> str | None:

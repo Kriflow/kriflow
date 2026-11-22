@@ -91,6 +91,14 @@ def test_a_worker_works_the_stage_and_leaves_notes_artifacts_and_a_log(
     assert [e["tool"] for e in log if e["kind"] == "denied"] == ["Bash"]
     assert log[0]["kind"] == "session" and f"{world}:hooks" in log[0]["detail"]
     assert log[-1]["kind"] == "result" and "$0.0420" in log[-1]["detail"]
+    # The transcript (issue 533): the agent's words and each allowed call's result, by its ref.
+    assert [e["detail"] for e in log if e["kind"] == "text" and e["agent"] == "worker-1"] == [
+        "Five ideas."
+    ]
+    calls = {e["ref"]: e["tool"] for e in log if e["kind"] == "tool"}
+    outputs = [e for e in log if e["kind"] == "output"]
+    assert [calls[o["ref"]] for o in outputs][:2] == [tool_id("query_graph"), tool_id("claim_task")]
+    assert all(o["input"]["chars"] >= len(o["detail"]) for o in outputs)
 
     planner, agent, judge = running.get(f"/api/runs/{run['id']}/agents").json()
     assert (planner["role"], judge["role"]) == ("planner", "judge")

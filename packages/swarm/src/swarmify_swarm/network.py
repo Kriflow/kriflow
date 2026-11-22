@@ -198,8 +198,14 @@ class _Seen:
         self.session_id = init.session_id
         self.hooks.started(init)
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
-        return self.hooks.before_tool(tool, input)
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
+        return self.hooks.before_tool(tool, input, ref)
+
+    def said(self, text: str) -> None:
+        self.hooks.said(text)
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None:
+        self.hooks.tool_result(ref, text, is_error)
 
     def cost(self, usd: float) -> str | None:
         return self.hooks.cost(usd)

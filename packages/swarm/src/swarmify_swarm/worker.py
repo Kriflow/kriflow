@@ -1202,6 +1202,10 @@ class Swarm:
         ]
 
 
+EXCERPT = 2000
+"""The most of a tool result the log keeps, in characters."""
+
+
 class _Hooks:
     """The SessionHooks of one agent: the live log, the allowlist, the graph-first rule and the
     renewal of its claims on every tool call and model step, so a working agent keeps them
@@ -1230,6 +1234,8 @@ class _Hooks:
         self.budget = budget
         self.graph_first = graph_first
         self.stopped: str | None = None
+        self.calls: dict[str, str] = {}
+        """The tool of each allowed call by its tool use id, for pairing its result."""
 
     def started(self, init: SessionInit) -> None:
         self.board.update_agent(
@@ -1254,12 +1260,35 @@ class _Hooks:
                 self.stage_id, self.agent, "error", f"Tool server {server} failed to start: {said}"
             )
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
         self.renew()
         reason = self._refusal(tool, input)
         kind = "denied" if reason else "tool"
-        self.board.log(self.stage_id, self.agent, kind, reason or "", tool=tool, input=input)
+        self.board.log(
+            self.stage_id, self.agent, kind, reason or "", tool=tool, input=input, ref=ref
+        )
+        if ref and not reason:
+            self.calls[ref] = tool
         return reason
+
+    def said(self, text: str) -> None:
+        self.board.log(self.stage_id, self.agent, "text", text)
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None:
+        """Log an allowed call's result as a capped excerpt; a refused or harness call's result
+        is left out, its refusal already logged or nothing to show."""
+        tool = self.calls.pop(ref, None)
+        if tool is None:
+            return
+        self.board.log(
+            self.stage_id,
+            self.agent,
+            "output",
+            text[:EXCERPT],
+            tool=tool,
+            input={"chars": len(text), "error": is_error},
+            ref=ref,
+        )
 
     def cost(self, usd: float) -> str | None:
         """Add the estimate to the agent, then ask the Budget whether the session goes on."""

@@ -141,7 +141,7 @@ const stageName = (stageId: string, runs: Run[]) => runs.flatMap((r) => r.stages
 /** A log line as a speech bubble: its first line, cut short; nothing for session bookkeeping. */
 export function bubble(entry: LogEntry): string | null {
   const line = entry.detail.split("\n")[0]?.trim() ?? "";
-  if (entry.kind === "session" || !line) return null;
+  if (entry.kind === "session" || entry.kind === "output" || !line) return null;
   return line.length > 48 ? `${line.slice(0, 47)}\u2026` : line;
 }
 

@@ -300,6 +300,7 @@ class SqliteStorage:
         detail: str = "",
         tool: str | None = None,
         input: dict[str, Any] | None = None,
+        ref: str | None = None,
     ) -> LogEntry:
         with self._write() as conn:
             row = conn.execute(
@@ -310,8 +311,9 @@ class SqliteStorage:
                 raise KeyError(agent)
             ts = _iso(None)
             seq = conn.execute(
-                "INSERT INTO agent_log (agent_id, stage_id, agent, kind, tool, input, detail, ts)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO agent_log"
+                " (agent_id, stage_id, agent, kind, tool, input, detail, ts, ref)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row["id"],
                     stage_id,
@@ -321,10 +323,11 @@ class SqliteStorage:
                     None if input is None else json.dumps(input),
                     detail,
                     ts,
+                    ref,
                 ),
             ).lastrowid
             assert seq is not None
-            entry = LogEntry(seq, agent, stage_id, kind, ts, tool, input, detail)
+            entry = LogEntry(seq, agent, stage_id, kind, ts, tool, input, detail, ref)
             event = Event.new(
                 "agent.logged",
                 world_id=row["world_id"],
@@ -349,6 +352,7 @@ class SqliteStorage:
                 r["tool"],
                 None if r["input"] is None else json.loads(r["input"]),
                 r["detail"],
+                r["ref"],
             )
             for r in rows
         ]

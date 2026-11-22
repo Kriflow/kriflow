@@ -1008,3 +1008,57 @@ def test_a_given_item_is_named_first_in_the_prompt() -> None:
     assert _prior(["s1/artifacts/a.md"]) == "Artifacts of earlier stages: s1/artifacts/a.md."
     said = _prior(["given/item.json", "s1/artifacts/a.md"])
     assert said.endswith("This run was given given/item.json to work on: read it first.")
+
+
+def test_the_log_keeps_a_transcript_of_words_and_tool_results(
+    board: SqliteStorage, tmp_path: Path
+) -> None:
+    """Issue 533: the agent's words, and each allowed call's result, capped, paired to its call
+    by the tool use id. A refused call keeps only its refusal."""
+    _seed(board)
+    long = "x" * 5000
+    script = Script(
+        [
+            Say("I'll check the graph first."),
+            GRAPH,
+            Call("Bash", {"command": "ls"}),
+            CLAIM,
+            Call(tool_id("write_note"), {"title": "Long", "body": long}),
+            FINISH,
+            Say("Done."),
+        ],
+        PASS,
+    )
+    _run(_swarm(board, tmp_path, script), tmp_path)
+
+    log = [e for e in board.list_log(S) if e.agent == WORKER]
+    assert [e.detail for e in log if e.kind == "text"] == ["I'll check the graph first.", "Done."]
+    calls = {e.ref: e for e in log if e.kind == "tool"}
+    outputs = [e for e in log if e.kind == "output"]
+    assert all(e.ref for e in calls.values())
+    assert [calls[o.ref].tool for o in outputs if o.ref] == [
+        tool_id("query_graph"),
+        tool_id("claim_task"),
+        tool_id("write_note"),
+        tool_id("finish_task"),
+    ]
+    graph = outputs[0]
+    assert graph.tool == tool_id("query_graph") and graph.input == {
+        "chars": len(graph.detail),
+        "error": False,
+    }
+    (denied,) = [e for e in log if e.kind == "denied"]
+    assert denied.ref and denied.ref not in {o.ref for o in outputs}
+    assert all(len(o.detail) <= 2000 for o in outputs)
+
+
+def test_a_tool_result_is_kept_as_a_capped_excerpt(board: SqliteStorage, tmp_path: Path) -> None:
+    from swarmify_swarm.worker import EXCERPT, _Hooks
+
+    board.agent(W, R, S, WORKER, "worker")
+    hooks = _Hooks(board, S, WORKER, ["Read*"], _world(tmp_path))
+    hooks.before_tool("Read", {"file_path": str(_world(tmp_path) / "a.md")}, "toolu_1")
+    hooks.tool_result("toolu_1", "y" * (EXCERPT + 10), False)
+    hooks.tool_result("toolu_2", "an unknown call", False)
+    (out,) = [e for e in board.list_log(S) if e.kind == "output"]
+    assert out.detail == "y" * EXCERPT and out.input == {"chars": EXCERPT + 10, "error": False}
