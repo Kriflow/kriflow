@@ -82,6 +82,7 @@ from swarmify_runs.machine import (
     transition,
 )
 from swarmify_runs.model import (
+    POSTED,
     RERUNS,
     Item,
     ItemView,
@@ -105,9 +106,10 @@ guards a run against workflows edited after it pinned its version."""
 # workflows of the current application version). Bump it when the workflow's step order changes.
 APP_VERSION = "6"
 
-Connector = Callable[[Run, str, StageDef], None]
+Connector = Callable[[Run, str, StageDef], str | None]
 """Calls one connector stage. Arguments: the run, the stage id (the idempotency key) and the
-stage's definition."""
+stage's definition. Answers the question of a "Did this post go out?" gate when its publish
+could not tell whether it posted: the stage then waits at a gate of kind `posted`."""
 Swarm = Callable[[Run, str, StageDef], None]
 """Runs one swarm stage to its end, with the same arguments. Raises to fail the stage, or
 OverBudget when the run's Budget stopped its agents."""
@@ -555,9 +557,13 @@ def _starts(kinds: list[str], commands: list[Any]) -> bool:
 
 
 def _run_stage(run_id: str, index: int) -> tuple[str, str | None]:
-    """Execute the stage at `index`: its outcome (an OUTCOMES_OF key) and error."""
+    """Execute the stage at `index`: its outcome (an OUTCOMES_OF key) and error, or for a gate
+    the stage raised, the question a connector stage asks (a `posted` gate's)."""
     try:
-        return ("raised" if _execute(run_id, index) else "finished"), None
+        raised = _execute(run_id, index)
+        if raised is False:
+            return "finished", None
+        return "raised", raised if isinstance(raised, str) else None
     except _Halted:
         return "stopped", None
     except OverBudget:
@@ -1102,6 +1108,8 @@ def _save(run_id: str, state: RunState, error: str | None, gate_opened: bool) ->
         _, stage = runner.storage.stage_def(run_id, index)
         shown = runner.preview_after(run, index)
         kind, ask = stage.config.get("kind") or "approve", stage.config.get("ask") or ""
+        if stage.type == "connector":  # its publish could not tell whether it posted
+            kind, ask = POSTED, error or ""
         if stage.type == "workflow":  # a fan-out stage whose Items settled: failed or to review
             views = [v for _, v in runner.storage.items(run_id, index)]
             kind, ask = items_gate(stage.config, views)
@@ -1210,8 +1218,9 @@ def gate_closed(before: Run, after: Run) -> Event | None:
 
 
 @DBOS.step(name="swarmify.execute")
-def _execute(run_id: str, index: int) -> bool:
-    """True when the stage raised a gate of its own instead of finishing (a retro's proposal)."""
+def _execute(run_id: str, index: int) -> bool | str:
+    """True when the stage raised a gate of its own instead of finishing (a retro's proposal),
+    or the question it asks there (a connector stage's `posted` gate)."""
     runner = _current()
     stage_id, stage = runner.storage.stage_def(run_id, index)
     calls: dict[str, Callable[[Run, str, StageDef], Any] | None] = {
@@ -1233,7 +1242,8 @@ def _execute(run_id: str, index: int) -> bool:
             " gate, or after publish stages that do (ADR 0007)"
         )
     try:
-        return bool(call(run, stage_id, stage))
+        raised = call(run, stage_id, stage)
+        return raised if isinstance(raised, str) else bool(raised)
     except OverBudget:
         if runner.storage.stop_of(run_id):  # read in the step, so a replay sees the same answer
             raise _Halted() from None

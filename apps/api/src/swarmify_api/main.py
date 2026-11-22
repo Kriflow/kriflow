@@ -72,6 +72,7 @@ from swarmify_connectors import (
     JobCancelled,
     McpTransport,
     Packages,
+    Unsure,
     build_session,
     publish,
     resources,
@@ -826,7 +827,10 @@ def create_app(
             raise ConnectorError(problem)
         shown = registry.publish_preview(run.world_id, config, metadata, confirmed, recorded)
         assert shown is not None  # is_publish above
-        if shown["problems"]:
+        made = registry.call_for(stage_id)  # a call finished: what it posted is recorded as is
+        if shown["problems"] and not (
+            made and made.status == "done" and made.visit == run.send_backs
+        ):
             raise ConnectorError("; ".join(shown["problems"]))
         # What was confirmed goes out as is (a resolved schedule stays fixed); the fresh preview
         # only fills in a decision recorded before a field existed.
@@ -842,6 +846,15 @@ def create_app(
             ]
         call = registry.run_stage(run.world_id, run.id, stage_id, config, run.send_backs, recorded)
         out = registry.publish_result(call)
+        if out["already_posted"] or out["recorded_by"]:
+            said = (
+                "A person found the post and gave its links, so nothing was posted again."
+                if out["recorded_by"]
+                else "Found the post an earlier try made, so nothing new was posted."
+            )
+            whiteboard.agent(run.world_id, run.id, stage_id, call.connector, "worker")
+            whiteboard.log(stage_id, call.connector, "result", said)
+            whiteboard.update_agent(stage_id, call.connector, status="done")
         private_when = (called.manifest or {}).get("private_when", {}) if called else {}
         memory.write_artifact(
             run.world_id,
@@ -863,6 +876,7 @@ def create_app(
                 # (every param its connector's `private_when` names), not a connector default
                 **{k: out[k] for k in ("public", "scheduled_for") if out[k] is not None},
                 "visibility_said": all(k in config["params"] for k in private_when),
+                **{k: out[k] for k in ("already_posted", "recorded_by") if out[k]},
             },
         )
         if out["links"] and out["public"] is not False:  # a private draft is not published
@@ -871,9 +885,11 @@ def create_app(
             except Exception:
                 log.warning("run %s posted, but its Entries did not move", run.id, exc_info=True)
 
-    def connector_stage(run: Run, stage_id: str, stage: StageDef) -> None:
+    def connector_stage(run: Run, stage_id: str, stage: StageDef) -> str | None:
         try:
             call_connector(run, stage_id, stage)
+        except Unsure as exc:  # it waits at the "Did this post go out?" gate with this question
+            return str(exc)
         except JobCancelled as exc:  # stopped as agents are, so the run ends aborted, not failed
             raise OverBudget(str(exc)) from exc
 
@@ -1197,6 +1213,7 @@ def create_app(
             swarm.waiting,
             lambda: resources.waits(registry.packages.sandbox.resources),
             send_message,
+            registry.answer_unsure,
         )  # fmt: skip
     )
 

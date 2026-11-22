@@ -30,6 +30,7 @@ from swarmify_runs.machine import (
     StageStatus,
 )
 from swarmify_runs.model import (
+    POSTED_CHOICES,
     AppliedChange,
     ChangeProposal,
     Decision,
@@ -64,6 +65,7 @@ from swarmify_runs.runner import (
 from swarmify_runs.sqlite import MIGRATIONS, SqliteStorage
 
 __all__ = [
+    "POSTED_CHOICES",
     "DEFAULT_CAP",
     "MAX_SEND_BACKS",
     "MIGRATIONS",

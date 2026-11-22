@@ -4,6 +4,7 @@
 /* A long path or traceback wraps inside the card instead of widening it (and the page on a phone). */
 .gate > *, .gate-form > * { min-width: 0; }
 /* The context line: world, run, stage, how long it has waited; the question under it is the headline. */
+.gate-title { margin: 0; font-size: 1rem; }
 .gate-ctx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; margin: 0; color: var(--faint); font-size: 0.75rem; }
 .gate-ctx > :not(:last-child)::after { content: "·"; margin: 0 6px; color: var(--faint); }
 .gate-ctx a { color: var(--muted); font-weight: 600; text-decoration: none; }

@@ -632,7 +632,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Decide */
+        /**
+         * Decide
+         * @description Answer the gate the run waits at. At a "Did this post go out?" gate, `choice` is
+         *     `posted` with `links` (422 without one) or `post`; the publish call learns it first.
+         */
         post: operations["decide_api_runs__run_id__decision_post"];
         delete?: never;
         options?: never;
@@ -3081,6 +3085,8 @@ export interface components {
             seen?: {
                 [key: string]: unknown;
             } | null;
+            /** Links */
+            links?: string[] | null;
         };
         /**
          * DecideProposal

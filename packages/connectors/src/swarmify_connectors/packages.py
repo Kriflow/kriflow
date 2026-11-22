@@ -59,6 +59,7 @@ CAPABILITIES = (
     "remote_approvals",
     "run_assistant",
     "templates",
+    "safe_resume",
 )
 FIELD_TYPES = ("string", "text", "number", "integer", "boolean", "choice", "url", "path", "oauth")
 _PYTHON = {"string": str, "text": str, "url": str, "path": str, "choice": str}
@@ -469,6 +470,8 @@ def check_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
                 bad("private_when", f"{key} is not one of its params")
     if "primary_metric" in manifest and "outcomes" not in manifest.get("capabilities", []):
         bad("primary_metric", "names an outcome, so the package offers the outcomes capability")
+    if "safe_resume" in manifest.get("capabilities", []) and manifest["kind"] != "publish":
+        bad("capabilities", "safe_resume is a publish connector's, so its kind is publish")
     if "outcomes" in manifest.get("capabilities", []):
         if manifest["kind"] != "publish":
             bad("capabilities", "outcomes are a publish connector's, so its kind is publish")

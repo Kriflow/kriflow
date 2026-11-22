@@ -5,13 +5,22 @@ package's publish connector answering over its own tools. Real SQLite, the recor
 transport. YouTube's and Upload-Post's own previews are tested in their packages."""
 
 import shutil
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from swarmify_connectors import Call, ConnectorError, Connectors, FakeTransport, Packages, publish
+from swarmify_connectors import (
+    Call,
+    ConnectorError,
+    Connectors,
+    FakeTransport,
+    Packages,
+    Unsure,
+    publish,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -48,44 +57,105 @@ def test_a_publish_stage_no_gate_confirmed_never_calls(
     assert transport.calls == []
 
 
-def test_an_interrupted_publish_call_is_never_repeated(
-    connectors: Connectors, transport: FakeTransport
-) -> None:
-    poster(connectors)
+def interrupted(connectors: Connectors, name: str = "webhook", **kw: Any) -> None:
+    """A publish call of stage_1 the api was cut off in: left running in the call ledger."""
     now = NOW.isoformat()
+    request = {"idempotency_key": "stage_1"}
     connectors.storage.save_call(
-        Call("stage_1", W, "run_1", "webhook", "publish", {}, "running", now, now, attempts=1)
+        Call("stage_1", W, "run_1", name, "publish", request, "running", now, now, attempts=1, **kw)
     )
-    with pytest.raises(ConnectorError, match="interrupted and may have posted"):
-        connectors.run_stage(W, "run_1", "stage_1", stage())
-    assert transport.calls == []
 
 
-def test_an_interrupted_publish_is_never_repeated_within_its_visit(
-    connectors: Connectors, transport: FakeTransport
-) -> None:
-    poster(connectors)
-    now = NOW.isoformat()
-    connectors.storage.save_call(
-        Call(
-            "stage_1",
-            W,
-            "run_1",
-            "webhook",
-            "publish",
-            {},
-            "running",
-            now,
-            now,
-            attempts=1,
-            visit=1,
+def resumer(connectors: Connectors, tmp_path: Path) -> None:
+    """A publish package that declares its publish resumes safely (`safe_resume`)."""
+    repo = tmp_path / "repo"
+    shutil.copytree(FIXTURES / "packages/clicks", repo / "connectors/clicks")
+    manifest = repo / "connectors/clicks/swarmify-connector.toml"
+    manifest.write_text(
+        manifest.read_text().replace(
+            '"publish", "outcomes"', '"publish", "outcomes", "safe_resume"'
         )
     )
-    with pytest.raises(ConnectorError, match="interrupted and may have posted"):
-        connectors.run_stage(W, "run_1", "stage_1", stage(), visit=1)
+    connectors.packages = Packages(connectors.packages.root, repo)
+    connectors.install_defaults()
+    connectors.enable(W, "clicks", "1.0.0")
+    connectors.save_setup(W, "clicks", {"token": "t"}, {})
+
+
+def clicks_stage() -> dict[str, Any]:
+    return {**stage(), "calls": "clicks", "confirmed": {"platforms": ["short", "long"]}}
+
+
+def test_an_interrupted_publish_of_a_package_that_cannot_resume_asks_instead(
+    connectors: Connectors, transport: FakeTransport
+) -> None:
+    poster(connectors)
+    for status in ("running", "failed"):  # cut off mid-call, or its error reached the ledger
+        interrupted(connectors)
+        connectors.storage.save_call(replace(connectors.call_for("stage_1"), status=status))  # type: ignore[arg-type]
+        with pytest.raises(Unsure) as asked:
+            connectors.run_stage(W, "run_1", "stage_1", stage())
+        assert str(asked.value) == (
+            "webhook was cut off while posting and could not check whether it posted: it does"
+            " not say whether it can resume safely. Look for it on webhook, then answer."
+        )
     assert transport.calls == []
     connectors.run_stage(W, "run_1", "stage_1", stage(), visit=2)  # a send-back reruns it
     assert transport.calls[0][2]["idempotency_key"] == "stage_1.2"
+
+
+def test_a_package_that_resumes_safely_is_called_again_with_the_same_key(
+    connectors: Connectors, transport: FakeTransport, tmp_path: Path
+) -> None:
+    resumer(connectors, tmp_path)
+    interrupted(connectors, "clicks")
+    transport.outputs["publish"] = [{"url": "https://sho.rt/p1", "already_posted": True}]
+    call = connectors.run_stage(W, "run_1", "stage_1", clicks_stage())
+    ((_, tool, args, _),) = transport.calls
+    assert (tool, args["idempotency_key"], call.attempts) == ("publish", "stage_1", 2)
+    out = connectors.publish_result(call)
+    assert (out["links"], out["already_posted"]) == ({"clicks": "https://sho.rt/p1"}, True)
+
+
+def test_an_unsure_answer_asks_and_is_never_retried_by_itself(
+    connectors: Connectors, transport: FakeTransport, tmp_path: Path
+) -> None:
+    resumer(connectors, tmp_path)
+    transport.outputs["publish"] = [ConnectorError("unsure: the upload session did not answer")]
+    ask = (
+        "Clicks was cut off while posting and could not check whether it posted: the upload"
+        " session did not answer. Look for it on Short and Long, then answer."
+    )
+    for _ in range(2):  # the second, a replay of the stage, asks without calling
+        with pytest.raises(Unsure) as asked:
+            connectors.run_stage(W, "run_1", "stage_1", clicks_stage())
+        assert str(asked.value) == ask
+    assert len(transport.calls) == 1
+
+
+def test_the_answers_at_the_gate_record_the_links_or_post_under_a_new_key(
+    connectors: Connectors, transport: FakeTransport
+) -> None:
+    poster(connectors)
+    interrupted(connectors)
+    connectors.answer_unsure("stage_1", None)  # Post it now
+    transport.outputs["publish"] = [ConnectorError("unsure: no answer")]
+    with pytest.raises(Unsure):
+        connectors.run_stage(W, "run_1", "stage_1", stage())
+    connectors.answer_unsure("stage_1", None)  # each time under a key of its own
+    transport.outputs["publish"] = [{"url": "https://hooks.example/m1"}]
+    connectors.run_stage(W, "run_1", "stage_1", stage())
+    keys = [c[2]["idempotency_key"] for c in transport.calls]
+    assert len(set(keys)) == 2 and "stage_1" not in keys
+
+    interrupted(connectors)
+    connectors.answer_unsure("stage_1", {"hooks": "https://hooks.example/m1"})  # It posted
+    call = connectors.run_stage(W, "run_1", "stage_1", stage())
+    assert len(transport.calls) == 2  # recorded, never posted
+    out = connectors.publish_result(call)
+    assert (out["links"], out["recorded_by"]) == ({"hooks": "https://hooks.example/m1"}, "person")
+    with pytest.raises(KeyError):
+        connectors.answer_unsure("stage_9", None)
 
 
 def test_publish_previews_only_for_publish_connectors(
@@ -224,6 +294,8 @@ def test_a_worlds_publish_connector_previews_and_publishes_through_its_own_tools
         "failed": {},
         "public": True,
         "scheduled_for": "2099-01-01T09:00:00Z",
+        "already_posted": False,
+        "recorded_by": None,
     }
     unsaid = publish.result("webhook", {"url": "u", "public": "yes", "scheduled_for": 5})
     assert (unsaid["public"], unsaid["scheduled_for"]) == (None, None)

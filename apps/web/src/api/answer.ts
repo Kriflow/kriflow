@@ -27,6 +27,7 @@ export const GATE_KIND: Record<Gate["kind"], string> = {
   budget: "Budget ran out",
   skill: "Review a skill change",
   approve_items: "Review each item",
+  posted: "Did this post go out?",
 };
 
 /** What the run wrote about itself, not something to choose or review. */
@@ -127,6 +128,8 @@ export type Choice =
   | { kind: "send_back"; to: string }
   | { kind: "confirm" }
   | { kind: "items"; retry: boolean }
+  | { kind: "posted"; links: string[] }
+  | { kind: "post" }
   | { kind: "review_items"; approve: string[]; sendBack: Record<string, string> }
   | { kind: "budget"; add: number }
   | { kind: "abort" }
@@ -185,6 +188,15 @@ export function decision(gate: Gate, choice: Choice, { note = "", edits = {}, re
     body.choice = choice.retry ? "retry" : "continue";
     const said = choice.retry ? "You retried the failed items" : "You went on without the failed items";
     return { send: () => decide(gate.run_id, body), said };
+  }
+  if (choice.kind === "posted") {
+    body.choice = "posted";
+    body.links = choice.links;
+    return { send: () => decide(gate.run_id, body), said: "You said it posted" };
+  }
+  if (choice.kind === "post") {
+    body.choice = "post";
+    return { send: () => decide(gate.run_id, body), said: "You asked to post it now" };
   }
   if (choice.kind === "pick") {
     body.choice = choice.choice;

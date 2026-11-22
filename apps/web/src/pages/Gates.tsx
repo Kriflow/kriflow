@@ -74,6 +74,7 @@ const KIND_CHIP: [Gate["kind"], string][] = [
   ["confirm", "Confirm"],
   ["budget", "Budget"],
   ["skill", "Skill"],
+  ["posted", "Posted?"],
 ];
 
 /** Whole dollars without cents, for the budget's preset chips and its button. */
@@ -590,6 +591,8 @@ export function GateCard({
   const [verdicts, setVerdicts] = useState<Verdicts>({});
   // Bumped once a review is taken, so the Items load again with fresh verdicts.
   const [round, setRound] = useState(0);
+  // At a "Did this post go out?" gate: the links typed, one per line.
+  const [links, setLinks] = useState<string[]>([]);
   // The budget's top-up, from a preset chip or typed.
   const [add, setAdd] = useState(() => topUpSuggestion(gate));
   // The publish fields the assistant filled, marked on the field for the person to check.
@@ -647,7 +650,8 @@ export function GateCard({
     const target = sendBack.current;
     sendBack.current = null;
     const one = cards.find((c) => c.path === fields.get("artifact"));
-    const retry = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "retry";
+    const pressed = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value");
+    const retry = pressed === "retry";
     const given = (verdict: string) => Object.keys(verdicts).filter((k) => verdicts[k] === verdict);
     const choice: Choice =
       gate.kind === "approve_items"
@@ -658,6 +662,10 @@ export function GateCard({
           }
         : gate.kind === "items"
         ? { kind: "items", retry }
+        : gate.kind === "posted"
+        ? pressed === "post"
+          ? { kind: "post" }
+          : { kind: "posted", links }
         : gate.kind === "budget"
         ? { kind: "budget", add: Number(fields.get("add")) }
         : target
@@ -759,6 +767,7 @@ export function GateCard({
           {gate.item && <span data-testid="gate-item">item {gate.item}</span>}
         </p>
       )}
+      {gate.kind === "posted" && <h3 className="gate-title">Did this post go out?</h3>}
       <GateQuestion ask={gate.ask} />
       {/* Holds the evidence's place while it loads, so the form below does not jump down. */}
       {shows && artifacts === null && (
@@ -821,6 +830,18 @@ export function GateCard({
             )}
             {gate.kind === "approve_items" && (
               <ReviewItems key={round} gate={gate} formId={formId} verdicts={verdicts} onVerdict={(key, v) => setVerdicts((all) => ({ ...all, [key]: v }))} />
+            )}
+            {gate.kind === "posted" && (
+              <label>
+                Link to the post (one per Platform)
+                <textarea
+                  name="links"
+                  rows={2}
+                  inputMode="url"
+                  autoComplete="off"
+                  onChange={(e) => setLinks(e.target.value.split("\n").map((l) => l.trim()).filter(Boolean))}
+                />
+              </label>
             )}
             {gate.kind === "pick" && cards.length > 0 && <ArtifactCards cards={cards} worldId={gate.world_id} multi={multi} />}
             {gate.kind === "pick" && artifacts && cards.length === 0 && (
@@ -886,6 +907,20 @@ export function GateCard({
                   <button type="button" className="danger" onClick={abort} disabled={busy}>
                     Abort the run
                   </button>
+                </>
+              )}
+              {gate.kind === "posted" && (
+                <>
+                  <button type="submit" form={formId} className="primary" value="posted" disabled={busy || links.length === 0}>
+                    It posted
+                  </button>
+                  <button type="submit" form={formId} value="post" disabled={busy}>
+                    Post it now
+                  </button>
+                  <button type="button" className="danger" onClick={abort} disabled={busy}>
+                    Abort the run
+                  </button>
+                  <span className="faint">It posted records your links and posts nothing. Post it now only when you checked it is not there.</span>
                 </>
               )}
               {gate.kind === "confirm" && (

@@ -94,7 +94,8 @@ class GateRaised:
 @dataclass(frozen=True)
 class ItemsRetried:
     """The `items` gate of the fan-out stage at `index` was answered with retry: the stage runs
-    again, starting a new child for each failed Item only (ADR 0031)."""
+    again, starting a new child for each failed Item only (ADR 0031). Or the `posted` gate of the
+    connector stage at `index` was answered: it runs again, to record or make the post."""
 
     index: int
 
@@ -240,7 +241,7 @@ def transition(
         case ItemsRetried(i):
             _require(not state.over_budget, "the run waits for money, not a decision")
             _require(_at(stages, i) == "waiting", f"stage {i} is not waiting")
-            _require(kinds[i] == "workflow", f"stage {i} is not a fan-out stage")
+            _require(kinds[i] in ("workflow", "connector"), f"stage {i} raised no gate to retry")
             stages[i] = "pending"
             return _settle(kinds, state, stages)
         case BudgetAdded():
