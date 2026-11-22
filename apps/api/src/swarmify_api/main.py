@@ -31,6 +31,7 @@ from typing import Any, Protocol
 import yaml
 from anyio import to_thread
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from jsonschema.exceptions import best_match
 from jsonschema.validators import validator_for
@@ -53,6 +54,7 @@ from swarmify_api import (
     learning,
     library,
     lists,
+    logins,
     mcp,
     notifications,
     planner,
@@ -1235,6 +1237,14 @@ def create_app(
         return resources.snapshot(registry.packages.sandbox.resources)
 
     app.include_router(connectors.router(registry, world_svc, workflow_svc))
+
+    def run_label(run_id: str, stage_id: str) -> tuple[str, str] | None:
+        run = runner.get(run_id)
+        stage = next((s for s in run.stages if s.id == stage_id), None) if run else None
+        return (run.name, stage.name) if run and stage else None
+
+    app.include_router(logins.router(registry.logins, world_svc, workflow_svc, run_label))
+    app.add_exception_handler(RequestValidationError, logins.no_echo)
     app.include_router(tasks.router(whiteboard, runner.get, clock))
     app.include_router(lists.router(lists_svc, lambda w: world_svc.get(w) is not None))
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))
@@ -1281,6 +1291,7 @@ def create_app(
         lists=lists_svc,
         retro=retro,
         ask=asker.ask,
+        logins=registry.logins,
     )
     app.include_router(planner.router(world_svc, asked, tools, registry))
     app.include_router(assistant.router(*reads, cards=cards))

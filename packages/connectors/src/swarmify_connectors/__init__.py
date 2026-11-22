@@ -37,6 +37,7 @@ from jsonschema.validators import validator_for
 from swarmify_connectors import build_session, oauth, publish, resources, setup
 from swarmify_connectors.credentials import Credentials
 from swarmify_connectors.fake import FakeTransport
+from swarmify_connectors.logins import FileSecrets, Logins
 from swarmify_connectors.mcp_transport import Caller, McpTransport
 from swarmify_connectors.model import (
     KINDS,
@@ -92,6 +93,7 @@ __all__ = [
     "InstallError",
     "JobCancelled",
     "KeyCheck",
+    "Logins",
     "ManifestError",
     "McpTransport",
     "Package",
@@ -307,6 +309,9 @@ class Connectors:
         self._watched: list[tuple[Connector, Confined]] = []
         """Processes others start (a swarm stage's agents), whose blocks `drain` reports."""
         self.setups = SetupStore(self.data_dir / "setup.json")
+        self.logins = Logins(storage, FileSecrets(self.data_dir / "secrets.json"))
+        """The world's World Logins; their secrets in their own mode-600 file, so deleting one
+        never touches Setup."""
         self._sign_ins: dict[str, dict[str, Any]] = {}
         """Sign-ins under way by their `state`, each bound to the browser session it began in."""
         self._tokens = threading.Lock()
@@ -1065,6 +1070,7 @@ class Connectors:
     def delete_world(self, world_id: str) -> None:
         self.storage.delete_world(world_id)
         self.setups.delete_world(world_id)
+        self.logins.delete_world(world_id)
 
     def secret_names(self, world_id: str) -> list[str]:
         """Every key name a coding session must not see: those in the file and those any of

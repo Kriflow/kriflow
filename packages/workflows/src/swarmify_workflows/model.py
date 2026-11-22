@@ -201,3 +201,12 @@ def calls(model: WorkflowModel) -> set[str]:
         elif isinstance(stage, SwarmStage):
             names.update(stage.tools)
     return names
+
+
+def logins_named(model: WorkflowModel) -> set[str]:
+    """Every World Login a stage names: a connector stage's `params.login`."""
+    return {
+        str(s.params["login"])
+        for s in model.stages
+        if isinstance(s, ConnectorStage) and s.params.get("login")
+    }

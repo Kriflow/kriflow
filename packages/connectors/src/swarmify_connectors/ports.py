@@ -9,6 +9,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from swarmify_connectors.model import Call, Connector, Tool
+from swarmify_kernel import Event
 
 
 class ConnectorTransport(Protocol):
@@ -68,3 +69,19 @@ class Storage(Protocol):
     def offer_default(self, world_id: str, package: str, at: str) -> None: ...
 
     def delete_world(self, world_id: str) -> None: ...
+
+    # World Logins (logins.LoginRows)
+
+    def logins(self, world_id: str) -> list[dict[str, Any]]: ...
+
+    def add_login(self, row: dict[str, Any], event: Event) -> bool: ...
+
+    def update_login(
+        self, world_id: str, name: str, fields: dict[str, Any], event: Event
+    ) -> bool: ...
+
+    def delete_login(self, world_id: str, name: str, event: Event) -> bool: ...
+
+    def append_event(self, event: Event) -> None: ...
+
+    def login_uses(self, world_id: str, name: str | None, limit: int) -> list[Event]: ...

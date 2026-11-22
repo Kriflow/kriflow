@@ -25,6 +25,7 @@ from swarmify_workflows.model import (
     WorkflowVersion,
     calls,
     children,
+    logins_named,
 )
 from swarmify_workflows.parse import parse_workflow
 from swarmify_workflows.ports import Storage
@@ -55,6 +56,7 @@ __all__ = [
     "Workflows",
     "cron_problem",
     "dump_workflow",
+    "logins_named",
     "next_fire",
 ]
 
