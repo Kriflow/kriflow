@@ -1,0 +1,12 @@
+# The Python script connector's own uv project, outside the Swarmify workspace: its install step
+# syncs these into the installed version's folder (ADR 0026).
+[project]
+name = "swarmify-python-script"
+version = "1.0.0"
+description = "Runs a world asset's Python script on a stage's input, in the connector sandbox"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["mcp==2.3.0"]
+
+[tool.uv]
+package = false

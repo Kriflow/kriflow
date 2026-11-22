@@ -19,6 +19,10 @@
     "version": "1.2.0",
     "files": "01982ece36fd17781ecda0faf68838e97da9e4da388d15f1e6899718c2fc0f93"
   },
+  "python_script": {
+    "version": "1.0.0",
+    "files": "197bee56e8e04c3f489cddbcbca5037b9ae6b1acc93007c1b631203c7f1d9180"
+  },
   "remotion_build": {
     "version": "1.0.4",
     "files": "3e17537c14b17f0c5c2cbbb4b4c6c7b10965920d2651695f22f0673f21df8021"

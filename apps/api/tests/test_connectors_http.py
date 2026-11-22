@@ -128,6 +128,7 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
         ("hyperframes_build", "1.0.2", "connectors/hyperframes_build"),
         ("hyperframes_render", "1.0.2", "connectors/hyperframes_render"),
         ("meta", "1.2.0", "connectors/meta"),
+        ("python_script", "1.0.0", "connectors/python_script"),
         ("remotion_build", "1.0.4", "connectors/remotion_build"),
         ("remotion_render", "1.0.9", "connectors/remotion_render"),
         ("slack", "1.1.1", "connectors/slack"),
@@ -354,6 +355,7 @@ def test_install_a_package_from_this_repo_and_list_it(client: TestClient, tmp_pa
         "hyperframes_build",
         "hyperframes_render",
         "meta",
+        "python_script",
         "remotion_build",
         "remotion_render",
         "slack",
@@ -366,7 +368,7 @@ def test_install_a_package_from_this_repo_and_list_it(client: TestClient, tmp_pa
     assert installed.status_code == 201, installed.text
     assert (tmp_path / "packages/echo/1.0.0/installed.txt").is_file()
     listed = client.get("/api/packages").json()
-    assert listed[2] == installed.json() and len(listed) == 12
+    assert listed[2] == installed.json() and len(listed) == 13
     assert {k: listed[2][k] for k in ("name", "version", "label", "kind", "state", "source")} == {
         "name": "echo",
         "version": "1.0.0",
@@ -421,6 +423,7 @@ def test_an_invalid_manifest_is_refused_naming_the_field(
         "hyperframes_build",
         "hyperframes_render",
         "meta",
+        "python_script",
         "remotion_build",
         "remotion_render",
         "slack",

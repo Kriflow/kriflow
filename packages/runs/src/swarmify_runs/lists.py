@@ -30,6 +30,8 @@ NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 """A list's or a status's name."""
 FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 """A field name a filter or an order may use."""
+COST = "cost_usd"
+"""The field holding what the runs that worked an Entry spent, added as each one ends."""
 ORDERS = ("score", "time")
 """What an order may name besides a numeric field; a leading `-` makes it descending."""
 
@@ -681,18 +683,36 @@ def release(conn: sqlite3.Connection, run_id: str, done: bool = False) -> None:
     """Free every Entry `run_id` holds, on the connection of the transaction that ends it. A
     fan-out child that ended `done` first moves its Entry to the query's `on_finish`, so no
     other run can claim it in the status it worked in (the parent's settling then finds it
-    there already)."""
+    there already). Each Entry adds the run's spend (its family's, ADR 0013) to its `cost_usd`
+    field: the cost of an Entry comes from the runs that worked it."""
     if done:
         _finish(conn, run_id)
     rows = conn.execute(
-        "SELECT world_id, list, key FROM list_entries WHERE claimed_by = ?", (run_id,)
+        "SELECT world_id, list, key, fields FROM list_entries WHERE claimed_by = ?", (run_id,)
     ).fetchall()
+    spent = conn.execute("SELECT spent_usd FROM runs WHERE id = ?", (run_id,)).fetchone()
     conn.execute(
         "UPDATE list_entries SET claimed_by = NULL, updated_at = ? WHERE claimed_by = ?",
         (_now(), run_id),
     )
     for r in rows:
-        change = {"claimed_by": None}
+        change: dict[str, Any] = {"claimed_by": None}
+        if spent is not None:
+            fields = json.loads(r[3])
+            had = fields.get(COST)
+            had = had if isinstance(had, int | float) and not isinstance(had, bool) else 0
+            fields[COST] = round(had + float(spent[0] or 0), 4)
+            try:
+                text = _fields(fields)
+            except ValueError:  # fields at their cap: the run still ends
+                text = None
+            if text is not None:
+                conn.execute(
+                    "UPDATE list_entries SET fields = ?"
+                    " WHERE world_id = ? AND list = ? AND key = ?",
+                    (text, r[0], r[1], r[2]),
+                )
+                change["fields"] = {COST: fields[COST]}
         WorldLists._changed(conn, r[0], r[1], r[2], change, "the run ended", "run", run_id)
 
 

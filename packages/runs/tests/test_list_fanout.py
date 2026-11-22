@@ -287,3 +287,36 @@ def test_a_send_back_to_the_fan_out_works_the_same_entry_again(
     first, second = sorted(kids(runner, parent.id), key=lambda c: c.created_at)
     assert first.name == second.name == "reply: Ticket t-b"
     assert [lists.get(WORLD, "tickets", k).runs for k in ("t-a", "t-c")] == [[], []]
+
+
+def test_an_ended_run_adds_what_it_spent_to_each_entry_it_held(
+    runner: Runner, lists: WorldLists
+) -> None:
+    """The cost of an Entry comes from the runs that worked it: each adds its family's spend to
+    the Entry's `cost_usd` as it ends, done or not."""
+    library(runner, wf_reply=[WORK, CHECK])
+    lists.set_fields(WORLD, "tickets", "t-a", {"cost_usd": 0.5})  # an earlier run's
+    parent = runner.start(WORLD, "wf_p", 1, "Inbox", [fan(take=2)])
+    wait_for(lambda: sum(c.status == "waiting_gate" for c in kids(runner, parent.id)) == 2)
+    held = {lists.get(WORLD, "tickets", k).claimed_by: k for k in ("t-b", "t-c")}
+    done, aborted = kids(runner, parent.id)
+    runner.storage.set_spent(done.id, 0.12345)
+    runner.storage.set_spent(aborted.id, 0.3)
+    runner.decide(done.id, person=True)
+    at(runner, done.id, "done")
+    runner.abort(aborted.id)
+    at(runner, aborted.id, "aborted")
+    assert lists.get(WORLD, "tickets", held[done.id]).fields["cost_usd"] == 0.1235
+    assert lists.get(WORLD, "tickets", held[aborted.id]).fields["cost_usd"] == 0.3
+    last = lists.history(WORLD, "tickets", held[done.id])[-1].payload
+    assert (last["claimed_by"], last["fields"], last["by"]) == (None, {"cost_usd": 0.1235}, "run")
+
+    again = runner.start(WORLD, "wf_p", 1, "Inbox", [fan(take=1, status=["open"], order="-rank")])
+    wait_for(lambda: [c.status for c in kids(runner, again.id)] == ["waiting_gate"])
+    (child,) = kids(runner, again.id)
+    assert lists.get(WORLD, "tickets", "t-a").claimed_by == child.id
+    runner.storage.set_spent(child.id, 0.25)
+    runner.abort(again.id)
+    at(runner, again.id, "aborted")
+    wait_for(lambda: lists.get(WORLD, "tickets", "t-a").claimed_by is None)
+    assert lists.get(WORLD, "tickets", "t-a").fields["cost_usd"] == 0.75  # added, not replaced
