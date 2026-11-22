@@ -134,37 +134,37 @@ def test_a_fan_out_stage_may_end_with_an_approve_items_gate_and_it_round_trips()
     assert bad.startswith("approve must be true or false")
 
 
-PILOT = """\
+LISTED = """\
   - workflow: make
-    from_list: {list: ideas, status: new, where: {kind: pilot}, order: rank, on_start: making}
-    runs_by: {field: format, map: {blocky: wf_t, body: wf_b}}
-    take: [cut.mp4]
+    from_list: {list: tickets, status: new, where: {kind: urgent}, order: rank, on_start: working}
+    runs_by: {field: queue, map: {email: wf_t, chat: wf_b}}
+    take: [reply.md]
 """
 
 
 def test_a_fan_out_stage_may_take_its_items_from_a_list_query() -> None:
     """Issue 541: `from_list` with its defaults filled in, `runs_by` in place of `runs`."""
-    stage = parsed(PILOT).stages[1]
+    stage = parsed(LISTED).stages[1]
     assert stage == WorkflowStage(
-        "make", "", ["cut.mp4"], None, "item.md", 2,
+        "make", "", ["reply.md"], None, "item.md", 2,
         from_list={
-            "list": "ideas", "status": ["new"], "where": {"kind": "pilot"}, "order": "rank",
-            "take": 1, "on_start": "making", "on_finish": None,
+            "list": "tickets", "status": ["new"], "where": {"kind": "urgent"}, "order": "rank",
+            "take": 1, "on_start": "working", "on_finish": None,
         },
-        runs_by={"field": "format", "map": {"blocky": "wf_t", "body": "wf_b"}},
+        runs_by={"field": "queue", "map": {"email": "wf_t", "chat": "wf_b"}},
     )  # fmt: skip
     stages = []
-    for each in parsed(PILOT).stages:
+    for each in parsed(LISTED).stages:
         fields = asdict(each)
         stages.append((fields.pop("type"), fields.pop("name"), fields))
-    assert parse_workflow(dump_workflow("N", stages)) == (parsed(PILOT), [])
-    found = validate(parsed(PILOT), workflow_id=None, connectors=CONNECTORS, references={})
+    assert parse_workflow(dump_workflow("N", stages)) == (parsed(LISTED), [])
+    found = validate(parsed(LISTED), workflow_id=None, connectors=CONNECTORS, references={})
     assert sorted(v.message for v in found) == [
         "no workflow with id 'wf_b'",
         "no workflow with id 'wf_t'",
     ]
     read = ConnectorStage("read", "remotion_render", input="items.json")
-    assert rules(WorkflowModel("w", [*parsed(PILOT).stages, read])) == [
+    assert rules(WorkflowModel("w", [*parsed(LISTED).stages, read])) == [
         ("unknown_workflow", "make")
     ]
 
@@ -172,7 +172,7 @@ def test_a_fan_out_stage_may_take_its_items_from_a_list_query() -> None:
 @pytest.mark.parametrize(
     ("fields", "message"),
     [
-        ("    runs: wf_t\n    from_list: ideas\n", "from_list must be a mapping"),
+        ("    runs: wf_t\n    from_list: tickets\n", "from_list must be a mapping"),
         ("    runs: wf_t\n    from_list: {status: new}\n", "list is required"),
         ("    runs: wf_t\n    from_list: {list: a, limit: 1}\n", "unknown field 'limit'"),
         ("    runs: wf_t\n    from_list: {list: a, take: 0}\n", "take must be a positive"),
@@ -193,10 +193,10 @@ def test_the_schema_refuses_a_bad_list_query(fields: str, message: str) -> None:
 
 
 def test_a_gate_names_where_its_runs_entry_moves_per_answer() -> None:
-    gate = "  - gate: review\n    ask: Good?\n    entry: {approve: review, send_back: making}\n"
+    gate = "  - gate: review\n    ask: Good?\n    entry: {approve: review, send_back: working}\n"
     (_, stage) = parsed(gate).stages
     assert isinstance(stage, GateStage)
-    assert stage.entry == {"approve": "review", "send_back": "making"}
+    assert stage.entry == {"approve": "review", "send_back": "working"}
     (stray,) = schema("  - gate: g\n    ask: a\n    entry: {publish: x}\n")
     assert stray.startswith("entry names answers approve, send_back, reject")
     (pick,) = schema("  - gate: g\n    ask: a\n    kind: pick\n    entry: {send_back: x}\n")

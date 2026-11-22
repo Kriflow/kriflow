@@ -452,26 +452,29 @@ POST = """  - connector: %s
 """
 
 
+@pytest.mark.parametrize("broken", [False, True], ids=["moves", "links-field-broken"])
 def test_a_listed_entry_is_claimed_approved_and_published_by_both_stages_after_one_gate(
-    running: TestClient, transport: FakeTransport, tmp_path: Path
+    running: TestClient, transport: FakeTransport, tmp_path: Path, broken: bool
 ) -> None:
     """Issue 541 end to end: a daily fan-out claims the top Entry, the person's confirm moves
     it, both publish stages after that one gate post, and the Entry ends published with both
-    links and no claim."""
+    links and no claim. An Entry whose fields cannot take the links stays where the gate put
+    it, and the posts stand: the stages still end done, nothing posts twice."""
     sign_in_youtube(tmp_path)
     world, make = setup(running, MAKE + POST % "youtube" + POST % "again")
-    lists = f"/api/worlds/{world}/lists/ideas"
-    statuses = ["new", "making", "review", "published"]
+    lists = f"/api/worlds/{world}/lists/tickets"
+    statuses = ["new", "working", "review", "published"]
     declared = running.put(lists, json={"statuses": statuses, "published": "published"})
     assert declared.status_code == 200, declared.text
     assert declared.json()["published"] == "published"
     for key, rank in (("later", 2), ("first", 1)):
-        body = {"key": key, "title": key.title(), "fields": {"rank": rank}}
+        fields = {"rank": rank} | ({"links": "x", "pad": "y" * 3960} if broken else {})
+        body = {"key": key, "title": key.title(), "fields": fields}
         assert running.post(f"{lists}/entries", json=body).status_code == 201
     daily = (
         "name: Daily\nstages:\n  - workflow: make\n"
         f"    runs: {make}\n"
-        "    from_list: {list: ideas, status: new, order: rank, on_start: making}\n"
+        "    from_list: {list: tickets, status: new, order: rank, on_start: working}\n"
     )
     saved = running.post(f"/api/worlds/{world}/workflows", json={"yaml": daily})
     assert saved.status_code == 201, saved.text
@@ -488,7 +491,7 @@ def test_a_listed_entry_is_claimed_approved_and_published_by_both_stages_after_o
     (out / "short.mp4").parent.mkdir(parents=True, exist_ok=True)
     (out / "short.mp4").write_bytes(b"video")
     entry = running.get(f"{lists}/entries/first").json()
-    assert (entry["status"], entry["claimed_by"]) == ("making", made["id"])
+    assert (entry["status"], entry["claimed_by"]) == ("working", made["id"])
 
     transport.outputs["publish"] = [
         {"id": "v1", "url": "https://youtu.be/v1", "public": True},
@@ -498,6 +501,13 @@ def test_a_listed_entry_is_claimed_approved_and_published_by_both_stages_after_o
     until(lambda: running.get(f"/api/runs/{parent['id']}").json()["status"] == "done")
     assert [c[1] for c in transport.calls if c[0] == "youtube"].count("publish") == 2
     entry = running.get(f"{lists}/entries/first").json()
+    if broken:  # over MAX_FIELDS once the links merge in
+        assert (entry["status"], entry["claimed_by"], entry["fields"]["links"]) == (
+            "review",
+            None,
+            "x",
+        )
+        return
     assert (entry["status"], entry["claimed_by"]) == ("published", None)
     assert entry["fields"]["links"] == {
         "youtube": "https://youtu.be/v1",

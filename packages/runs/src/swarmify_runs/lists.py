@@ -478,13 +478,22 @@ class WorldLists:
         return [_entry(r) for r in rows]
 
     def move_held(
-        self, world_id: str, run_id: str, status: str, *, by: str, note: str = ""
+        self,
+        world_id: str,
+        run_id: str,
+        status: str,
+        *,
+        by: str,
+        note: str = "",
+        check: bool = False,
     ) -> None:
         """Move every Entry `run_id` holds to `status`. Refused, with nothing moved, when one's
-        list does not declare it."""
+        list does not declare it; with `check` nothing moves either way."""
         held = self.held(world_id, run_id)
         for entry in held:
             self._status(self.get_list(world_id, entry.list), status)
+        if check:
+            return
         for entry in held:
             self.set_status(
                 world_id, entry.list, [entry.key], status, note=note, by=by, run_id=run_id
@@ -498,7 +507,8 @@ class WorldLists:
             declared = self.get_list(world_id, entry.list)
             if declared.published is None:
                 continue
-            merged = {**(entry.fields.get("links") or {}), **links}
+            had = entry.fields.get("links")
+            merged = {**(had if isinstance(had, dict) else {}), **links}
             self.set_fields(
                 world_id, entry.list, entry.key, {"links": merged}, by="run", run_id=run_id
             )
@@ -630,8 +640,13 @@ class WorldLists:
             conn.execute("DELETE FROM world_lists WHERE world_id = ?", (world_id,))
 
 
-def release(conn: sqlite3.Connection, run_id: str) -> None:
-    """Free every Entry `run_id` holds, on the connection of the transaction that ends it."""
+def release(conn: sqlite3.Connection, run_id: str, done: bool = False) -> None:
+    """Free every Entry `run_id` holds, on the connection of the transaction that ends it. A
+    fan-out child that ended `done` first moves its Entry to the query's `on_finish`, so no
+    other run can claim it in the status it worked in (the parent's settling then finds it
+    there already)."""
+    if done:
+        _finish(conn, run_id)
     rows = conn.execute(
         "SELECT world_id, list, key FROM list_entries WHERE claimed_by = ?", (run_id,)
     ).fetchall()
@@ -642,3 +657,36 @@ def release(conn: sqlite3.Connection, run_id: str) -> None:
     for r in rows:
         change = {"claimed_by": None}
         WorldLists._changed(conn, r[0], r[1], r[2], change, "the run ended", "run", run_id)
+
+
+def _finish(conn: sqlite3.Connection, run_id: str) -> None:
+    row = conn.execute(
+        "SELECT r.world_id, f.run_id, json_extract(f.source, '$.entry'), s.config"
+        " FROM fanout_items f JOIN runs r ON r.id = f.run_id"
+        " JOIN run_stages s ON s.run_id = f.run_id AND s.idx = f.stage_index"
+        " WHERE f.child_run_id = ? ORDER BY f.visit DESC LIMIT 1",
+        (run_id,),
+    ).fetchone()
+    if row is None or row[2] is None:
+        return
+    world_id, parent, key = row[0], row[1], row[2]
+    query = json.loads(row[3]).get("from_list") or {}
+    status, name = query.get("on_finish"), str(query.get("list") or "")
+    declared = conn.execute(
+        "SELECT statuses FROM world_lists WHERE world_id = ? AND name = ?", (world_id, name)
+    ).fetchone()
+    entry = conn.execute(
+        "SELECT status, claimed_by FROM list_entries WHERE world_id = ? AND list = ? AND key = ?",
+        (world_id, name, key),
+    ).fetchone()
+    if not status or declared is None or status not in json.loads(declared[0]):
+        return  # an undeclared on_finish fails the Item when the parent settles it
+    if entry is None or entry[1] != run_id or entry[0] == status:
+        return
+    conn.execute(
+        "UPDATE list_entries SET status = ?, updated_at = ? WHERE world_id = ? AND list = ?"
+        " AND key = ?",
+        (status, _now(), world_id, name, key),
+    )
+    change = {"from": entry[0], "to": status}
+    WorldLists._changed(conn, world_id, name, key, change, "", "run", parent)

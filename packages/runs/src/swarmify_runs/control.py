@@ -606,8 +606,9 @@ class RunControl:
                     f"{f.label} changed since the gate was shown, to {f.value or 'nothing'}:"
                     " check it and confirm again"
                 )
-        if person:
-            self._move_entries(run, stage, "send_back" if send_back_to else "approve", by, note)
+        answer = "send_back" if send_back_to else "approve"
+        if person:  # refused here, before anything is written; moved once the answer is sent
+            self._move_entries(run, stage, answer, by, note, check=True)
         decision = Decision(
             new_id("dec"),
             index,
@@ -639,6 +640,8 @@ class RunControl:
             self.storage.remove_decision(decision.id)
             Path(decision.path).unlink(missing_ok=True)
             raise
+        if person:
+            self._move_entries(run, stage, answer, by, note)
         return self._run(run_id)
 
     def propose(self, run_id: str, change: RunChange) -> ChangeProposal:
@@ -1077,13 +1080,16 @@ class RunControl:
         return run
 
     def _move_entries(
-        self, run: Run, gate: StageDef, answer: str, by: str | None, note: str
+        self, run: Run, gate: StageDef, answer: str, by: str | None, note: str, check: bool = False
     ) -> None:
         """Move the Entries `run` holds to the status gate `gate` names for `answer`, if any
-        (issue 541). Raises ValueError when a list does not declare it, before anything moves."""
+        (issue 541), or with `check` only refuse it. Raises ValueError when a list does not
+        declare it, before anything moves."""
         status = (gate.config.get("entry") or {}).get(answer) if gate.type == "gate" else None
         if status and self.lists is not None:
-            self.lists.move_held(run.world_id, run.id, status, by=by or "operator", note=note)
+            self.lists.move_held(
+                run.world_id, run.id, status, by=by or "operator", note=note, check=check
+            )
 
     def delete_world(self, world_id: str) -> None:
         """Cancel the world's unfinished runs, then drop its rows and its queue. Through the DBOS

@@ -242,3 +242,45 @@ def test_publishing_moves_the_held_entry_to_the_published_status_with_its_links(
     assert moved.fields["links"] == {"forum": "https://f.example/1", "mail": "https://m.example/1"}
     with pytest.raises(ValueError, match="published must be declared"):
         lists.declare(WORLD, "tickets", STATUSES, published="sent")
+
+
+def test_an_item_that_cannot_start_leaves_its_entry_with_the_parent_until_it_ends(
+    runner: Runner, lists: WorldLists, tmp_path: Path
+) -> None:
+    """t-c's file goes after the claim; t-a is handed to another run meanwhile. Neither Item
+    starts, neither Entry is left with a run id that never ends."""
+    library(runner, wf_reply=[WORK, CHECK])
+    stage = fan(take=3)
+    stage = StageDef(stage.name, stage.type, {**stage.config, "max_parallel": 1})
+    parent = runner.start(WORLD, "wf_p", 1, "Inbox", [stage])
+    wait_for(lambda: [c.status for c in kids(runner, parent.id)] == ["waiting_gate"])
+    (tmp_path / "worlds" / WORLD / "tickets" / "t-c.md").unlink()
+    lists.hand(WORLD, "tickets", "t-a", parent.id, "run_other")
+
+    runner.decide(kids(runner, parent.id)[0].id, person=True)
+    waiting = at(runner, parent.id, "waiting_gate")
+    items = {i.key: (i.status, i.error or "") for i in waiting.stages[0].items}
+    assert items["t-c"][0] == "failed" and "cannot give 'Ticket t-c'" in items["t-c"][1]
+    assert items["t-a"] == ("failed", "Entry 't-a' of tickets is held by run run_other")
+    assert sorted(c.status for c in kids(runner, parent.id)) == ["aborted", "done"]
+    assert lists.get(WORLD, "tickets", "t-c").claimed_by == parent.id
+    runner.abort(parent.id)
+    at(runner, parent.id, "aborted")
+    assert lists.get(WORLD, "tickets", "t-c").claimed_by is None
+    assert lists.get(WORLD, "tickets", "t-a").claimed_by == "run_other"
+
+
+def test_a_send_back_to_the_fan_out_works_the_same_entry_again(
+    runner: Runner, lists: WorldLists
+) -> None:
+    library(runner, wf_reply=[WORK])
+    again = StageDef("again", "gate", {"ask": "Again?"})
+    parent = runner.start(WORLD, "wf_p", 1, "Inbox", [fan(on_finish="closed"), again])
+    at(runner, parent.id, "waiting_gate")
+    assert lists.get(WORLD, "tickets", "t-b").status == "closed"
+    runner.decide(parent.id, send_back_to="each ticket", note="Shorter")
+    wait_for(lambda: len(kids(runner, parent.id)) == 2)
+    at(runner, parent.id, "waiting_gate")
+    first, second = sorted(kids(runner, parent.id), key=lambda c: c.created_at)
+    assert first.name == second.name == "reply: Ticket t-b"
+    assert [lists.get(WORLD, "tickets", k).runs for k in ("t-a", "t-c")] == [[], []]

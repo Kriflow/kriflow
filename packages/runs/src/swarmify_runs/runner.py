@@ -26,7 +26,7 @@ import shutil
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -53,6 +53,7 @@ from swarmify_runs.control import (
     run_folder,
     slot_queue,
     stage_folder,
+    state_of,
     with_sidecar,
 )
 from swarmify_runs.machine import (
@@ -825,7 +826,10 @@ def _plan(
     """Record the Items of a new visit. A revisit whose note names Items (by key or title,
     whole words, any case) runs only those, except ones named only in a sentence that says to
     keep them (`_KEEP`); the others keep what their last visit gathered."""
-    if stage.config.get("from_list"):
+    last = [i for i, _ in runner.storage.items(run.id, index)] if visit else []
+    if stage.config.get("from_list") and last:
+        source = last  # a revisit works the Entries it was sent back with, not a fresh claim
+    elif stage.config.get("from_list"):
         source = _listed(runner, run, stage)
     elif runner.items is None:
         raise NotImplementedError("fan-out stages need items to read their source")
@@ -920,6 +924,23 @@ def _start_item(
         f"{pinned.name}: {item.title}", "queued", now, now, [], parent_run_id=run.id,
         baseline=run.baseline,
     )  # fmt: skip
+    given = run_folder(runner.data_dir, child) / "given"
+    given.mkdir(parents=True, exist_ok=True)
+    name = str(stage.config.get("as_") or "item.md")
+    try:
+        if item.file:
+            files = sorted(with_sidecar(Path(item.file)), key=lambda f: len(f.name))
+            for file, target in zip(files, (name, name + ".md"), strict=False):
+                shutil.copyfile(file, given / target)
+        else:
+            (given / name).write_text(json.dumps(item.data, indent=2, ensure_ascii=False) + "\n")
+    except OSError as exc:  # an Entry's file deleted since the claim: the parent still holds it
+        raise _ItemRefused(f"cannot give {item.title!r} to its child: {exc}") from exc
+    # ponytail: a crash between these two leaves an unlinked queued child, as _start_child does
+    child = runner.storage.add_run(child, pinned.stages)
+    runner.storage.set_item(run.id, index, visit, item.key, "running", child.id)
+    # Handed only once the child has a row: a crash before this leaves the Entry with the
+    # parent, whose end frees it, never with a run id that never ends.
     if item.entry is not None and runner.lists is not None:
         query = stage.config["from_list"]
         try:
@@ -928,19 +949,8 @@ def _start_item(
                 query.get("on_start") or None,
             )  # fmt: skip
         except (KeyError, ValueError) as exc:
+            runner.storage.save_state(child.id, replace(state_of(child), status="aborted"))
             raise _ItemRefused(str(exc).strip("'\"")) from exc
-    given = run_folder(runner.data_dir, child) / "given"
-    given.mkdir(parents=True, exist_ok=True)
-    name = str(stage.config.get("as_") or "item.md")
-    if item.file:
-        files = sorted(with_sidecar(Path(item.file)), key=lambda f: len(f.name))
-        for file, target in zip(files, (name, name + ".md"), strict=False):
-            shutil.copyfile(file, given / target)
-    else:
-        (given / name).write_text(json.dumps(item.data, indent=2, ensure_ascii=False) + "\n")
-    # ponytail: a crash between these two leaves an unlinked queued child, as _start_child does
-    child = runner.storage.add_run(child, pinned.stages)
-    runner.storage.set_item(run.id, index, visit, item.key, "running", child.id)
     return child.id
 
 

@@ -861,7 +861,10 @@ def create_app(
             },
         )
         if out["links"] and out["public"] is not False:  # a private draft is not published
-            lists_svc.published(run.world_id, run.id, out["links"])
+            try:  # the post is out: a failure here must not fail the stage and post again
+                lists_svc.published(run.world_id, run.id, out["links"])
+            except Exception:
+                log.warning("run %s posted, but its Entries did not move", run.id, exc_info=True)
 
     def connector_stage(run: Run, stage_id: str, stage: StageDef) -> None:
         try:

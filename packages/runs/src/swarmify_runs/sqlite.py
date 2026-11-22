@@ -256,7 +256,7 @@ class SqliteStorage:
                     {"s": status, "now": now, "error": error, "run": run_id, "i": i},
                 )
             if state.status in ENDED:  # a run that ended holds no Entry (issue 541)
-                release(conn, run_id)
+                release(conn, run_id, done=state.status == "done")
             saved = self._read(conn, run_id)
             assert saved is not None
             append(conn, _updated(saved))
