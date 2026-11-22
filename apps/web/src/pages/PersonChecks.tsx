@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { quiet } from "../api/client";
+import { reloadGates } from "../api/gates";
 import type { components } from "../api/schema";
 import { useRefresh } from "../refresh";
 import { notify } from "../Toast";
@@ -64,6 +65,7 @@ function PersonCheckCard({ check, linked, onDone }: { check: Check; linked: bool
     } else notify(body.code ? "Code sent. The run goes on." : body.action === "stop" ? "Stopped. The stage fails." : "Trying again.", { tone: "ok" });
     setCode("");
     onDone();
+    reloadGates(); // the Needs you count drops with it
   }
 
   function submit(e: FormEvent) {

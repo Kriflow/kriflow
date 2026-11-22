@@ -1,7 +1,12 @@
-"""The Logins row on Settings at phone size (spec: World Logins, seam 5), against the real API:
-add a login, see it listed without its password (in the page and in every response), change its
-password, and find its delete refused while a saved workflow names it. At 390 and 360 wide."""
+"""World Logins at phone size (spec seam 5), against the real API: the Logins row on Settings
+(add a login, see it listed without its password in the page and in every response, change its
+password, find its delete refused while a saved workflow names it) and a Person Check answered
+from Needs you. At 390 and 360 wide."""
 
+import re
+import shlex
+import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -88,4 +93,44 @@ def test_a_login_is_added_rotated_and_its_delete_refused_on_a_phone(
     for secret in (SECRET, NEW_SECRET):
         assert secret not in html
         assert all(secret not in b for b in bodies)
+    api.close()
+
+
+def test_a_person_check_is_answered_from_needs_you_on_a_phone(page: Page, locked_url: str) -> None:
+    """A stage's process asks for a code (spec: Person Check): Needs you shows it first, with
+    the count, and the code typed on the phone reaches the process; the run finishes."""
+    api = signed_in(locked_url)
+    world = api.post("/worlds", json={"name": "Codes"}).json()["id"]
+    server = shlex.join([sys.executable, str(SIGNER / "server.py")])
+    body = {"name": "asker", "kind": "stage", "server": server, "stage_types": ["connector"]}
+    api.post(f"/worlds/{world}/connectors", json=body).raise_for_status()
+    yaml = (
+        "name: Pilot\nstages:\n  - connector: sign\n    calls: asker\n"
+        "    params: {tool: ask, kind: code, ask: 'Enter the code we sent to ...67'}\n"
+    )
+    made = api.post(f"/worlds/{world}/workflows", json={"yaml": yaml})
+    made.raise_for_status()
+    run = api.post(f"/workflows/{made.json()['workflow_id']}/runs", json={}).json()["id"]
+
+    page.goto("/gates")
+    card = page.get_by_test_id("person-check")
+    expect(card).to_contain_text("Pilot is waiting for you to sign in.", timeout=30_000)
+    expect(page.get_by_role("link", name=re.compile(r"^Needs you"))).to_have_accessible_name(
+        re.compile(r"Needs you \d+ waiting")
+    )
+    field = card.get_by_label("Enter the code we sent to ...67")
+    expect(field).to_have_attribute("inputmode", "numeric")
+    fits(page)
+    field.fill("481516")
+    send = card.get_by_role("button", name="Send code")
+    assert send.bounding_box()["height"] >= 44  # type: ignore[index]
+    send.click()
+    expect(page.get_by_test_id("person-check")).to_have_count(0)
+    deadline = time.monotonic() + 60
+    while (status := api.get(f"/runs/{run}").json()["status"]) not in ("done", "failed"):
+        assert time.monotonic() < deadline
+        time.sleep(0.2)
+    assert status == "done"
+    stage = api.get(f"/runs/{run}").json()["stages"][0]["id"]
+    assert api.get(f"/stages/{stage}/call").json()["response"]["echo"] == "[secret: code]"
     api.close()

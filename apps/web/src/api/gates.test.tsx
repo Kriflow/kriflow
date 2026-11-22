@@ -31,17 +31,20 @@ test("reading the open gates never shows the loading line, and reads do not pile
       <Count />
     </>,
   );
+  // each read asks for the gates and the open Person Checks; count the gates' reads
+  const reads = () => fetch.mock.calls.filter(([req]) => String((req as Request).url ?? req).includes("/api/gates")).length;
+  const answerAll = () => answers.splice(0).forEach((a) => a());
   reloadGates();
   reloadGates(); // a burst of run updates while the slow first read is in flight
   await wait(300);
   expect(screen.getByTestId("route-progress").query()).toBeNull();
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(reads()).toBe(1);
 
-  answers.shift()?.();
+  answerAll();
   await expect.element(screen.getByText("0 open")).toBeInTheDocument();
-  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2)); // one more, for what came in meanwhile
-  answers.shift()?.();
+  await vi.waitFor(() => expect(reads()).toBe(2)); // one more, for what came in meanwhile
+  answerAll();
   await wait(50);
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(reads()).toBe(2);
   expect(screen.getByTestId("route-progress").query()).toBeNull();
 });
