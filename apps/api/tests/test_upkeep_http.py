@@ -102,8 +102,9 @@ def test_a_connector_reporting_clicks_shows_in_the_record_and_the_scorecard(
     workflow = saved.json()["workflow_id"]
     run = at_gate(running, tmp_path, world, workflow)
     transport.outputs["publish"] = [{"id": "p1", "url": "https://sho.rt/p1"}]
+    curve = {"retention": [[0, 1], [0.5, 0.4], [1, 0.12]]}
     transport.outputs["clicks.outcomes"] = [
-        {"p1": {"clicks": 12, "views": 300}, "other": {"clicks": 1}}
+        {"p1": {"clicks": 12, "views": 300, "curves": curve}, "other": {"clicks": 1}}
     ]
     assert running.post(f"/api/runs/{run['id']}/decision", json={}).status_code == 200
     until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] == "done")
@@ -115,6 +116,7 @@ def test_a_connector_reporting_clicks_shows_in_the_record_and_the_scorecard(
     found = json.loads(outcomes.read_text())
     assert found["outcomes"] == {"clicks": 12, "views": 300}
     assert found["primary_metric"] == "clicks"
+    assert found["curves"] == curve  # stored as answered, never added up
     posts = [{"connector": "clicks", "id": "p1", "links": {"clicks": "https://sho.rt/p1"}}]
     assert ("clicks", "outcomes", {"posts": posts}, {"CLICKS_TOKEN": "t"}) in transport.calls
     # youtube offers outcomes too, but is not signed in here: skipped, the others still asked
@@ -123,6 +125,15 @@ def test_a_connector_reporting_clicks_shows_in_the_record_and_the_scorecard(
 
     (score,) = running.get(f"/api/workflows/{workflow}/scorecard").json()["runs"]
     assert score["outcomes"] == {"clicks": 12}  # ranked by its Primary Metric
+
+    # later passes give the same curve: nothing is written; a new curve replaces the last
+    seen, written = len(transport.calls), outcomes.stat().st_mtime_ns
+    until(lambda: len(transport.calls) > seen + 2)
+    assert outcomes.stat().st_mtime_ns == written
+    later = {"retention": [[0, 1], [1, 0.2]]}
+    transport.outputs["clicks.outcomes"] = [{"p1": {"clicks": 12, "views": 300, "curves": later}}]
+    until(lambda: json.loads(outcomes.read_text()).get("curves") == later)
+    assert json.loads(outcomes.read_text())["outcomes"] == {"clicks": 12, "views": 300}
 
 
 def test_retention_deletes_old_binaries_and_keeps_their_markdown(
