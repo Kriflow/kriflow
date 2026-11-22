@@ -1,0 +1,44 @@
+# The Python script connector (README.md beside this file). Installed with Swarmify from this
+# folder but not enabled by default: a world enables it to run its own scripts. No coding
+# session: the stage runs `python3 <script> < input > output` in the connector sandbox.
+name = "python_script"
+version = "1.0.0"
+label = "Python script"
+about = "Runs one of the world's Python scripts on the stage's input file and keeps what it prints as the output. No network."
+kind = "stage"
+icon = "icon.svg"
+stage_types = ["connector"]
+enable_by_default = false
+
+planner_notes = "Runs a deterministic Python script the operator put in the world's assets: params.script names it (a path in assets/), the stage's input file is its stdin and its stdout becomes the output file, an artifact later stages read. Use it where a number or a ranking must come from code rather than an agent's judgement: a swarm stage writes the input JSON, this stage runs the script, a later swarm stage applies the output. It has no network and writes only the output; it costs nothing from the Budget."
+
+runtime = "uv"
+install = ["uv", "sync", "--frozen", "--no-dev"]
+command = [".venv/bin/python", "python_script.py"]
+
+# Its sandbox (ADR 0021): no network; it reads the world's assets (the scripts) and the run's
+# folders, and writes only its stage's folder.
+[permissions]
+folders = ["worlds/{world}/assets"]
+
+[params]
+type = "object"
+required = ["script"]
+additionalProperties = false
+[params.properties.script]
+type = "string"
+description = "the script, a .py file's path in the world's assets, as tools/score.py"
+[params.properties.seconds]
+type = "integer"
+minimum = 1
+maximum = 600
+default = 60
+description = "the script's time limit"
+
+[[inputs]]
+description = "the script's stdin, as a JSON file an earlier stage wrote; further inputs are its arguments"
+media_type = "application/json"
+
+[[outputs]]
+description = "what the script printed to stdout"
+media_type = "application/json"
