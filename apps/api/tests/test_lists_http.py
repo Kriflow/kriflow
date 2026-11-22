@@ -12,6 +12,7 @@ from mcp import Client
 from swarmify_api.auth import CALLER, Token
 from swarmify_api.lists import AgentLists
 from swarmify_api.main import (
+    migrated_db,
     run_control,
     task_board,
     workflow_service,
@@ -19,6 +20,8 @@ from swarmify_api.main import (
     world_service,
 )
 from swarmify_api.mcp import server
+from swarmify_runs import Run, RunState
+from swarmify_runs import SqliteStorage as RunStorage
 from swarmify_swarm import ToolError, tool_id
 from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
 
@@ -183,6 +186,82 @@ def test_status_and_fields_change_with_who_and_note_in_the_history(
     assert world_lists(tmp_path).lists(world) == []
 
 
+def _run(tmp_path: Path, world: str, run_id: str) -> RunStorage:
+    """A queued run of `world`: live until saved as ended."""
+    storage = RunStorage(migrated_db(tmp_path))
+    storage.add_run(Run(run_id, world, "wf_1", 1, "Work", "queued", "t", "t", []), [])
+    return storage
+
+
+def test_an_entry_is_deleted_unless_a_live_run_holds_it(
+    client: TestClient, tmp_path: Path
+) -> None:
+    world, url = _world(client)
+    for key in ("a", "b", "https://example.com/c"):
+        _add(client, url, key)
+    storage = _run(tmp_path, world, "run_1")
+    (held,) = world_lists(tmp_path).claim(world, "ideas", "run_1", order="time")
+    assert held.key == "a"
+
+    refused = client.delete(f"{url}/entries/a")
+    assert refused.status_code == 409 and "held by run run_1" in refused.text
+    assert client.delete(f"{url}/entries/b").status_code == 204
+    assert client.delete(f"{url}/entries/https://example.com/c").status_code == 204
+    assert _keys(client, url) == ["a"]
+    assert client.delete(f"{url}/entries/b").status_code == 404
+    assert client.delete(f"/api/worlds/{world}/lists/nope/entries/a").status_code == 404
+    assert client.delete(f"/api/worlds/world_nope/lists/ideas/entries/a").status_code == 404
+
+    # Once the run ends it holds nothing, and the Entry goes.
+    storage.save_state("run_1", RunState("aborted", ()))
+    assert client.delete(f"{url}/entries/a").status_code == 204
+    assert _keys(client, url) == []
+
+    events = [e for e in world_service(tmp_path).events_after(world) if e.type == "entry.deleted"]
+    assert [(e.payload["key"], e.payload["by"]) for e in events] == [
+        ("b", "operator"),
+        ("https://example.com/c", "operator"),
+        ("a", "operator"),
+    ]
+    assert events[0].payload["list"] == "ideas" and events[0].payload["title"] == "B"
+    # Added again, the key starts fresh.
+    _add(client, url, "b")
+
+
+def test_a_list_is_deleted_with_its_entries_unless_a_live_run_holds_one(
+    client: TestClient, tmp_path: Path
+) -> None:
+    world, url = _world(client)
+    for key in ("a", "b"):
+        _add(client, url, key)
+    _run(tmp_path, world, "run_1").save_state("run_1", RunState("running", ()))
+    world_lists(tmp_path).claim(world, "ideas", "run_1", order="time")
+    # A run id with no row, or one that ended, holds nothing.
+    world_lists(tmp_path).hand(world, "ideas", "b", "", "run_gone")
+
+    refused = client.delete(url)
+    assert refused.status_code == 409 and "run run_1" in refused.text
+    assert len(_keys(client, url)) == 2
+    assert client.delete(f"/api/worlds/{world}/lists/nope").status_code == 404
+    assert client.delete("/api/worlds/world_nope/lists/ideas").status_code == 404
+
+    RunStorage(migrated_db(tmp_path)).save_state("run_1", RunState("done", ()))
+    assert client.delete(url).status_code == 204
+    assert client.get(f"/api/worlds/{world}/lists").json() == []
+    assert client.get(f"{url}/entries").status_code == 404
+    (event,) = [
+        e for e in world_service(tmp_path).events_after(world) if e.type == "list.deleted"
+    ]
+    assert (event.payload["list"], event.payload["entries"], event.payload["by"]) == (
+        "ideas",
+        2,
+        "operator",
+    )
+    # Declared again, it starts empty.
+    assert client.put(url, json=IDEAS).status_code == 200
+    assert _keys(client, url) == []
+
+
 def test_entries_waiting_for_review_raise_one_needs_you_notice_until_none_wait(
     client: TestClient,
 ) -> None:
@@ -237,6 +316,10 @@ async def test_the_same_calls_on_mcp(tmp_path: Path) -> None:
         entry = await call("get_entry", list="ideas", key="a")
         assert entry["fields"] == {"rank": 2}  # type: ignore[index]
         assert entry["history"][-1]["note"] == "Why"  # type: ignore[index]
+        await call("delete_entry", list="ideas", key="b")
+        assert [e["key"] for e in await call("read_list", list="ideas")] == ["a"]  # type: ignore[union-attr]
+        gone = await client.call_tool("delete_entry", {"world_id": world, "list": "ideas", "key": "b"})
+        assert gone.is_error
 
         bad = await client.call_tool(
             "set_entry_status", {"world_id": world, "list": "ideas", "keys": ["a"], "status": "x"}

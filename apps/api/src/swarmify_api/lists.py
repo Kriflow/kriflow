@@ -1,6 +1,7 @@
 """HTTP face of World Lists (issue 539), and the `lists` Agent Tool's answers for the swarm.
 
-One `WorldLists` serves HTTP, MCP and agents alike: KeyError is a 404, ValueError a 422.
+One `WorldLists` serves HTTP, MCP and agents alike: KeyError is a 404, Held a 409 and any
+other ValueError a 422.
 """
 
 import json
@@ -11,7 +12,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from swarmify_runs import Entry, WorldList, WorldLists
+from swarmify_runs import Entry, Held, WorldList, WorldLists
 from swarmify_swarm import OPERATOR, ToolError
 
 WorldExists = Callable[[str], bool]
@@ -84,6 +85,8 @@ def router(lists: WorldLists, world_exists: WorldExists) -> APIRouter:
             return fn()
         except KeyError as exc:
             raise HTTPException(404, str(exc).strip("'\"")) from exc
+        except Held as exc:
+            raise HTTPException(409, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
@@ -105,6 +108,11 @@ def router(lists: WorldLists, world_exists: WorldExists) -> APIRouter:
                 published=body.published,
             ),
         )
+
+    @api.delete("/{name}", status_code=204, responses={404: {}, 409: {}})
+    def delete_list(world_id: str, name: str) -> None:
+        """Delete the list and its Entries. 409 while a run that has not ended holds one."""
+        act(world_id, lambda: lists.delete_list(world_id, name, by=OPERATOR))
 
     @api.get("/{name}/entries")
     def read(
@@ -167,6 +175,11 @@ def router(lists: WorldLists, world_exists: WorldExists) -> APIRouter:
                 world_id, name, key, body.fields, score=body.score, note=body.note, by=OPERATOR
             ),
         )
+
+    @api.delete("/{name}/entries/{key:path}", status_code=204, responses={404: {}, 409: {}})
+    def delete_entry(world_id: str, name: str, key: str) -> None:
+        """Delete the Entry. 409 while a run that has not ended holds it."""
+        act(world_id, lambda: lists.delete_entry(world_id, name, key, by=OPERATOR))
 
     return api
 

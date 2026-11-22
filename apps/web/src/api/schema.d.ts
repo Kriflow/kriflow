@@ -1280,7 +1280,11 @@ export interface paths {
         /** Declare */
         put: operations["declare_api_worlds__world_id__lists__name__put"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete List
+         * @description Delete the list and its Entries. 409 while a run that has not ended holds one.
+         */
+        delete: operations["delete_list_api_worlds__world_id__lists__name__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1332,7 +1336,11 @@ export interface paths {
         get: operations["get_api_worlds__world_id__lists__name__entries__key__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Entry
+         * @description Delete the Entry. 409 while a run that has not ended holds it.
+         */
+        delete: operations["delete_entry_api_worlds__world_id__lists__name__entries__key__delete"];
         options?: never;
         head?: never;
         /** Set Fields */
@@ -7797,6 +7805,50 @@ export interface operations {
             };
         };
     };
+    delete_list_api_worlds__world_id__lists__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_api_worlds__world_id__lists__name__entries_get: {
         parameters: {
             query?: {
@@ -7930,6 +7982,51 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_entry_api_worlds__world_id__lists__name__entries__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

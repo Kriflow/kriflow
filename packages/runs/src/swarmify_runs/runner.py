@@ -1030,7 +1030,9 @@ def _take_item(
                 run.world_id, str(query["list"]), [item.entry], str(query["on_finish"]),
                 by="run", run_id=run_id,
             )  # fmt: skip
-        except (KeyError, ValueError) as exc:
+        except KeyError:
+            pass  # the Entry (or its list) was deleted once no live run held it: nothing to move
+        except ValueError as exc:
             error = f"{type(exc).__name__}: {exc}"
     settled = "done" if error is None else ("aborted" if status == "aborted" else "failed")
     runner.storage.set_item(run_id, index, visit, key, settled, child.id, error)
