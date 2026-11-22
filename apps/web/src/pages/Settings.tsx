@@ -12,6 +12,7 @@ import { InstallRow } from "../PwaNotices";
 import { cap, piedPiper, setPiedPiper, the } from "../skin";
 import { notify } from "../Toast";
 import { ModelSelect, useModels } from "./ModelSelect";
+import { LoginsRow } from "./Logins";
 import { Tokens } from "./Tokens";
 
 type World = components["schemas"]["World"];
@@ -268,6 +269,7 @@ export function Settings() {
           </div>
         )}
       </form>
+      <LoginsRow worldId={worldId} Row={Row} />
       <Row title="Slack" about="Gates can ask you in Slack too, and each message links straight to the run or the gate.">
         <form className="panel set-panel" onSubmit={saveSlack} aria-label="Slack">
           <p data-testid="slack-state">
