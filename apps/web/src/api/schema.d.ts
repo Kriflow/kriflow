@@ -1646,6 +1646,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read
+         * @description serving, draining (with the stages still at work) or drained.
+         */
+        get: operations["read_api_drain_get"];
+        put?: never;
+        /**
+         * Start
+         * @description Start no new stages; those at work finish. A drain under way keeps its limit.
+         */
+        post: operations["start_api_drain_post"];
+        /**
+         * Cancel
+         * @description Serve again: stages that waited start now.
+         */
+        delete: operations["cancel_api_drain_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/worlds/{world_id}/runs/{run_id}/review-feed": {
         parameters: {
             query?: never;
@@ -2644,6 +2672,22 @@ export interface components {
             bytes: number;
         };
         /**
+         * AtWork
+         * @description A stage executing in this process.
+         */
+        AtWork: {
+            /** Run Id */
+            run_id: string;
+            /** Run Name */
+            run_name: string;
+            /** Stage */
+            stage: string;
+            /** Type */
+            type: string;
+            /** Started At */
+            started_at: string;
+        };
+        /**
          * Attempt
          * @description One execution of a swarm stage, numbered per stage from 1 (issue 535). The first visit is
          *     Attempt 1; each send-back, Rerun or Follow-up that runs the stage again starts the next.
@@ -3191,6 +3235,27 @@ export interface components {
             created_at: string;
             /** Last Success At */
             last_success_at: string | null;
+        };
+        /**
+         * Drain
+         * @description `serving` starts stages; `draining` starts none and waits for those `at_work`; `drained`
+         *     once none are. `seconds_left` until a drain stops waiting, None while serving.
+         */
+        Drain: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "serving" | "draining" | "drained";
+            /** Seconds Left */
+            seconds_left: number | null;
+            /** At Work */
+            at_work: components["schemas"]["AtWork"][];
+        };
+        /** DrainStart */
+        DrainStart: {
+            /** Seconds */
+            seconds?: number | null;
         };
         /** EnabledPackage */
         EnabledPackage: {
@@ -3848,7 +3913,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review" | "feed";
+            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review" | "feed" | "updating";
             /** Text */
             text: string;
             /** World Id */
@@ -8760,6 +8825,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Notice"][];
+                };
+            };
+        };
+    };
+    read_api_drain_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Drain"];
+                };
+            };
+        };
+    };
+    start_api_drain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DrainStart"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Drain"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_drain_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Drain"];
                 };
             };
         };

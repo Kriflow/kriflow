@@ -8,7 +8,8 @@ password set or stored nothing is checked, which is right only on 127.0.0.1.
 A browser signs in at `POST /api/session` and gets a session cookie: a random id signed with the
 install's secret (HttpOnly, SameSite Lax, Secure over https), stored hashed with its expiry, so
 signing out ends it. API tokens reach only the MCP server at `/mcp`: shown once, stored hashed,
-revocable. A token's scope says how much of it: `mcp` all of it, any other scope only the server
+revocable; a token of the whole server also reaches `/api/drain`, for the deploy command. A
+token's scope says how much of it: `mcp` all of it, any other scope only the server
 at `/mcp/<scope>`, as the token the core provisions for a Remote Approval connector. A token
 may be scoped to one world as well; the middleware hands the MCP tools the token it let in as
 `CALLER`, so they keep to its world and record its name as who changed a run. The
@@ -44,6 +45,8 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 COOKIE = "swarmify_session"
 SESSION = timedelta(days=30)
 MCP = "/mcp"
+DRAIN = "/api/drain"
+"""The one `/api` path a token reaches: a deploy drains with one (drain.py)."""
 FULL = "mcp"
 OPEN = frozenset({"/api/health", "/api/session"})
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
@@ -224,7 +227,8 @@ CALLER: ContextVar[Token | None] = ContextVar("caller", default=None)
 
 class SignedIn:
     """Refuses `/api` and `/mcp` without a session cookie; `/mcp` also takes a Bearer token,
-    one scoped to a part of it only there, and sets `CALLER` to it."""
+    one scoped to a part of it only there, and sets `CALLER` to it; `/api/drain` takes a token
+    of the whole server."""
 
     def __init__(self, app: ASGIApp, operator: Operator) -> None:
         self.app = app
@@ -239,9 +243,11 @@ class SignedIn:
         if (cookie := conn.cookies.get(COOKIE)) and self.operator.session(cookie):
             return True
         scheme, _, token = conn.headers.get("authorization", "").partition(" ")
-        if not mcp or scheme.lower() != "bearer":
+        if not (mcp or path == DRAIN) or scheme.lower() != "bearer":
             return False
         found = self.operator.token(token.strip())
+        if path == DRAIN:  # every world's runs: a token of one world or one part cannot
+            return found is not None and found.scope == FULL and found.world_id is None
         if found is None or (found.scope != FULL and path != f"{MCP}/{found.scope}"):
             return False
         CALLER.set(found)

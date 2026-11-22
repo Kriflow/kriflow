@@ -2,7 +2,9 @@
 event streams cannot hold the stop past uvicorn's graceful-shutdown timeout. Also pins what an
 interrupted publish leaves today (the spec's open questions 3 and 4)."""
 
+import json
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -104,3 +106,87 @@ def test_a_sandbox_stopped_mid_publish_fails_the_stage_while_the_api_lives(
     assert ended is not None and ended.status == "failed"
     assert "the sandbox went away" in (ended.stages[-1].error or "")
     assert [c[1] for c in transport.calls].count("publish") == 1
+
+
+PASSWORD = "aviato"
+
+
+@pytest.fixture
+def guarded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, transport: FakeTransport) -> FastAPI:
+    monkeypatch.setenv("SWARMIFY_PASSWORD", PASSWORD)
+    return create_app(tmp_path / "data", retro=False, transport=transport)
+
+
+def test_a_drain_is_started_read_and_cancelled_and_the_needs_you_page_says_so(
+    client: TestClient, transport: FakeTransport
+) -> None:
+    with client:
+        assert client.get("/api/drain").json() == {
+            "state": "serving",
+            "seconds_left": None,
+            "at_work": [],
+        }
+        assert client.get("/api/notices").json() == []
+        started = client.post("/api/drain", json={"seconds": 600}).json()
+        assert started["state"] == "drained" and 590 < started["seconds_left"] <= 600
+        assert client.post("/api/drain").json()["seconds_left"] <= 600  # keeps its limit
+        (notice,) = client.get("/api/notices").json()
+        assert notice["kind"] == "updating"
+        assert notice["text"].startswith("Updating. Stages already at work finish first")
+
+        _, workflow = setup(client, ONE_STAGE)
+        run = client.post(f"/api/workflows/{workflow}/runs", json={}).json()
+        time.sleep(0.5)
+        assert client.get(f"/api/runs/{run['id']}").json()["status"] == "queued"
+        assert client.delete("/api/drain").json()["state"] == "serving"
+        until(lambda: client.get(f"/api/runs/{run['id']}").json()["status"] == "done")
+        assert client.get("/api/notices").json() == []
+
+
+def test_a_drain_needs_a_session_or_a_token_of_the_whole_server(guarded: FastAPI) -> None:
+    with TestClient(guarded) as client:
+        assert client.get("/api/drain").status_code == 401
+        assert client.post("/api/session", json={"password": PASSWORD}).status_code == 204
+        world = client.post("/api/worlds", json={"name": "W"}).json()["id"]
+        full = client.post("/api/tokens", json={"name": "deploy"}).json()["token"]
+        one = client.post("/api/tokens", json={"name": "w", "world_id": world}).json()["token"]
+        assert client.get("/api/drain").status_code == 200
+        client.cookies.clear()
+        assert client.get("/api/drain").status_code == 401
+        bearer = {"Authorization": f"Bearer {full}"}
+        assert client.get("/api/drain", headers=bearer).status_code == 200
+        assert client.get("/api/worlds", headers=bearer).status_code == 401  # still only here
+        refused = client.get("/api/drain", headers={"Authorization": f"Bearer {one}"})
+        assert refused.status_code == 401
+
+
+def test_the_console_script_drives_the_drain_with_a_token(
+    guarded: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from swarmify_api import drain
+
+    server = uvicorn.Server(uvicorn.Config(guarded, host="127.0.0.1", port=0, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        until(lambda: server.started)
+        url = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+        monkeypatch.setenv("SWARMIFY_DRAIN_URL", url)
+        with pytest.raises(SystemExit, match="401"):
+            drain.main(["status"])
+        session = httpx.post(f"{url}/api/session", json={"password": PASSWORD})
+        made = httpx.post(f"{url}/api/tokens", json={"name": "deploy"}, cookies=session.cookies)
+        monkeypatch.setenv("SWARMIFY_API_TOKEN", made.json()["token"])
+
+        def said(*args: str) -> dict:
+            drain.main(list(args))
+            return json.loads(capsys.readouterr().out)
+
+        assert said("start", "--seconds", "90")["state"] == "drained"
+        assert said("status")["seconds_left"] <= 90
+        assert said("cancel")["state"] == "serving"
+    finally:
+        server.should_exit = True
+        thread.join(10)

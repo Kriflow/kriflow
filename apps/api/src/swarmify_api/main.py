@@ -46,6 +46,7 @@ from swarmify_api import (
     assistant,
     auth,
     connectors,
+    drain,
     evals,
     fanout,
     graph,
@@ -1222,7 +1223,9 @@ def create_app(
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))
     app.include_router(graph.router(world_svc, index, writer))
     app.include_router(graph.stalled_router(world_svc, writer))
-    app.include_router(upkeep.notices_router(notices))
+    # The Updating notice shows on the page only: pushing it would ring phones every deploy.
+    app.include_router(upkeep.notices_router(drain.with_updating(runner, notices)))
+    app.include_router(drain.router(runner, drain_seconds()))
     app.include_router(review_feeds.router(feeds, family))
     app.include_router(
         library.router(
