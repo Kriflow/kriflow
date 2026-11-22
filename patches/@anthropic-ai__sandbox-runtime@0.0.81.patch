@@ -1,0 +1,51 @@
+diff --git a/dist/sandbox/http-proxy.js b/dist/sandbox/http-proxy.js
+index 7ad12c3c8529987ba0a045103b8b30be09df0c99..c36898ab1041fb5862ff0654135dd50a919e383e 100644
+--- a/dist/sandbox/http-proxy.js
++++ b/dist/sandbox/http-proxy.js
+@@ -12,7 +12,7 @@ const ALLOWLIST_DENY = [
+     'Connection blocked by network allowlist',
+     'blocked-by-allowlist',
+ ];
+-import { peekForClientHello, terminateAndForward, } from './tls-terminate-proxy.js';
++import { closeAfterFlush, peekForClientHello, terminateAndForward, } from './tls-terminate-proxy.js';
+ import { prepareBodySubstitution, } from './body-substitution.js';
+ import { isResolvedAddressDenied } from './resolved-address-guard.js';
+ import { canonicalizeHost, connectViaParentProxy, directRequestOptions, dialDirect, formatAuthority, openConnectTunnel, proxyAuthHeader, onUpstreamError, relayResponseHead, selectParentProxyUrl, shouldBypassParentProxy, stripBrackets, stripHopByHop, } from './parent-proxy.js';
+@@ -512,7 +512,11 @@ export function createHttpProxyServer(options) {
+                 socket.destroy();
+             });
+             socket.on('close', () => upstream.destroy());
+-            upstream.on('close', () => socket.destroy());
++            // The upstream's end reaches the client as an end (pipe), which sends what is still
++            // queued for it first: destroying the client at the upstream's close dropped that
++            // queue, the last chunk of a download a client read slower than it came. A close on
++            // an error still cuts the tunnel at once.
++            upstream.on('close', hadError => hadError ? socket.destroy() : closeAfterFlush(socket, () => { }));
+         }
+         catch (err) {
+             logForDebugging(`Error handling CONNECT: ${err}`, { level: 'error' });
+diff --git a/dist/sandbox/socks-proxy.js b/dist/sandbox/socks-proxy.js
+index 760a10b1d1c475a7636ff78092d3c9daaafe7335..76b235bf293b2c25e0c5c4700dbb4465723f791f 100644
+--- a/dist/sandbox/socks-proxy.js
++++ b/dist/sandbox/socks-proxy.js
+@@ -1,6 +1,7 @@
+ import { createServer } from '@pondwader/socks5-server';
+ import { logForDebugging } from '../utils/debug.js';
+ import { isResolvedAddressDenied } from './resolved-address-guard.js';
++import { closeAfterFlush } from './tls-terminate-proxy.js';
+ import { canonicalizeHost, connectViaParentProxy, dialDirect, isValidHost, selectParentProxyUrl, shouldBypassParentProxy, } from './parent-proxy.js';
+ import { encodedCommandFromProxyUser, PROXY_AUTH_USER, } from './sandbox-utils.js';
+ // VER, REP=0x01 (general SOCKS server failure), RSV, ATYP=IPv4, 0.0.0.0:0.
+@@ -97,7 +98,11 @@ export function createSocksProxyServer(options) {
+             sendStatus('REQUEST_GRANTED');
+             upstream.pipe(conn.socket);
+             conn.socket.pipe(upstream);
+-            upstream.on('close', () => conn.socket.destroy());
++            // The upstream's end reaches the client as an end (pipe), which sends what is still
++            // queued for it first: destroying the client at the upstream's close dropped that
++            // queue, the last chunk of a download a client read slower than it came. A close on
++            // an error still cuts the tunnel at once.
++            upstream.on('close', hadError => hadError ? conn.socket.destroy() : closeAfterFlush(conn.socket, () => { }));
+         })
+             .catch(err => {
+             logForDebugging(`SOCKS connect to ${host}:${port} failed: ${err.message}`, { level: 'error' });
