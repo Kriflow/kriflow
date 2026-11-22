@@ -305,8 +305,14 @@ def test_a_document_opens_from_its_run_into_the_reader(phone: Page, ids: dict) -
     expect(doc.locator("pre")).to_contain_text("ffmpeg")
     _fits(phone)
     # The code block and the table scroll inside themselves; the page stays put.
+    # The document can render again right after the route change; re-measure until it settles.
     for wide in (doc.locator("pre"), doc.locator(".scroll-x")):
-        sizes = wide.evaluate("e => [e.scrollWidth, e.clientWidth]")
+        sizes = [0, 0]
+        for _ in range(50):
+            sizes = wide.evaluate("e => [e.scrollWidth, e.clientWidth]")
+            if sizes[0] > sizes[1]:
+                break
+            phone.wait_for_timeout(100)
         assert sizes[0] > sizes[1], f"{wide} is not wider than its box: {sizes}"
     raw = phone.get_by_role("link", name="Raw file").get_attribute("href")
     response = phone.request.get(raw)  # type: ignore[arg-type]
