@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from api_fakes import studio
+from api_fakes import install
 from fastapi.testclient import TestClient
 from mcp import Client
 
@@ -23,6 +23,7 @@ from swarmify_api.mcp import server
 from swarmify_connectors.logins import FileSecrets, ref
 from swarmify_kernel.sqlite import connect
 
+SIGNER = "packages/connectors/tests/fixtures/packages/signer"
 PASSWORD, NEW_PASSWORD = "Pa55-word-9183", "N3w-pa55-2207"
 TOTP = "JBSWY3DPEHPK3PXP"
 SESSION = '{"cookies": [{"name": "sid", "value": "s3ssion-c00kie-41"}]}'
@@ -105,11 +106,12 @@ def test_deleting_a_login_a_saved_workflow_names_is_refused_with_its_name(
     client: TestClient,
 ) -> None:
     w = client.post("/api/worlds", json={"name": "Shop"}).json()["id"]
-    studio(client, w)
+    assert install(client, SIGNER).status_code == 201  # a package that accepts a login
+    assert client.put(f"/api/worlds/{w}/packages/signer", json={"version": "1.0.0"}).is_success
     body = {"name": "shop_admin", "domains": ["a.com"], "username": "u", "password": PASSWORD}
     assert client.post(f"/api/worlds/{w}/logins", json=body).status_code == 201
     yaml = (
-        "name: Restock\nstages:\n  - connector: order\n    calls: studio\n"
+        "name: Restock\nstages:\n  - connector: order\n    calls: signer\n"
         "    params: {login: shop_admin}\n"
     )
     saved = client.post(f"/api/worlds/{w}/workflows", json={"yaml": yaml})

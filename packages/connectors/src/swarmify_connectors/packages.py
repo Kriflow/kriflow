@@ -236,6 +236,13 @@ SCHEMA: dict[str, Any] = {
             },
         },
         "capabilities": {"type": "array", "uniqueItems": True, "items": {"enum": CAPABILITIES}},
+        # A World Login (spec: World Logins): with `accepts`, a stage that names one hands its
+        # process the login's values, and its sandbox reaches the login's domains too.
+        "login": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"accepts": {"type": "boolean"}},
+        },
         # The Build Session Capability (ADR 0018): the core runs one sandboxed coding session in
         # a build folder seeded from `starter`, then calls `tool` on the result as the stage's
         # call. The session's network is `permissions.network`.
@@ -529,7 +536,8 @@ def permissions(manifest: dict[str, Any]) -> list[str]:
     folders it reads (`folders`), the Services it calls (`services`), the host's GPU (`gpu`),
     the world folders it owns
     (`owned_folders`), the Credentials it is given (`credentials`, by the variable it reads),
-    the hosts Swarmify signs in to for it (`sign_in`) and the core's Capabilities it uses
+    the World Login a stage names (`logins`), the hosts Swarmify signs in to for it (`sign_in`)
+    and the core's Capabilities it uses
     (`capabilities`). `{}` declares none."""
     granted = manifest.get("permissions", {})
     out = [f"network: {d}" for d in granted.get("network", [])]
@@ -549,6 +557,8 @@ def permissions(manifest: dict[str, Any]) -> list[str]:
         for f in setup.fields(manifest)
         if setup.secret(f) and "client_of" not in f
     ]
+    if manifest.get("login", {}).get("accepts"):
+        out.append("logins: the World Login a stage names, and its domains")
     for f in manifest.get("config", []):
         if f["type"] == "oauth":
             out += [f"sign_in: {domain(f['oauth'][u])}" for u in ("authorize_url", "token_url")]

@@ -25,7 +25,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NoReturn
@@ -37,7 +37,7 @@ from jsonschema.validators import validator_for
 from swarmify_connectors import build_session, oauth, publish, resources, setup
 from swarmify_connectors.credentials import Credentials
 from swarmify_connectors.fake import FakeTransport
-from swarmify_connectors.logins import FileSecrets, Logins
+from swarmify_connectors.logins import FileSecrets, Handed, Logins
 from swarmify_connectors.mcp_transport import Caller, McpTransport
 from swarmify_connectors.model import (
     KINDS,
@@ -103,6 +103,7 @@ __all__ = [
     "Storage",
     "Tool",
     "Unsure",
+    "accepts_login",
     "read_manifest",
 ]
 
@@ -212,10 +213,52 @@ def _preview_args(
     """A publish connector's `preview` arguments for a stage (`swarmify_connectors.publish`)."""
     return {
         "inputs": [config["input"]] if config.get("input") else list(config.get("inputs") or []),
-        "params": dict(config.get("params") or {}),
+        "params": _without_login(config.get("params")),
         "metadata": metadata or {},
         "edits": edits or {},
     }
+
+
+LOGIN = "login"
+"""A connector stage's param naming the World Login it signs in as; the core takes it out before
+the package's params check and its tool call."""
+LOGIN_ENV = (
+    "SWARMIFY_LOGIN_NAME",
+    "SWARMIFY_LOGIN_DOMAINS",
+    "SWARMIFY_LOGIN_USERNAME",
+    "SWARMIFY_LOGIN_PASSWORD",
+    "SWARMIFY_LOGIN_TOTP",
+    "SWARMIFY_LOGIN_SESSION",
+)
+"""What the process of a stage that names a login gets, and only it: the login's name, its
+domains (comma-separated), username, password, authenticator secret (when it has one) and the
+path of its Saved Session file. A coding session never sees these names."""
+SESSION_IN, SESSION_OUT = "login-session.json", "login-session.out.json"
+"""The Saved Session the core hands a login's process, mode 600 in its own scratch folder (its
+HOME), and the updated one the process writes beside it, kept once it ends; both deleted then."""
+LOGIN_RESULT = "login_result"
+"""A tool answer's key saying what came of its sign-in (logins.RESULTS), for `login.used`."""
+
+
+def _without_login(params: Any) -> dict[str, Any]:
+    return {k: v for k, v in dict(params or {}).items() if k != LOGIN}
+
+
+def accepts_login(connector: Connector) -> bool:
+    """Its Manifest says `[login] accepts = true`: only such a package ever receives one."""
+    return bool(connector.manifest.get("login", {}).get("accepts"))
+
+
+@dataclass
+class _Handoff:
+    """A login handed to one process: where its session files are, and what came of it."""
+
+    world_id: str
+    stage: Stage
+    package: str
+    login: str
+    home: Path
+    result: str = "received"
 
 
 NOTICE = "_notice"
@@ -308,6 +351,8 @@ class Connectors:
         """The id of the top run of a run's family (the run itself when it has no parent)."""
         self._watched: list[tuple[Connector, Confined]] = []
         """Processes others start (a swarm stage's agents), whose blocks `drain` reports."""
+        self._handoffs: dict[Stage, list[_Handoff]] = {}
+        """Logins handed to processes others start, by stage, settled when it ends (`settle`)."""
         self.setups = SetupStore(self.data_dir / "setup.json")
         self.logins = Logins(storage, FileSecrets(self.data_dir / "secrets.json"))
         """The world's World Logins; their secrets in their own mode-600 file, so deleting one
@@ -729,12 +774,22 @@ class Connectors:
         stage: Stage | None = None,
         blocked: list[str] | None = None,
         marks: bool = True,
+        login: str | None = None,
     ) -> Iterator[Caller]:
         """A session with the connector's process, in the sandbox (`confine`); what the sandbox
         blocked is reported after each call and at the end (and added to `blocked`). A
         package's tool failing with an `auth_failed` message marks its oauth fields for sign-in
-        again (oauth.is_auth_failure), unless `marks` is False, as for a sign-in's own call."""
-        confined, sandboxed = self.confine(connector, env, stage)
+        again (oauth.is_auth_failure), unless `marks` is False, as for a sign-in's own call.
+        `login`, the World Login the stage names, is handed to this process alone (`_hand`)."""
+        handoff, extra, handed = None, None, None
+        if login is not None:
+            assert stage is not None  # only a stage names a login
+            login_env, extra, handed = self._hand(connector, login, stage)
+            env = {**env, **login_env}
+        confined, sandboxed = self.confine(connector, env, stage, extra=extra)
+        if handed is not None:
+            assert stage is not None
+            handoff = self._place_session(connector, confined, handed, env, stage)
 
         def report() -> None:
             if confined and (lines := confined.blocked()):
@@ -745,7 +800,11 @@ class Connectors:
         def caller(call: Caller) -> Caller:
             def tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
                 try:
-                    return call(name, arguments)
+                    answer = call(name, arguments)
+                    said = answer.get(LOGIN_RESULT) if isinstance(answer, dict) else None
+                    if handoff is not None and isinstance(said, str):
+                        handoff.result = said
+                    return answer
                 except ConnectorError as exc:
                     if marks and connector.version is not None and oauth.is_auth_failure(str(exc)):
                         self._needs_sign_in(connector)
@@ -760,6 +819,80 @@ class Connectors:
                 yield caller(call)
         finally:
             report()
+            if handoff is not None:
+                self._settle_login(handoff)
+
+    # World Logins (spec: World Logins And Browser Connector)
+
+    def _hand(
+        self, connector: Connector, login: str, stage: Stage
+    ) -> tuple[dict[str, str], Grants, Handed]:
+        """The login's values as the process environment, and the network it adds (its
+        domains), for a package that accepts one. Raises ConnectorError when it does not, or
+        the world has no such login any more."""
+        if not accepts_login(connector):
+            raise ConnectorError(f"{connector.name} does not accept a login")
+        if not connector.command:
+            raise ConnectorError(f"{connector.name}: a login reaches only a package the box runs")
+        assert connector.world_id is not None
+        try:
+            handed = self.logins.hand(connector.world_id, login)
+        except KeyError:
+            raise ConnectorError(
+                f"this world has no login named {login} any more: add it on Settings, or take"
+                " it out of the stage"
+            ) from None
+        values = {
+            "SWARMIFY_LOGIN_NAME": login,
+            "SWARMIFY_LOGIN_DOMAINS": ",".join(handed.login.domains),
+            "SWARMIFY_LOGIN_USERNAME": handed.login.username,
+            "SWARMIFY_LOGIN_PASSWORD": handed.password,
+            **({"SWARMIFY_LOGIN_TOTP": handed.totp} if handed.totp else {}),
+            "SWARMIFY_LOGIN_SESSION": "",  # named now, so the sandbox passes it; set once placed
+        }
+        return values, Grants(domains=list(handed.login.domains)), handed
+
+    def _place_session(
+        self,
+        connector: Connector,
+        confined: Confined | None,
+        handed: Handed,
+        env: dict[str, str],
+        stage: Stage,
+    ) -> _Handoff:
+        """The Saved Session written, mode 600, in the process's own scratch folder, named in
+        `env` before the process starts."""
+        assert confined is not None and connector.world_id is not None  # `_hand` checked
+        home = confined.folder / "home"
+        session = home / SESSION_IN
+        if handed.session is not None:
+            fd = os.open(session, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(handed.session)
+        env["SWARMIFY_LOGIN_SESSION"] = str(session)
+        return _Handoff(connector.world_id, stage, connector.name, handed.login.name, home)
+
+    def _settle_login(self, handoff: _Handoff) -> None:
+        """Once the process ended: keep the session it saved, delete both session files at once
+        (not at the scratch folder's daily prune) and record `login.used`, with no values."""
+        out = handoff.home / SESSION_OUT
+        try:
+            saved = out.read_text()
+        except OSError:
+            saved = ""
+        if saved.strip():
+            self.logins.keep_session(handoff.world_id, handoff.login, saved)
+        for name in (SESSION_IN, SESSION_OUT):
+            (handoff.home / name).unlink(missing_ok=True)
+        run_id, stage_id = handoff.stage
+        self.logins.used(
+            handoff.world_id, run_id, stage_id, handoff.package, handoff.login, handoff.result
+        )
+
+    def settle(self, run_id: str, stage_id: str) -> None:
+        """A stage has ended: the logins its swarm's tool servers received settle."""
+        for handoff in self._handoffs.pop((run_id, stage_id), []):
+            self._settle_login(handoff)
 
     # The sandbox (ADR 0021)
 
@@ -1079,7 +1212,8 @@ class Connectors:
             saved = set(self.credentials.read())
         except PermissionError:
             saved = set()
-        return sorted(saved | {n for c in self.list_all(world_id) for n in c.credentials})
+        named = {n for c in self.list_all(world_id) for n in c.credentials}
+        return sorted(saved | named | set(LOGIN_ENV))
 
     def agent_servers(
         self,
@@ -1088,6 +1222,7 @@ class Connectors:
         pins: Mapping[str, str] | None = None,
         stage: Stage | None = None,
         run: Stage | None = None,
+        login: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """The standard MCP server config of each named connector that has a server, with its
         credentials: what a swarm stage's agents or a Build Session connect to. With `stage`
@@ -1098,7 +1233,9 @@ class Connectors:
         in, for the session to show when it fails to start; not MCP's, so the runtime takes it
         out before handing the config on. `run`, the (run, stage) it works for without being
         confined to it (a swarm stage's), names its run identity only; every command's process
-        gets its Manifest's Resources. Raises ConnectorError when one is missing a credential."""
+        gets its Manifest's Resources. `login`, the World Login a swarm stage names, goes to
+        each server whose package accepts one, which then runs confined to the stage. Raises
+        ConnectorError when one is missing a credential or the login is gone."""
         servers: dict[str, dict[str, Any]] = {}
         for name in names:
             connector = self.find(world_id, name, pins)
@@ -1109,10 +1246,18 @@ class Connectors:
                 servers[name] = {"type": "http", "url": connector.url, "headers": env}
                 continue
             env["SWARMIFY_ASSETS"] = str(self.data_dir / "worlds" / world_id / "assets")
-            known = Grants(env=self.identity(run)) if run and not stage else None
-            confined, sandboxed = self.confine(connector, env, stage, extra=known)
+            where, handed = stage, None
+            if login is not None and accepts_login(connector) and (where := stage or run):
+                login_env, known, handed = self._hand(connector, login, where)
+                env.update(login_env)
+            else:
+                known = Grants(env=self.identity(run)) if run and not stage else None
+            confined, sandboxed = self.confine(connector, env, where, extra=known)
             assert confined is not None  # it has a command
             self._watched.append((connector, confined))
+            if handed is not None and where is not None:
+                handoff = self._place_session(connector, confined, handed, env, where)
+                self._handoffs.setdefault(where, []).append(handoff)
             servers[name] = {
                 "type": "stdio",
                 "command": sandboxed.command[0],
@@ -1287,7 +1432,8 @@ class Connectors:
         connector = self.find(world_id, str(config.get("calls", "")), pins)
         if connector is None:
             return []
-        params = dict(config.get("params") or {})
+        params = _without_login(config.get("params"))  # the core's, never the package's
+        config = {**config, "params": params}
         if connector.kind == "publish":
             # Its own preview says what would stop it, as the gate's will. One that cannot answer
             # (its process not starting) is left to the gate, which previews again and says why;
@@ -1393,6 +1539,9 @@ class Connectors:
         count, at the package version `pins` (the workflow version's) names. A finished call is
         returned as recorded; a long job interrupted by a crash resumes polling instead of calling
         again. A call from an earlier visit is replaced: the stage reruns after a send-back."""
+        named = (config.get("params") or {}).get(LOGIN)
+        login = str(named) if named else None
+        config = {**config, "params": _without_login(config.get("params"))}
         done = self.storage.get_call(stage_id)
         if done is not None and done.visit != visit:
             done = None
@@ -1427,7 +1576,7 @@ class Connectors:
         # and the network it grants, lasts as long as the job.
         with (
             self._held(connector, (run_id, stage_id)),
-            self._open(connector, env, (run_id, stage_id)) as tool,
+            self._open(connector, env, (run_id, stage_id), login=login) as tool,
         ):
             if call is None or call.status != "polling":
                 call = self._call(

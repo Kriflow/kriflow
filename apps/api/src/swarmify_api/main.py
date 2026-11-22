@@ -78,6 +78,7 @@ from swarmify_connectors import (
     McpTransport,
     Packages,
     Unsure,
+    accepts_login,
     build_session,
     publish,
     resources,
@@ -227,6 +228,7 @@ def workflow_service(
                 c.version,
                 (c.manifest or {}).get("private_when", {}),
                 "build_session" in (c.manifest or {}).get("capabilities", []),
+                accepts_login(c),
             )
             for c in registry.list_all(world_id, pins)
         }
@@ -237,7 +239,7 @@ def workflow_service(
             live = workflow is not None and workflow.archived_at is None
             control.schedule(version.workflow_id, version.model.schedule if live else None)
 
-    workflows = Workflows(WorkflowStorage(migrated_db(root)), refs, on_saved)
+    workflows = Workflows(WorkflowStorage(migrated_db(root)), refs, on_saved, registry.logins.names)
     return workflows
 
 
@@ -908,12 +910,25 @@ def create_app(
     index = graph_index or McpGraphIndex(worlds_dir)
     writer = GraphWriter(migrated_db(root), worlds_dir, extract, graph_debounce)
     memory = Memory(migrated_db(root), root)
+    stage_logins: dict[str, str] = {}
+    """The World Login each running swarm stage names, by stage id."""
+
+    def stage_servers(
+        world_id: str,
+        names: list[str],
+        pins: Mapping[str, str] | None = None,
+        run: tuple[str, str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """A swarm stage's tool servers; those that accept a login get the one it names."""
+        login = stage_logins.get(run[1]) if run else None
+        return registry.agent_servers(world_id, names, pins, run=run, login=login)
+
     swarm = Swarm(
         whiteboard,
         runtime or SdkRuntime(sandboxed_cli=os.environ.get("SWARMIFY_SANDBOX_CLI") or None),
         memory,
         graphs=graph.WorldGraphs(world_svc, index),
-        servers=registry.agent_servers,
+        servers=stage_servers,
         clock=clock,
         budget=lambda run_id: runner.check_stop(run_id),  # the Budget, pause and abort live in Runs
         network=network,
@@ -949,6 +964,14 @@ def create_app(
             made = {r.id: r.status for r in others if r.id != run.id and r.status in UNSPOILED}
             promoted = {r.promoted_from for r in others if r.promoted_from}  # unparks a card
             config["made"] = memory.made(run.world_id, made, promoted)
+        if login := stage.config.get("login"):
+            # checked again at the start: a login deleted since the save fails the stage here
+            if login not in registry.logins.names(run.world_id):
+                raise ConnectorError(
+                    f"this world has no login named {login} any more: add it on Settings, or"
+                    " take it out of the stage"
+                )
+            stage_logins[stage_id] = str(login)
         try:
             swarm.run_stage(
                 run.world_id,
@@ -965,6 +988,9 @@ def create_app(
             )
         except Stopped as exc:
             raise OverBudget(str(exc)) from exc
+        finally:
+            stage_logins.pop(stage_id, None)
+            registry.settle(run.id, stage_id)
 
     def run_retro(run: Run, stage_id: str, stage: StageDef) -> bool:
         """The Retro stage: a judge-style session over the world's events, through the swarm's

@@ -141,3 +141,8 @@ a.button.primary:hover { background: #3fd68f; border-color: #3fd68f; }
 .segments label:last-of-type span { border-radius: 0 8px 8px 0; }
 .segments input:checked + span { color: var(--text); background: var(--raised); box-shadow: inset 0 -1px 0 var(--accent); }
 .segments input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A stage's World Login: chips that wrap, each its own 44 px target. */
+.login-pick { display: grid; gap: 6px; min-width: 0; }
+.login-pick .segments { display: flex; flex-wrap: wrap; gap: 8px; }
+.login-pick .segments label span { border: 1px solid var(--control); border-radius: 999px; padding: 0 14px; overflow-wrap: anywhere; }

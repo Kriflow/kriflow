@@ -1251,6 +1251,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/worlds/{world_id}/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Logins */
+        get: operations["list_logins_api_worlds__world_id__logins_get"];
+        put?: never;
+        /**
+         * Add Login
+         * @description 422 naming the bad field (`Domains: *.com is too broad`), 409 for a taken name.
+         */
+        post: operations["add_login_api_worlds__world_id__logins_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/logins/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Login */
+        get: operations["get_login_api_worlds__world_id__logins__name__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Login
+         * @description 409 while a saved workflow names it, with those workflows (`detail.workflows`).
+         */
+        delete: operations["delete_login_api_worlds__world_id__logins__name__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change Login
+         * @description Its domains or username; never a secret.
+         */
+        patch: operations["change_login_api_worlds__world_id__logins__name__patch"];
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/logins/{name}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate Login
+         * @description A new password (and authenticator secret, or none with `clear_totp`). Its Saved
+         *     Session is forgotten, so it is signed out everywhere on this box.
+         */
+        post: operations["rotate_login_api_worlds__world_id__logins__name__rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/logins/{name}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget Session */
+        delete: operations["forget_session_api_worlds__world_id__logins__name__session_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/logins/{name}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Login Uses
+         * @description The latest 20 stages that read it, newest first.
+         */
+        get: operations["login_uses_api_worlds__world_id__logins__name__uses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/stages/{stage_id}/tasks": {
         parameters: {
             query?: never;
@@ -3082,6 +3186,8 @@ export interface components {
             version: string;
             /** Icon */
             icon: string | null;
+            /** Accepts Login */
+            accepts_login: boolean;
         };
         /** Conversation */
         Conversation: {
@@ -3673,6 +3779,37 @@ export interface components {
             /** Ref */
             ref?: string | null;
         };
+        /** LoginChange */
+        LoginChange: {
+            /** Domains */
+            domains?: string[] | null;
+            /** Username */
+            username?: string | null;
+        };
+        /** LoginView */
+        LoginView: {
+            /** Name */
+            name: string;
+            /** Domains */
+            domains: string[];
+            /** Username */
+            username: string;
+            /** Has Totp */
+            has_totp: boolean;
+            /** Has Session */
+            has_session: boolean;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Rotated At */
+            rotated_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Workflows */
+            workflows: components["schemas"]["WorkflowRef"][];
+            last_use: components["schemas"]["UseView"] | null;
+        };
         /**
          * LookSetting
          * @description An agent's look in the skin only: code and logs keep the plain agent name (ADR 0004).
@@ -3834,6 +3971,31 @@ export interface components {
              * @default []
              */
             judgements: components["schemas"]["Judgement"][];
+        };
+        /** NewLogin */
+        NewLogin: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Domains
+             * @default []
+             */
+            domains: string[];
+            /**
+             * Username
+             * @default
+             */
+            username: string;
+            /**
+             * Password
+             * @default
+             */
+            password: string;
+            /** Totp Secret */
+            totp_secret?: string | null;
         };
         /**
          * NewSkill
@@ -4381,6 +4543,21 @@ export interface components {
              * @default false
              */
             poses_side: boolean;
+        };
+        /** Rotation */
+        Rotation: {
+            /**
+             * Password
+             * @default
+             */
+            password: string;
+            /** Totp Secret */
+            totp_secret?: string | null;
+            /**
+             * Clear Totp
+             * @default false
+             */
+            clear_totp: boolean;
         };
         /** Run */
         Run: {
@@ -5056,6 +5233,8 @@ export interface components {
             agents: number;
             /** Not Before */
             not_before?: string | null;
+            /** Login */
+            login?: string | null;
             /**
              * Type
              * @default swarm
@@ -5222,6 +5401,23 @@ export interface components {
             /** Removed */
             removed: string[];
         };
+        /** UseView */
+        UseView: {
+            /** Run Id */
+            run_id: string;
+            /** Stage Id */
+            stage_id: string;
+            /** Run Name */
+            run_name: string | null;
+            /** Stage Name */
+            stage_name: string | null;
+            /** Package */
+            package: string;
+            /** Result */
+            result: string;
+            /** At */
+            at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -5348,6 +5544,13 @@ export interface components {
              * @default false
              */
             skip_when_live: boolean;
+        };
+        /** WorkflowRef */
+        WorkflowRef: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * WorkflowStage
@@ -7948,6 +8151,270 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Call"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_logins_api_worlds__world_id__logins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_login_api_worlds__world_id__logins_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_login_api_worlds__world_id__logins__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_login_api_worlds__world_id__logins__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_login_api_worlds__world_id__logins__name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_login_api_worlds__world_id__logins__name__rotate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Rotation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_session_api_worlds__world_id__logins__name__session_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_uses_api_worlds__world_id__logins__name__uses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UseView"][];
                 };
             };
             /** @description Validation Error */

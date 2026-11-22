@@ -222,6 +222,9 @@ class Logins:
             for r in self.rows.logins(world_id)
         ]
 
+    def names(self, world_id: str) -> set[str]:
+        return {r["name"] for r in self.rows.logins(world_id)}
+
     def get(self, world_id: str, name: str) -> Login | None:
         return next((x for x in self.list_all(world_id) if x.name == name), None)
 

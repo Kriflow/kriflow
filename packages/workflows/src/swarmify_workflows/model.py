@@ -33,6 +33,8 @@ class SwarmStage:
     not_before: str | None = None
     """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
     such time at or after its turn comes."""
+    login: str | None = None
+    """The World Login its tools that accept one sign in as; only they ever receive it."""
     type: Literal["swarm"] = "swarm"
 
 
@@ -164,6 +166,8 @@ class ConnectorRef:
     builds: bool = False
     """It requests a Build Session, so a stage of it may name in `params.from` an earlier stage
     of it whose build folder it renders instead of building one."""
+    accepts_login: bool = False
+    """Its Manifest says `[login] accepts = true`: a stage may name a World Login for it."""
 
 
 @dataclass(frozen=True)
@@ -203,10 +207,15 @@ def calls(model: WorkflowModel) -> set[str]:
     return names
 
 
+def login_of(stage: Stage) -> str | None:
+    """The World Login a stage names: a connector stage's `params.login`, a swarm stage's
+    `login`."""
+    if isinstance(stage, ConnectorStage):
+        named = stage.params.get("login")
+        return None if named is None else str(named)
+    return stage.login if isinstance(stage, SwarmStage) else None
+
+
 def logins_named(model: WorkflowModel) -> set[str]:
-    """Every World Login a stage names: a connector stage's `params.login`."""
-    return {
-        str(s.params["login"])
-        for s in model.stages
-        if isinstance(s, ConnectorStage) and s.params.get("login")
-    }
+    """Every World Login the workflow's stages name."""
+    return {n for s in model.stages if (n := login_of(s))}

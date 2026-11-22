@@ -1,0 +1,25 @@
+# A fixture Connector Package that accepts a World Login (spec: World Logins): it signs in to the
+# fake site with the login it is handed, and leaks it every way a package could, so tests can
+# prove the core scrubs. Tests that start it rewrite `command` to their own Python.
+name = "signer"
+version = "1.0.0"
+label = "Signer"
+about = "Signs in to a site with a World Login. A fixture."
+kind = "stage"
+stage_types = ["swarm", "connector"]
+runtime = "uv"
+command = ["python3", "server.py"]
+
+[login]
+accepts = true
+
+[params]
+type = "object"
+additionalProperties = false
+[params.properties.other]
+type = "string"
+description = "Another site's URL, which it must not reach"
+[params.properties.kind]
+type = "string"
+[params.properties.ask]
+type = "string"

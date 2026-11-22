@@ -2,7 +2,9 @@
 adapter must pass too), what a login refuses, and that no read of a login carries a secret."""
 
 import json
+import shutil
 import stat
+import sys
 from contextlib import closing
 from pathlib import Path
 
@@ -10,6 +12,7 @@ import pytest
 
 from swarmify_connectors import Connectors
 from swarmify_connectors.logins import FileSecrets, SecretStore, Taken, domain_problem, totp
+from swarmify_connectors.packages import MANIFEST
 from swarmify_kernel.sqlite import connect
 
 SECRET = "JBSWY3DPEHPK3PXP"
@@ -125,3 +128,51 @@ def test_a_deleted_world_takes_its_logins_and_their_secrets(
     assert connectors.logins.list_all("w1") == []
     assert connectors.logins.hand("w2", "a").password == "p2"
     assert "p1" not in (tmp_path / "secrets.json").read_text()
+
+
+SIGNER = Path(__file__).parent / "fixtures/packages/signer"
+
+
+def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
+    connectors: Connectors, tmp_path: Path
+) -> None:
+    """Only the signer's server gets the login, confined to the stage, its session in a mode-600
+    file kept out of the sandbox plan; `settle` keeps the session it saved and deletes both."""
+    for name, source in (("signer", SIGNER), ("probe", SIGNER.parent / "probe")):
+        copy = tmp_path / "src" / name
+        shutil.copytree(source, copy)
+        toml = (copy / MANIFEST).read_text()
+        (copy / MANIFEST).write_text(
+            toml.replace('["python3", "server.py"]', f'["{sys.executable}", "server.py"]')
+        )
+        connectors.packages.install(str(copy))
+    connectors.setups.put("probe", "w1", {"api_key": "k"}, {})
+    for name in ("signer", "probe"):
+        connectors.enable("w1", name, "1.0.0")
+    connectors.logins.add("w1", "shop", ["shop.example.com"], "ana", "pa55-word", SECRET)
+    connectors.logins.keep_session("w1", "shop", '{"sid": "s3ss-old-777"}')
+
+    servers = connectors.agent_servers(
+        "w1", ["signer", "probe"], run=("run_1", "stg_1"), login="shop"
+    )
+    signer, probe = servers["signer"], servers["probe"]
+    assert signer["env"]["SWARMIFY_LOGIN_PASSWORD"] == "pa55-word"
+    assert signer["env"]["SWARMIFY_LOGIN_TOTP"] == SECRET
+    assert not [k for k in probe["env"] if k.startswith("SWARMIFY_LOGIN")]
+    home = Path(signer["env"]["SWARMIFY_LOGIN_SESSION"]).parent
+    plan = (home.parent / "plan.json").read_text()
+    assert "pa55-word" not in plan and SECRET not in plan and "s3ss-old-777" not in plan
+    assert json.loads(plan)["sandbox"]["network"]["allowedDomains"] == ["shop.example.com"]
+    assert "/runs/run_1/stg_1" in plan  # it writes the stage's folder, confined to it
+    session = home / "login-session.json"
+    assert stat.S_IMODE(session.stat().st_mode) == 0o600
+    (home / "login-session.out.json").write_text('{"sid": "new"}')
+
+    connectors.settle("run_1", "stg_1")
+    assert connectors.logins.hand("w1", "shop").session == '{"sid": "new"}'
+    assert not session.exists() and not (home / "login-session.out.json").exists()
+    [use] = connectors.logins.uses("w1", "shop")
+    assert (use.run_id, use.stage_id, use.package, use.result) == (
+        "run_1", "stg_1", "signer", "received"
+    )  # fmt: skip
+    assert "SWARMIFY_LOGIN_PASSWORD" in connectors.secret_names("w1")

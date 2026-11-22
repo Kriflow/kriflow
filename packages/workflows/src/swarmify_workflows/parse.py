@@ -36,6 +36,7 @@ STAGE_FIELDS: dict[str, set[str]] = {
         "model",
         "agents",
         "not_before",
+        "login",
     },
     "gate": {"ask", "kind", "max_send_backs", "picks", "entry"},
     "connector": {"calls", "input", "inputs", "output", "params", "not_before"},
@@ -190,7 +191,7 @@ def _parse_stage(
     if kind == "swarm":
         goal, done_when = f.text("goal", required=True), f.text("done_when", required=True)
         tools, graphs, produces = f.names("tools"), f.names("graphs"), f.names("produces")
-        output_type, model = f.text("output_type"), f.text("model")
+        output_type, model, login = f.text("output_type"), f.text("model"), f.text("login")
         count = f.number("agents", integer=True) or agents or 1
         if goal and done_when:
             stage = SwarmStage(
@@ -204,6 +205,7 @@ def _parse_stage(
                 model,
                 int(count),
                 not_before,
+                login,
             )
     elif kind == "gate":
         ask = f.text("ask", required=True)

@@ -21,6 +21,7 @@ type WorkflowVersion = components["schemas"]["WorkflowVersion"];
 type Starter = components["schemas"]["Starter"];
 type World = components["schemas"]["World"];
 type Template = components["schemas"]["Template"];
+type Login = components["schemas"]["LoginView"];
 export const EDITOR_TABS = ["stages", "planner", "yaml", "scorecard"] as const;
 export type EditorTab = (typeof EDITOR_TABS)[number];
 type Doc = Record<string, unknown>;
@@ -168,6 +169,7 @@ export function WorkflowEditor() {
   const phone = usePhone();
   const connectors = useConnectors(worldId);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [logins, setLogins] = useState<Login[]>([]);
   // A phone edits a stage in a sheet over the list; a wider screen in the aside.
   const [sheet, setSheet] = useState(false);
   // The last removal, undone in one step from the text before it.
@@ -184,6 +186,13 @@ export function WorkflowEditor() {
     api
       .GET("/api/worlds/{world_id}/templates", { params: { path: { world_id: worldId } } })
       .then(({ data }) => setTemplates(data ?? []))
+      .catch(() => undefined);
+  }, [worldId]);
+
+  useEffect(() => {
+    api
+      .GET("/api/worlds/{world_id}/logins", { params: { path: { world_id: worldId } } })
+      .then(({ data }) => setLogins(data ?? []))
       .catch(() => undefined);
   }, [worldId]);
 
@@ -448,6 +457,10 @@ export function WorkflowEditor() {
   const offered = held ? templates.filter((t) => t.folder === held) : null;
   // a build starts from its Template (`base`), a direct render reads one in place (`project`)
   const param = called?.capabilities.includes("build_session") ? "base" : "project";
+  // A World Login is offered only once the stage uses a package that accepts one.
+  const kind = stage ? stageType(stage) : null;
+  const named = kind === "swarm" ? asList(stage?.tools).split(", ") : kind === "connector" ? [asText(stage?.calls)] : [];
+  const takesLogin = named.some((n) => connectors[n]?.accepts_login);
   const tabs: [EditorTab, string][] = [
     ["stages", "Stages"],
     ["planner", role("planner")],
@@ -489,6 +502,8 @@ export function WorkflowEditor() {
       phone={phone}
       onField={setField}
       onBase={(index, base) => setBase(index, param, base)}
+      logins={takesLogin ? logins : null}
+      onLogin={(index, login) => (kind === "swarm" ? setField(index, "login", login) : setBase(index, "login", login))}
       onMove={move}
       onRemove={remove}
       onDone={() => setSheet(false)}
@@ -922,6 +937,8 @@ function StagePanel({
   onMove,
   onRemove,
   onDone,
+  logins,
+  onLogin,
 }: {
   stages: RawStage[];
   index: number;
@@ -938,6 +955,9 @@ function StagePanel({
   onMove: (index: number, by: -1 | 1) => void;
   onRemove: (index: number) => void;
   onDone: () => void;
+  /** The world's logins, when one of the stage's packages accepts one; null otherwise. */
+  logins: Login[] | null;
+  onLogin: (index: number, login: string) => void;
 }) {
   const stage = stages[index] ?? {};
   const type = stageType(stage);
@@ -1030,6 +1050,14 @@ function StagePanel({
               onBase={(b) => onBase(index, b)}
             />
           )}
+          {logins && (
+            <LoginPicker
+              name={name}
+              logins={logins}
+              login={asText(type === "swarm" ? stage.login : (stage.params as Doc | undefined)?.login)}
+              onLogin={(l) => onLogin(index, l)}
+            />
+          )}
           {type === "connector" && "params" in stage && <span className="faint">params: edit them in the YAML view.</span>}
         </>
       ) : (
@@ -1058,6 +1086,70 @@ function StagePanel({
         </button>
       </span>
     </section>
+  );
+}
+
+const RESULT_WORDS: Record<string, string> = {
+  signed_in: "Signed in",
+  reused_session: "Reused session",
+  person_check: "Asked you for a code",
+  refused_origin: "Refused another site",
+  failed: "Failed",
+  received: "Used",
+};
+
+/** The World Login a stage signs in as: chips of the world's logins (a list past four) and None,
+ * the chosen one's last result first. */
+function LoginPicker({
+  name,
+  logins,
+  login,
+  onLogin,
+}: {
+  name: string;
+  logins: Login[];
+  login: string;
+  onLogin: (login: string) => void;
+}) {
+  const { worldId } = useParams({ strict: false }) as { worldId: string };
+  const chosen = logins.find((l) => l.name === login);
+  const last = chosen?.last_use;
+  const choices = ["", ...logins.map((l) => l.name), ...(login && !chosen ? [login] : [])];
+  const label = (n: string) => (n === "" ? "None" : n === login && !chosen ? `${n} (not in this world)` : n);
+  return (
+    <div className="login-pick">
+      {choices.length > 5 ? (
+        <label>
+          <span>Login</span>
+          <select aria-label={`Login of ${name}`} value={login} onChange={(e) => onLogin(e.target.value)}>
+            {choices.map((n) => (
+              <option key={n} value={n}>
+                {label(n)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <fieldset className="segments" aria-label={`Login of ${name}`}>
+          <legend>Login</legend>
+          {choices.map((n) => (
+            <label key={n}>
+              <input type="radio" name={`login-${name}`} value={n} checked={login === n} onChange={() => onLogin(n)} />
+              <span>{label(n)}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {last ? (
+        <span className="faint">
+          Last time: {RESULT_WORDS[last.result] ?? last.result}, {new Date(last.at).toLocaleString()}
+        </span>
+      ) : logins.length === 0 ? (
+        <span className="faint">
+          No logins in this world yet. <Link to="/worlds/$worldId/settings" params={{ worldId }}>Add one on Settings</Link>.
+        </span>
+      ) : null}
+    </div>
   );
 }
 

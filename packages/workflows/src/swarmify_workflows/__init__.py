@@ -5,7 +5,7 @@ immutable Workflow Version. Connectors belong to another context, so the composi
 in a function from world id to the connectors that world allows.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -25,6 +25,7 @@ from swarmify_workflows.model import (
     WorkflowVersion,
     calls,
     children,
+    login_of,
     logins_named,
 )
 from swarmify_workflows.parse import parse_workflow
@@ -56,6 +57,7 @@ __all__ = [
     "Workflows",
     "cron_problem",
     "dump_workflow",
+    "login_of",
     "logins_named",
     "next_fire",
 ]
@@ -101,6 +103,7 @@ class Workflows:
         storage: Storage,
         connectors_for: Callable[[str, Mapping[str, str]], Mapping[str, ConnectorRef]],
         on_saved: Callable[[WorkflowVersion], None] = lambda _: None,
+        logins_for: Callable[[str], Collection[str]] | None = None,
     ) -> None:
         """`connectors_for(world id, pins)` gives the world's connectors, a package named in
         `pins` at that version over the world's pin. `on_saved` sees every new version once it
@@ -110,6 +113,8 @@ class Workflows:
         self.storage = storage
         self.connectors_for = connectors_for
         self.on_saved = on_saved
+        self.logins_for = logins_for
+        """The names of a world's World Logins, which a stage may name; None checks none."""
 
     def check(
         self,
@@ -128,6 +133,7 @@ class Workflows:
                 workflow_id=workflow_id,
                 connectors=connectors,
                 references=self._references(),
+                logins=self.logins_for(world_id) if self.logins_for else None,
             )
         return Draft(model, violations, warnings(model, connectors) if model is not None else [])
 
