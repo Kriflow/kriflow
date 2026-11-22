@@ -417,6 +417,35 @@ test("a schedule shows its next run from the check, in the list and the aside", 
   expect(yaml.value).toMatch(/schedule: ["']?0 8 \* \* 1["']?\n/);
 });
 
+test("a stage's not_before and the schedule's skip_when_live edit the YAML, and the check's refusal shows", async () => {
+  fake({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "GET /api/worlds": () => Response.json([video]),
+    "POST /api/worlds/world_1/workflows/check": async (req) => {
+      const { yaml } = (await req.json()) as { yaml: string };
+      const bad = yaml.includes("Mars/Base");
+      return Response.json({
+        violations: bad ? [{ rule: "schema", message: "not_before names an unknown timezone 'Mars/Base', use an IANA name", stage: "research" }] : [],
+        model,
+        next_run_at: yaml.includes("schedule:") ? "2026-11-02T08:00:00+00:00" : null,
+      });
+    },
+  });
+  const { screen } = await mountAt("/worlds/world_1/workflows/new");
+  await screen.getByRole("tab", { name: "Stages" }).click();
+  await screen.getByLabelText("Schedule (cron, UTC)").fill("0 8 * * 1");
+  await screen.getByLabelText("Skip a tick while a run of it is live").click();
+  await expect.element(screen.getByTestId("schedule")).toMatchTextContent(/A tick is skipped while a run of it is live\./);
+  await screen.getByLabelText("Not before (17:00 America/Toronto) of research").fill("17:00 Mars/Base");
+  await expect.element(screen.getByTestId("problems")).toMatchTextContent(/research: not_before names an unknown timezone 'Mars\/Base'/);
+  await screen.getByLabelText("Not before (17:00 America/Toronto) of research").fill("17:00 America/Toronto");
+  await expect.element(screen.getByTestId("problems")).toMatchTextContent(/Checks pass/);
+  await screen.getByRole("tab", { name: "YAML" }).click();
+  const yaml = screen.getByLabelText("Workflow YAML").element() as HTMLTextAreaElement;
+  expect(yaml.value).toMatch(/skip_when_live: true\n/);
+  expect(yaml.value).toMatch(/not_before: 17:00 America\/Toronto\n/);
+});
+
 test("the planner drafts through its endpoint and its YAML becomes the editor's text", async () => {
   const sent: unknown[] = [];
   fake({

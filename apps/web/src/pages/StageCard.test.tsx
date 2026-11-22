@@ -108,3 +108,17 @@ test("the side column lists every file the run made with its line by type, and s
   const { rows: by, below } = spendByStage(done, agents);
   expect(by.reduce((sum, r) => sum + r.usd, below)).toBeCloseTo(done.spent_usd);
 });
+
+test("a stage held for its not_before time says when it runs, in its card, its row and the hero", async () => {
+  const at = new Date(Date.now() + 3 * 3600_000).toISOString();
+  const held = run("running", [
+    stage(0, "approve", "gate", "done"),
+    stage(1, "post", "connector", "running", { calls: "publish", started_at: ts, runs_at: at, config: { not_before: "17:00 America/Toronto" } }),
+  ]);
+  fakeFetch({ "GET /api/runs/run_1": () => Response.json(held), "GET /api/runs/run_1/artifacts": () => Response.json([]) });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
+  const when = new Date(at).toLocaleString();
+  await expect.element(screen.getByTestId("stage-holding")).toHaveTextContent(`Waits until ${when}, its not before time (17:00 America/Toronto). It holds no slot until then.`);
+  await expect.element(screen.getByTestId("stage-meta")).toMatchTextContent(/waits until/);
+  await expect.element(screen.getByTestId("hero-sub")).toHaveTextContent(`post, step 2 of 2. Waits until ${when}. Nothing needs you yet.`);
+});

@@ -2711,6 +2711,8 @@ export interface components {
             };
             /** Inputs */
             inputs?: string[];
+            /** Not Before */
+            not_before?: string | null;
             /**
              * Type
              * @default connector
@@ -4136,6 +4138,8 @@ export interface components {
             items?: components["schemas"]["ItemView"][];
             /** Waiting */
             waiting?: string | null;
+            /** Runs At */
+            runs_at?: string | null;
         };
         /** SaveAsWorkflow */
         SaveAsWorkflow: {
@@ -4598,6 +4602,8 @@ export interface components {
              * @default 1
              */
             agents: number;
+            /** Not Before */
+            not_before?: string | null;
             /**
              * Type
              * @default swarm
@@ -4883,6 +4889,11 @@ export interface components {
             given?: string[];
             /** Budget Warn Usd */
             budget_warn_usd?: number | null;
+            /**
+             * Skip When Live
+             * @default false
+             */
+            skip_when_live: boolean;
         };
         /**
          * WorkflowStage
@@ -4911,6 +4922,8 @@ export interface components {
              * @default false
              */
             approve: boolean;
+            /** Not Before */
+            not_before?: string | null;
             /**
              * Type
              * @default workflow

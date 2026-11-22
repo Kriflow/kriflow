@@ -32,6 +32,13 @@ export function stageSeconds(s: Stage, now = Date.now()): number | null {
   return Math.max(0, (end - Date.parse(s.started_at)) / 1000);
 }
 
+/** A running stage with `not_before` whose time has not come: it holds no slot and does nothing yet. */
+export const holding = (s: Stage) => !!s.runs_at && Date.parse(s.runs_at) > Date.now();
+
+/** A time as the run page says when a held stage runs: weekday, hour and minute, in the viewer's zone. */
+const shortTime = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+
 /** A step's state in a word or its duration: "2m 14s", "running", "waiting". */
 export function stepMeta(s: Stage, queued = false): string {
   const took = stageSeconds(s);
@@ -39,6 +46,7 @@ export function stepMeta(s: Stage, queued = false): string {
     case "done":
       return took === null ? "done" : clock(took);
     case "running":
+      if (holding(s)) return `waits until ${shortTime(s.runs_at!)}`;
       if (s.waiting) return s.waiting.split(":", 1)[0] ?? s.waiting;
       return s.network ? "waiting for the network" : "running";
     case "waiting":
@@ -946,6 +954,12 @@ export function StagePanel(p: PanelProps) {
       {stage.network && (
         <p className="notice" role="status" data-testid="stage-network">
           {stage.network}
+        </p>
+      )}
+      {holding(stage) && (
+        <p className="notice" role="status" data-testid="stage-holding">
+          Waits until {new Date(stage.runs_at!).toLocaleString()}, its not before time ({String(stage.config?.not_before ?? "")}).
+          It holds no slot until then.
         </p>
       )}
       {stage.waiting && (
