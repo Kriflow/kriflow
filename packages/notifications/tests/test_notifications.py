@@ -99,7 +99,7 @@ def test_the_test_message_and_clearing_the_channel(
     notifications.set_webhook("world_1", fake.url)
     notifications.set_webhook("world_1", fake.url)  # saving again replaces, not duplicates
     notifications.send_test("world_1")
-    assert fake.texts() == [f"Swarmify is connected. <{GATES}|Open gates>"]
+    assert fake.texts() == [f"Kriflow is connected. <{GATES}|Open gates>"]
     notifications.set_webhook("world_1", "")
     assert notifications.webhook("world_1") is None
     notifications.set_webhook("world_1", fake.url)

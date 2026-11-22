@@ -1,4 +1,4 @@
-// Swarmify's service worker: the app shell only. vite.config.ts fills in the build's file list and
+// Kriflow's service worker: the app shell only. vite.config.ts fills in the build's file list and
 // emits this as /sw.js. The API, its event streams, media and downloads always go to the network:
 // they are never matched, cached or served from here.
 const SHELL = __PRECACHE__;
@@ -44,7 +44,7 @@ self.addEventListener("push", (event) => {
     // Not ours to read: still show something, as browsers require for every push.
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "Swarmify", {
+    self.registration.showNotification(data.title || "Kriflow", {
       body: data.body || "A run needs you.",
       tag: data.tag,
       renotify: Boolean(data.tag && data.renotify),
@@ -55,7 +55,7 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// A tap focuses an open Swarmify window and asks the app to route to the link itself (App.tsx),
+// A tap focuses an open Kriflow window and asks the app to route to the link itself (App.tsx),
 // so the open app is not reloaded; with no window open it opens the link. Only paths on this
 // origin are followed.
 self.addEventListener("notificationclick", (event) => {

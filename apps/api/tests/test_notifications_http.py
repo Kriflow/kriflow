@@ -64,7 +64,7 @@ def test_the_settings_page_stores_a_webhook_per_world_and_never_returns_it(
     assert running.get(f"/api/worlds/{other}/notifications").json() == {"slack_webhook": None}
 
     assert running.post(f"{url}/test").status_code == 204
-    assert slack.texts() == [f"Swarmify is connected. <{BASE}/gates|Open gates>"]
+    assert slack.texts() == [f"Kriflow is connected. <{BASE}/gates|Open gates>"]
     slack.status = 404
     refused = running.post(f"{url}/test")
     assert refused.status_code == 502 and "Slack did not take" in refused.json()["detail"]

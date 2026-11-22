@@ -1,4 +1,4 @@
-# The curated index of Swarmify Connector Packages. Format and how to add one: README.md.
+# The curated index of Kriflow Connector Packages. Format and how to add one: README.md.
 
 [[packages]]
 name = "blender_build"
@@ -134,7 +134,7 @@ permissions = [
 
 [[packages]]
 name = "slack"
-description = "Posts each gate to a Slack channel with a button per answer, and updates the message once the gate is answered, there or in Swarmify. A reply in a gate's thread asks the run's assistant, whose proposals come with Apply and Not now. Needs a Slack app of your own in Socket Mode (its README)."
+description = "Posts each gate to a Slack channel with a button per answer, and updates the message once the gate is answered, there or in Kriflow. A reply in a gate's thread asks the run's assistant, whose proposals come with Apply and Not now. Needs a Slack app of your own in Socket Mode (its README)."
 git = "https://github.com/wagleanuj/swarmify.git"
 subfolder = "connectors/slack"
 ref = "v2"

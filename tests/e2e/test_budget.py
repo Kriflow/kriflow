@@ -49,7 +49,7 @@ def test_a_run_warns_at_80_percent_and_waits_at_100_for_money_or_an_abort(
         expect(page.get_by_test_id("slack-state")).to_contain_text("Posting to http://127.0.0.1")
         page.get_by_role("button", name="Send a test message").click()
         expect(page.get_by_text("Test sent.")).to_be_visible()
-        assert "Swarmify is connected" in slack.texts()[-1]
+        assert "Kriflow is connected" in slack.texts()[-1]
 
         # A test run with its budget overridden at the start (story 23).
         start = f"/workflows/{workflow['workflow_id']}/runs"

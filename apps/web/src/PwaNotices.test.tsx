@@ -23,7 +23,7 @@ test("offline says so, and a waiting version asks before it reloads", async () =
   setPwa({ online: false, waiting: worker });
   const screen = await render(<PwaNotices />);
   await expect.element(screen.getByText("Offline. Live runs and gates come back when you reconnect.")).toBeVisible();
-  await expect.element(screen.getByText("A new version of Swarmify is ready.")).toBeVisible();
+  await expect.element(screen.getByText("A new version of Kriflow is ready.")).toBeVisible();
   expect(worker.postMessage).not.toHaveBeenCalled();
   await screen.getByRole("button", { name: "Reload" }).click();
   expect(worker.postMessage).toHaveBeenCalledWith("SKIP_WAITING");
@@ -36,7 +36,7 @@ test("the install hint waits until the app has given something, then goes for go
   markAnswered();
   expect(earnedInstallHint()).toBe(true);
   const screen = await render(<PwaNotices />);
-  const hint = screen.getByRole("complementary", { name: "Install Swarmify" });
+  const hint = screen.getByRole("complementary", { name: "Install Kriflow" });
   await expect.element(hint).toBeVisible();
   await screen.getByRole("button", { name: "No thanks" }).click();
   await expect.element(hint).not.toBeInTheDocument();
@@ -48,14 +48,14 @@ test("three days of use earn the hint too, never on the Office", async () => {
   localStorage.setItem("swarmify.days", JSON.stringify(["2026-01-01", "2026-01-02", "2026-01-03"]));
   setPwa({ offer: offer() as never, office: true });
   const screen = await render(<PwaNotices />);
-  expect(screen.getByRole("complementary", { name: "Install Swarmify" }).query()).toBeNull();
+  expect(screen.getByRole("complementary", { name: "Install Kriflow" }).query()).toBeNull();
 });
 
 test("Settings installs from the browser's offer", async () => {
   const held = offer();
   setPwa({ offer: held as never });
   const screen = await render(<InstallRow Row={Row} />);
-  await screen.getByRole("button", { name: "Install Swarmify" }).click();
+  await screen.getByRole("button", { name: "Install Kriflow" }).click();
   expect(held.prompt).toHaveBeenCalled();
   await expect.element(screen.getByText(/has not offered an install/)).toBeVisible();
 });

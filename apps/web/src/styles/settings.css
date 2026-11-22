@@ -41,7 +41,7 @@ fieldset.set-panel { display: grid; min-width: 0; }
 .sign-in { display: grid; place-content: center; justify-items: center; gap: 24px; min-height: 100svh; max-width: none; box-sizing: border-box;
   padding: max(24px, env(safe-area-inset-top)) max(var(--pad), env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(var(--pad), env(safe-area-inset-left)); }
 .sign-in .brand { flex-direction: column; gap: 12px; padding: 0; font-size: 1.25rem; letter-spacing: -0.01em; }
-.sign-in .brand svg { width: 48px; height: 48px; }
+.sign-in .brand img { width: 48px; height: 48px; }
 .sign-in form { display: grid; gap: 16px; width: min(22rem, calc(100vw - 2 * var(--pad))); box-sizing: border-box; }
 .sign-in form > label { margin-bottom: -10px; }
 .sign-in h1, .sign-in p { margin: 0; }

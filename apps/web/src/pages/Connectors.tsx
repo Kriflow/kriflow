@@ -8,6 +8,7 @@ import { connectorsRoute } from "../router";
 import { Icon } from "../Icon";
 import { Intro } from "../Intro";
 import { Loading, Skeleton } from "../Skeleton";
+import { APP } from "../skin";
 import { usePhone } from "../usePhone";
 import { Menu } from "./Menu";
 
@@ -63,7 +64,7 @@ const GROUPS: [Connector["kind"], string, string][] = [
   ["tool", "Tools agents use inside a swarm step", ""],
   ["stage", "Steps of their own", ""],
   ["publish", "Publishing", "Always after a gate."],
-  ["notify", "Notifications", "Answer gates from outside Swarmify."],
+  ["notify", "Notifications", `Answer gates from outside ${APP}.`],
 ];
 
 /** A package's logo (its Manifest's `icon`), else a tile of its label's first letter tinted by
@@ -294,8 +295,8 @@ export function Connectors() {
         <div>
           <h1>Connectors</h1>
           <Intro lead={`${connectors ? `${connectors.length} connectors, ${waiting} waiting on a key. ` : ""}Any MCP server can be one.`} label="About connectors">
-            <p>Swarmify installs it as a local package with its keys in its Setup. No key ever enters a run or a shared workflow.</p>
-            <p>Web search and the world's graph are not connectors: they are Agent Tools Swarmify gives swarm steps, with nothing to set up.</p>
+            <p>{APP} installs it as a local package with its keys in its Setup. No key ever enters a run or a shared workflow.</p>
+            <p>Web search and the world's graph are not connectors: they are Agent Tools {APP} gives swarm steps, with nothing to set up.</p>
           </Intro>
         </div>
         {phone ? (
@@ -360,7 +361,7 @@ export function Connectors() {
       <form className="panel add-connector" onSubmit={test} aria-label="Add a connector">
         <h2>Add a connector</h2>
         <p className="faint">
-          Paste an MCP command or URL. Swarmify starts it once, lists its tools, and shows you what
+          Paste an MCP command or URL. {APP} starts it once, lists its tools, and shows you what
           it will be allowed to do before saving.
         </p>
         <label>
@@ -588,7 +589,7 @@ const PERMISSION_KINDS: [string, string][] = [
   ["services", "Services it calls"],
   ["owned_folders", "World folders it owns"],
   ["credentials", "Credentials it is given"],
-  ["sign_in", "Sign-in hosts Swarmify calls for it"],
+  ["sign_in", `Sign-in hosts ${APP} calls for it`],
   ["capabilities", "Capabilities it uses"],
 ];
 
@@ -647,7 +648,7 @@ function InstallPackage({ from, onInstalled }: { from: PackageFrom; onInstalled:
     <form className="panel add-connector" onSubmit={ask} aria-label="Install a package">
       <h2>Install a package</h2>
       <p className="faint">
-        From a git URL at a tag, branch or commit, or a folder on this machine. Swarmify fetches it without running
+        From a git URL at a tag, branch or commit, or a folder on this machine. {APP} fetches it without running
         any of it and shows everything it asks for; nothing of it runs, its install step included, until you approve.
       </p>
       <label>
@@ -1107,7 +1108,7 @@ function SignIn({ f, connector, worldId }: { f: SetupField; connector: Pick<Conn
   const state = f.needs_sign_in
     ? `The provider refused the sign-in. ${connector.label} steps fail until you sign in again.`
     : signedIn
-      ? "Signed in. Swarmify refreshes the access token before it expires."
+      ? `Signed in. ${APP} refreshes the access token before it expires.`
       : "Not signed in.";
 
   async function go() {

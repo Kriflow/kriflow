@@ -51,9 +51,9 @@ test("lists connectors by kind with their steps and health, and flags a missing 
   const { screen } = await mountAt("/worlds/world_1/connectors");
   await expect.element(screen.getByText(/2 connectors, 1 waiting on a key\./)).toBeVisible();
   // the rest of the intro waits behind its info glyph
-  await expect.element(screen.getByText(/they are Agent Tools Swarmify gives swarm steps/)).not.toBeVisible();
+  await expect.element(screen.getByText(/they are Agent Tools Kriflow gives swarm steps/)).not.toBeVisible();
   await screen.getByRole("img", { name: "About connectors" }).click();
-  await expect.element(screen.getByText(/they are Agent Tools Swarmify gives swarm steps/)).toBeVisible();
+  await expect.element(screen.getByText(/they are Agent Tools Kriflow gives swarm steps/)).toBeVisible();
   expect(screen.getByRole("list", { name: "Tools agents use inside a swarm step" }).elements()).toHaveLength(0);
   await expect
     .element(screen.getByRole("region", { name: "Publishing" }))
@@ -475,7 +475,7 @@ test("installing from git shows every permission, marks what an upgrade adds, an
   await expect.element(shown).toMatchTextContent(/At commit 0123456789ab\./);
   await expect.element(shown).toMatchTextContent(/Hosts it reaches\s*api\.example\.org, eu\.example\.org \(new\)/);
   await expect.element(shown).toMatchTextContent(/Credentials it is given\s*ECHO_KEY/);
-  await expect.element(shown).toMatchTextContent(/Sign-in hosts Swarmify calls for it\s*auth\.example\.org/);
+  await expect.element(shown).toMatchTextContent(/Sign-in hosts Kriflow calls for it\s*auth\.example\.org/);
   await expect.element(shown).toMatchTextContent(/Capabilities it uses\s*remote approvals/);
   await expect.element(shown.getByRole("status")).toHaveTextContent("New since 1.0.0: network: eu.example.org. Installing 2.0.0 grants it too.");
   expect(calls).not.toContain("POST /api/packages");

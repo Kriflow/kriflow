@@ -12,7 +12,7 @@ import { status } from "./pages/Connectors";
 import { figures } from "./pages/WorldOverview";
 import { Sheet } from "./Sheet";
 import { Skeleton } from "./Skeleton";
-import { worldHome } from "./skin";
+import { APP, worldHome } from "./skin";
 import "./styles/shell.css";
 
 type World = components["schemas"]["World"];
@@ -68,11 +68,8 @@ const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 export const Mark = () => (
   <span className="brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 18 L12 4 L20 18 Z" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinejoin="round" />
-      <path d="M9 18 L12 12.5 L15 18" fill="var(--accent)" />
-    </svg>
-    Swarmify
+    <img src="/mark.svg" width="22" height="22" alt="" />
+    {APP}
   </span>
 );
 
