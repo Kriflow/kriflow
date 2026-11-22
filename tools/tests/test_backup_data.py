@@ -53,9 +53,12 @@ def test_backup_leaves_out_what_can_be_made_again_and_keeps_the_newest(tmp_path,
     monkeypatch.setattr(backup_data, "MIN_FREE", 0)
     # a file that goes away between the walk and the tar (a process's scratch) is skipped
     walked = backup_data.plan
-    monkeypatch.setattr(
-        backup_data, "plan", lambda r: (lambda f, d, n, e: ([*f, "gone.txt"], d, n, e))(*walked(r))
-    )
+
+    def with_a_gone_file(r):
+        files, dbs, size, est = walked(r)
+        return [*files, "gone.txt"], dbs, size, est
+
+    monkeypatch.setattr(backup_data, "plan", with_a_gone_file)
 
     backup_data.inside("t", root, dest, 2, False, f"{os.getuid()}:{os.getgid()}")
     live.close()
