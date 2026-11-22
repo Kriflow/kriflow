@@ -25,11 +25,12 @@ import re
 import shutil
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from dbos import DBOS, DBOSConfig, SetWorkflowID
 
@@ -104,6 +105,9 @@ guards a run against workflows edited after it pinned its version."""
 # ponytail: pinned so a code change does not orphan runs in flight (DBOS only recovers
 # workflows of the current application version). Bump it when the workflow's step order changes.
 APP_VERSION = "6"
+DRAIN_SECONDS = 1200.0
+"""How long a drain waits for the stages at work before the api stops anyway (20 min: an
+Instagram Reel's processing alone can take 10)."""
 
 Connector = Callable[[Run, str, StageDef], None]
 """Calls one connector stage. Arguments: the run, the stage id (the idempotency key) and the
@@ -137,6 +141,16 @@ _runner: "Runner | None" = None
 _waiting: set[str] = set()
 _waiting_lock = threading.Lock()
 _stopping = threading.Event()
+# The Drain (Safe Deploys): while `_draining` is set no stage starts; each waits, parked, and a
+# shutdown leaves it PENDING for the next launch. `_at_work` is every stage executing in this
+# process, by (run, index), with when it started: what a drain waits for. The database cannot
+# say: a stage waiting for its `not_before` reads running too.
+_draining = threading.Event()
+_deadline = 0.0
+"""time.monotonic() when the drain started gives up waiting."""
+_at_work: dict[tuple[str, int], str] = {}
+_parked: set[tuple[str, int]] = set()
+_work_lock = threading.Lock()
 log = logging.getLogger(__name__)
 
 
@@ -157,6 +171,27 @@ class _ChildEnded:
 
     child_run_id: str
     status: str
+
+
+@dataclass(frozen=True)
+class AtWork:
+    """A stage executing in this process."""
+
+    run_id: str
+    run_name: str
+    stage: str
+    type: str
+    started_at: str
+
+
+@dataclass(frozen=True)
+class Drain:
+    """`serving` starts stages; `draining` starts none and waits for those `at_work`; `drained`
+    once none are. `seconds_left` until a drain stops waiting, None while serving."""
+
+    state: Literal["serving", "draining", "drained"]
+    seconds_left: float | None
+    at_work: list[AtWork]
 
 
 class _Halted(Exception):
@@ -216,6 +251,7 @@ class Runner(RunControl):
         global _runner
         _runner = self
         _stopping.clear()
+        _draining.clear()  # a new process always serves
         config: DBOSConfig = {
             "name": APP_NAME,
             "system_database_url": f"sqlite:///{self.system_db}",
@@ -237,6 +273,46 @@ class Runner(RunControl):
         )
         self.adopt()
 
+    def drain(self, seconds: float = DRAIN_SECONDS) -> Drain:
+        """Start no more stages and let those at work finish, for up to `seconds`. A drain
+        already under way keeps its own limit."""
+        global _deadline
+        with _work_lock:
+            if not _draining.is_set():
+                _deadline = time.monotonic() + seconds
+                _draining.set()
+        return self.drain_state()
+
+    def cancel_drain(self) -> Drain:
+        """Serve again: the stages parked meanwhile start now."""
+        with _work_lock:
+            _draining.clear()
+        return self.drain_state()
+
+    def drain_state(self) -> Drain:
+        with _work_lock:
+            work = sorted(_at_work.items(), key=lambda kv: kv[1])
+            draining, left = _draining.is_set(), max(0.0, _deadline - time.monotonic())
+        if not draining:
+            return Drain("serving", None, [])
+        at_work = []
+        for (run_id, index), started in work:
+            run = self.storage.get_run(run_id)
+            stage = run.stages[index] if run and index < len(run.stages) else None
+            name = run.name if run else run_id
+            what = (stage.name, stage.type) if stage else (str(index), "")
+            at_work.append(AtWork(run_id, name, *what, started))
+        return Drain("draining" if at_work else "drained", round(left, 1), at_work)
+
+    def wait_drained(self) -> Drain:
+        """Block until the drain under way is drained or out of time."""
+        while (now := self.drain_state()).state == "draining" and now.seconds_left:
+            time.sleep(0.2)
+        if now.at_work:
+            cut = ", ".join(f"{w.run_name}: {w.stage}" for w in now.at_work)
+            log.warning("drain limit reached, stopping with stages at work: %s", cut)
+        return now
+
     def shutdown(self, seconds: float = 5.0) -> None:
         """Release the waiting workflows, then stop DBOS. Interrupted runs resume on launch."""
         global _runner
@@ -247,7 +323,9 @@ class Runner(RunControl):
         while time.monotonic() < deadline:
             with _waiting_lock:
                 waiting = list(_waiting)
-            if not waiting:
+            with _work_lock:
+                parked = bool(_parked)  # gone once they see _stopping, before a relaunch serves
+            if not waiting and not parked:
                 break
             for run_id in waiting:
                 try:
@@ -521,7 +599,8 @@ def execute_run(run_id: str) -> str:
             continue
         got: list[RunEvent | _ChildEnded] = []
         if world is None:
-            result, error = _run_stage(run_id, index)
+            with _at_work_on(run_id, index):
+                result, error = _run_stage(run_id, index)
         else:
             runner = _current()
             if world not in runner._caps:  # a run recovered at launch, before any enqueue
@@ -571,8 +650,33 @@ def stage_in_slot(run_id: str, index: int, start: RunState | None) -> None:
     """One stage of a run at work, holding one of its world's run slots until it ends (#486).
     `start` is the state a queued run starts in, saved once it holds the slot. Sends the outcome
     to the run's control topic."""
-    result, error = _run_stage(run_id, index) if _ready(run_id, start) else ("stopped", None)
-    DBOS.send(run_id, {"action": "stage", "result": result, "error": error}, topic=CONTROL_TOPIC)
+    with _at_work_on(run_id, index):  # parked before `_ready`, a queued run still reads queued
+        result, error = _run_stage(run_id, index) if _ready(run_id, start) else ("stopped", None)
+        message = {"action": "stage", "result": result, "error": error}
+        DBOS.send(run_id, message, topic=CONTROL_TOPIC)
+
+
+@contextmanager
+def _at_work_on(run_id: str, index: int) -> Iterator[None]:
+    """The stage counts as at work while inside. During a drain it waits to start, and a
+    shutdown meanwhile raises _Shutdown, before any step, so the next launch starts it once."""
+    key = (run_id, index)
+    while True:
+        with _work_lock:
+            if not _draining.is_set():
+                _parked.discard(key)
+                _at_work[key] = datetime.now(UTC).isoformat()
+                break
+            _parked.add(key)
+        if _stopping.wait(0.1):
+            with _work_lock:
+                _parked.discard(key)
+            raise _Shutdown(run_id)
+    try:
+        yield
+    finally:
+        with _work_lock:
+            _at_work.pop(key, None)
 
 
 @DBOS.step(name="swarmify.ready")
