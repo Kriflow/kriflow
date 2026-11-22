@@ -1188,3 +1188,51 @@ def test_a_message_goes_only_to_agents_still_working(board: SqliteStorage) -> No
     with pytest.raises(Refused, match="planner is not working"):
         swarm.message(R, S, "change_1", "Hello.", "planner")
     assert swarm.message(R, S, "change_1", "Hello.") == [WORKER]
+
+
+def test_a_follow_up_continues_the_session_and_a_rerun_starts_afresh(
+    board: SqliteStorage, tmp_path: Path
+) -> None:
+    """Issue 535: each visit is an Attempt. A Follow-up's worker continues the session of the
+    Attempt before, the person's words its next turn; a Rerun's worker starts a new session.
+    Each Attempt keeps what it spent, and the artifacts it left once the next one starts."""
+    _seed(board)
+    script = Script(
+        [GRAPH, CLAIM, FINISH], PASS,  # Attempt 1
+        [CLAIM, FINISH], PASS,  # Attempt 2, the Follow-up
+        [CLAIM, FINISH], PASS,  # Attempt 3, the Rerun
+        cost=0.5,
+    )  # fmt: skip
+    swarm = _swarm(board, tmp_path, script)
+    _run(swarm, tmp_path)
+    first = _worker(board).session_id
+    artifacts = tmp_path / W / "runs" / R / S / "artifacts"
+    assert (artifacts / "verdict-1.md").is_file()
+
+    words = "Cut the intro."
+    follow = {"kind": "follow_up", "note": words, "by": None, "at": "2026-11-21T20:00:00+00:00"}
+    swarm.run_stage(W, R, S, "research", dict(STAGE), _world(tmp_path), [words], 1, cause=follow)
+    assert script.sessions[2].resume == first, "the Follow-up continues the session"
+    assert script.prompts[2].startswith(f"{FROM_PERSON}{words}")
+    assert (artifacts.parent / "attempts" / "1" / "verdict-1.md").is_file()
+
+    again = {**follow, "kind": "rerun", "note": "Start over."}
+    swarm.run_stage(
+        W, R, S, "research", dict(STAGE), _world(tmp_path), ["Start over."], 2, cause=again
+    )
+    assert script.sessions[4].resume is None, "a Rerun starts afresh"
+    assert FROM_PERSON not in script.prompts[4]
+
+    one, two, three = board.list_attempts(S)
+    assert [a.number for a in (one, two, three)] == [1, 2, 3]
+    assert one.cause is None and two.cause == follow and three.cause == again
+    assert all(a.ended_at for a in (one, two, three))
+    assert one.started_at < two.started_at < three.started_at
+    assert sum(a.spent_usd for a in (one, two, three)) == pytest.approx(
+        sum(a.cost_usd for a in board.list_agents(R))
+    )
+    assert two.spent_usd > 0
+
+    # A stage retried within the same visit goes on with its Attempt.
+    swarm.run_stage(W, R, S, "research", dict(STAGE), _world(tmp_path), ["Start over."], 2)
+    assert len(board.list_attempts(S)) == 3

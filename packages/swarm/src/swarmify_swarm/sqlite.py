@@ -21,6 +21,7 @@ from swarmify_swarm.model import (
     Agent,
     AgentRole,
     AgentStatus,
+    Attempt,
     LogEntry,
     LogKind,
     Note,
@@ -158,6 +159,7 @@ class SqliteStorage:
             conn.execute("DELETE FROM tasks WHERE world_id = ?", (world_id,))
             conn.execute("DELETE FROM verdicts WHERE world_id = ?", (world_id,))
             conn.execute("DELETE FROM agents WHERE world_id = ?", (world_id,))
+            conn.execute("DELETE FROM attempts WHERE world_id = ?", (world_id,))
 
     # Verdicts
 
@@ -324,6 +326,65 @@ class SqliteStorage:
                 )  # fmt: skip
                 for q in _queued(conn, stage_id, agent)
             ]
+
+    # Attempts
+
+    def start_attempt(
+        self, world_id: str, run_id: str, stage_id: str, visit: int, cause: dict[str, Any] | None
+    ) -> tuple[Attempt, bool]:
+        with self._write() as conn:
+            last = conn.execute(
+                "SELECT number, visit FROM attempts WHERE stage_id = ? ORDER BY number DESC",
+                (stage_id,),
+            ).fetchone()
+            new = last is None or last["visit"] != visit
+            if new:
+                (spent,) = conn.execute(
+                    "SELECT coalesce(sum(cost_usd), 0) FROM agents WHERE stage_id = ?", (stage_id,)
+                ).fetchone()
+                conn.execute(
+                    "INSERT INTO attempts (stage_id, number, world_id, run_id, visit, cause,"
+                    " started_at, spent_before) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        stage_id, (last["number"] if last else 0) + 1, world_id, run_id, visit,
+                        None if cause is None else json.dumps(cause), _iso(None), spent,
+                    ),
+                )  # fmt: skip
+            else:
+                conn.execute(
+                    "UPDATE attempts SET ended_at = NULL WHERE stage_id = ? AND number = ?",
+                    (stage_id, last["number"]),  # type: ignore[index]
+                )
+        return self.list_attempts(stage_id)[-1], new
+
+    def end_attempt(self, stage_id: str) -> None:
+        with self._write() as conn:
+            conn.execute(
+                "UPDATE attempts SET ended_at = ? WHERE stage_id = ? AND number ="
+                " (SELECT max(number) FROM attempts WHERE stage_id = ?)",
+                (_iso(None), stage_id, stage_id),
+            )
+
+    def list_attempts(self, stage_id: str) -> list[Attempt]:
+        with closing(connect(self.path)) as conn:
+            rows = conn.execute(
+                "SELECT * FROM attempts WHERE stage_id = ? ORDER BY number", (stage_id,)
+            ).fetchall()
+            (spent,) = conn.execute(
+                "SELECT coalesce(sum(cost_usd), 0) FROM agents WHERE stage_id = ?", (stage_id,)
+            ).fetchone()
+        after = [r["spent_before"] for r in rows[1:]] + [spent]
+        ends = [r["started_at"] for r in rows[1:]] + [None]
+        return [
+            Attempt(
+                r["number"],
+                r["started_at"],
+                r["ended_at"] or end,  # one a crash cut short ended when the next began
+                max(0.0, total - r["spent_before"]),
+                json.loads(r["cause"]) if r["cause"] else None,
+            )
+            for r, total, end in zip(rows, after, ends, strict=True)
+        ]
 
     def list_log(self, stage_id: str) -> list[LogEntry]:
         with closing(connect(self.path)) as conn:

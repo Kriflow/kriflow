@@ -44,6 +44,7 @@ from swarmify_runs.machine import (
     transition,
 )
 from swarmify_runs.model import (
+    RERUNS,
     AppliedChange,
     ChangeProposal,
     Decision,
@@ -825,7 +826,8 @@ class RunControl:
     def _step(
         self, run: Run, change: RunChange
     ) -> tuple[RunStageView, RunEvent, dict[str, Any], str | None, list[str], int | None]:
-        """A Rerun or a Skip: its stage, the event the run's workflow takes for it, the stages
+        """A Rerun, a Follow-up (a Rerun of a swarm stage that continues its agents' sessions)
+        or a Skip: its stage, the event the run's workflow takes for it, the stages
         it changes by name with their status now, why the run cannot take it now, the workflow
         check's violations the change itself brings (a Skip's missing input or ungated
         publish, ADR 0007), and on a run that has ended the stage its Fork runs anew from (the
@@ -836,7 +838,7 @@ class RunControl:
         stage = target(run, change)
         ended = run.status in TERMINAL
         violations: list[str] = []
-        if change.kind == "rerun":
+        if change.kind in RERUNS:
             keep = tuple(c.stage_index for c in run.changes if c.kind == "skip")
             event: RunEvent = Rerun(stage.index, keep=keep)
             start = rerun_from(kinds_of(run), [s.status for s in run.stages], stage.index)
@@ -846,6 +848,8 @@ class RunControl:
             not_now = None
             if stage.status not in ("done", "failed"):
                 not_now = f"{stage.name} has not {'run' if ended else 'finished'}"
+            elif change.kind == "follow_up" and stage.type != "swarm":
+                not_now = f"{stage.name} has no agent session to continue: rerun it instead"
         else:
             event, start = Skip(stage.index), stage.index
             before = {stage.name: stage.status}
@@ -870,7 +874,7 @@ class RunControl:
 
     def _propose_step(self, run: Run, change: RunChange) -> ChangeProposal:
         stage, _, before, not_now, violations, fork = self._step(run, change)
-        after = dict.fromkeys(before, "pending" if change.kind == "rerun" else "skipped")
+        after = dict.fromkeys(before, "pending" if change.kind in RERUNS else "skipped")
         problems = ([not_now] if not_now else []) + violations
         top = self.top(run)
         left = None if top.budget_usd is None else max(0.0, top.budget_usd - top.spent_usd)
@@ -881,7 +885,7 @@ class RunControl:
                 left = 0.0
                 problems.append(str(exc))
         cost = None
-        if change.kind == "rerun":
+        if change.kind in RERUNS:
             spent = self.stage_spend(run.id)
             reset = [s for s in run.stages if s.name in before]
             cost = sum(spent.get(s.id, 0.0) / visits(run, s) for s in reset)
@@ -892,18 +896,20 @@ class RunControl:
         )  # fmt: skip
 
     def _apply_step(self, run: Run, change: RunChange, by: str) -> AppliedChange:
-        """Record the Rerun or Skip, then tell the run's workflow, which resets or passes over
-        the stages once it is free (a Skip while a stage runs lands when it ends). On a run that
-        has ended it starts the Fork instead."""
+        """Record the Rerun, Follow-up or Skip, then tell the run's workflow, which resets or
+        passes over the stages once it is free (a Skip while a stage runs lands when it ends).
+        On a run that has ended it starts the Fork instead."""
         stage, event, before, not_now, violations, fork = self._step(run, change)
         if not_now:
             raise Illegal(not_now)
         if violations:
             raise ValueError("; ".join(violations))
         payload = {"note": str(change.payload.get("note") or "").strip()}
+        if change.kind == "follow_up" and not payload["note"]:
+            raise ValueError("a follow-up needs the change you ask for")
         applied = AppliedChange(
             new_id("change"), run.id, change.kind, stage.id, stage.index, stage.name,
-            payload if change.kind == "rerun" else {}, before, by, _now(), run.revision + 1,
+            payload if change.kind in RERUNS else {}, before, by, _now(), run.revision + 1,
         )  # fmt: skip
         if fork is not None:
             return self._fork_with(run, fork, defs(run), applied)
@@ -1313,7 +1319,7 @@ class RunControl:
         return decision
 
 
-STEPS = ("rerun", "skip")
+STEPS = (*RERUNS, "skip")
 """The Run Changes that move the run's stages rather than edit them, through its workflow."""
 
 
@@ -1361,7 +1367,7 @@ def visits(run: Run, stage: RunStageView) -> int:
         if d.send_back_to
         and index.get(d.send_back_to, stage.index + 1) <= stage.index < d.stage_index
     )
-    return 1 + back + sum(1 for c in run.changes if c.kind == "rerun" and stage.name in c.before)
+    return 1 + back + sum(1 for c in run.changes if c.kind in RERUNS and stage.name in c.before)
 
 
 def edited(run: Run, change: RunChange) -> tuple[RunStageView, list[StageDef]]:
@@ -1449,9 +1455,12 @@ def moved(run: Run, revision: int) -> str:
     since = [c for c in run.changes if c.revision > revision]
     live = next((s for s in run.stages if s.status in ("running", "waiting")), None)
     if since:
-        done = {"rerun": "re-run", "skip": "skipped", "message": "messaged"}.get(
-            since[-1].kind, "edited"
-        )
+        done = {
+            "rerun": "re-run",
+            "follow_up": "followed up",
+            "skip": "skipped",
+            "message": "messaged",
+        }.get(since[-1].kind, "edited")
         what = f"{since[-1].stage_name} was {done} by {since[-1].by}"
     else:
         what = f"it is now at {live.name}" if live else f"it is now {run.status}"

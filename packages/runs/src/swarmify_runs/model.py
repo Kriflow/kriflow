@@ -189,11 +189,12 @@ class RunStageView:
 class RunChange:
     """One edit to a live run, as proposed (ADR 0027). `stage` is the target stage's id; a
     `stage_edit`'s `payload` is the stage's new config, an `artifact_edit`'s the `path` of a file
-    in the stage's artifacts folder and its new `text`, a `rerun`'s its `note`, a `skip` has
-    none and a `restructure`'s is `stages`, the new list from that stage on, each a workflow
-    stage's fields (`name`, `type` and its config). A `message`'s is the `text` a person sends
-    the running stage's agents, `to` (one agent, or None for everyone still working) and
-    `interrupt`."""
+    in the stage's artifacts folder and its new `text`, a `rerun`'s its `note` (a
+    `follow_up`'s too: the change asked of a finished swarm stage, whose agents continue their
+    sessions), a `skip` has none and a `restructure`'s is `stages`, the new list from that
+    stage on, each a workflow stage's fields (`name`, `type` and its config). A `message`'s is
+    the `text` a person sends the running stage's agents, `to` (one agent, or None for everyone
+    still working) and `interrupt`."""
 
     kind: str
     stage: str
@@ -289,18 +290,46 @@ class Run:
     stage end; None on a first run. Filled only when one run is served, not on events."""
 
     def send_back_note(self, stage_name: str) -> str:
-        """The note of the send-back or Rerun that caused this visit, when it named
+        """The note of the send-back, Rerun or Follow-up that caused this visit, when it named
         `stage_name`; empty when the stage reruns because it named an earlier stage. A Fork a
-        Rerun made counts that Rerun."""
-        sent = [(d.decided_at, d.send_back_to, d.note) for d in self.decisions if d.send_back_to]
+        Rerun or Follow-up made counts it."""
+        cause = self.visit_cause(stage_name)
+        return cause.note if cause else ""
+
+    def visit_cause(self, stage_name: str) -> "Cause | None":
+        """What sent the run back to `stage_name` for this visit, when the latest send-back,
+        Rerun or Follow-up named it: its kind, note, who and when. None on a first visit or
+        when the stage runs again because an earlier stage was named."""
+        sent = [
+            Cause("send_back", d.note, d.by, d.decided_at, d.send_back_to)
+            for d in self.decisions
+            if d.send_back_to
+        ]
         made = [self.forked_by] if self.forked_by else []
         sent += [
-            (c.at, c.stage_name, c.payload["note"])
+            Cause(c.kind, c.payload["note"], c.by, c.at, c.stage_name)
             for c in [*self.changes, *made]
-            if c.kind == "rerun"
+            if c.kind in RERUNS
         ]
-        last = max(sent, default=None)
-        return last[2] if last and last[1] == stage_name else ""
+        last = max(sent, key=lambda c: c.at, default=None)
+        return last if last and last.stage == stage_name else None
+
+
+RERUNS = ("rerun", "follow_up")
+"""The Run Changes that send the run back to a finished stage: a Rerun starts its agents
+afresh, a Follow-up continues their sessions with the person's words (both ADR 0027)."""
+
+
+@dataclass(frozen=True)
+class Cause:
+    """What started a stage's visit: a gate's send-back, a Rerun or a Follow-up, with its note,
+    who gave it (None for an answer given in Swarmify) and when."""
+
+    kind: str
+    note: str
+    by: str | None
+    at: str
+    stage: str | None
 
 
 @dataclass(frozen=True)

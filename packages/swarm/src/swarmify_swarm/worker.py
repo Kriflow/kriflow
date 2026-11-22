@@ -24,10 +24,11 @@ with the world it came from.
 import asyncio
 import json
 import re
+import shutil
 import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
@@ -225,6 +226,12 @@ class _At:
     """The note of the send-back that caused this visit, when it named this stage."""
     baseline: bool = False
     cast: tuple[CastEntry, ...] = tuple(DEFAULT_CAST)
+    cause: str | None = None
+    """What started this Attempt when a person sent the run back to this stage: `rerun`,
+    `follow_up` or `send_back`; None otherwise."""
+    opening: set[str] = field(default_factory=set, compare=False)
+    """The workers whose first session of a new Attempt has not started yet: a Rerun starts
+    them afresh, a Follow-up continues their sessions with the person's words first."""
 
     def entry(self, name: str, role: AgentRole) -> CastEntry:
         return next((c for c in self.cast if c.name == name), CastEntry(name, role))
@@ -470,6 +477,44 @@ class Swarm:
         visit: int = 0,
         baseline: bool = False,
         cast: list[CastEntry] | None = None,
+        cause: dict[str, Any] | None = None,
+    ) -> None:
+        """Run the stage as one Attempt (issue 535), then end it, whatever happened: `visit`
+        names it, so a retried or resumed stage goes on with the same Attempt. `cause` is what
+        sent the run back to this stage (`kind`, `note`, `by`, `at`), None otherwise. A new
+        Attempt after the first keeps the artifacts the last one left in `attempts/<n>`. A
+        Rerun's workers start afresh; a Follow-up's continue their sessions, the person's words
+        their next turn. Raises as `_run_stage` does."""
+        attempt, new = self.board.start_attempt(world_id, run_id, stage_id, visit, cause)
+        opening: set[str] = set()
+        if new and attempt.number > 1:
+            folder = self.files.stage_folder(world_id, run_id, stage_id)
+            if (folder / "artifacts").is_dir():
+                kept = folder / "attempts" / str(attempt.number - 1)
+                shutil.copytree(folder / "artifacts", kept, dirs_exist_ok=True)
+            opening = {c.name for c in (cast or DEFAULT_CAST) if c.role == "worker"} or {WORKER}
+        try:
+            self._run_stage(
+                world_id, run_id, stage_id, stage_name, config, world_folder, notes, visit,
+                baseline, cast, (cause or {}).get("kind"), opening,
+            )  # fmt: skip
+        finally:
+            self.board.end_attempt(stage_id)
+
+    def _run_stage(
+        self,
+        world_id: str,
+        run_id: str,
+        stage_id: str,
+        stage_name: str,
+        config: dict[str, Any],
+        world_folder: Path,
+        notes: list[str] | None,
+        visit: int,
+        baseline: bool,
+        cast: list[CastEntry] | None,
+        cause: str | None,
+        opening: set[str],
     ) -> None:
         """Plan an empty whiteboard, work it until no task is left, then judge it: a pass
         projects the stage's typed artifacts, a fail adds gap tasks and loops, at most
@@ -499,6 +544,8 @@ class Swarm:
             tuple(notes or ()),
             baseline,
             tuple(cast) if cast else tuple(DEFAULT_CAST),
+            cause,
+            opening,
         )
         if baseline:
             # ponytail: no judge, so a baseline stage projects no typed artifacts; later stages
@@ -605,10 +652,19 @@ class Swarm:
         if entry.tools is not None:
             servers = [t for t in servers if t in entry.tools]
 
+        # The first session of a new Attempt: a Rerun starts it afresh, a Follow-up gives the
+        # person's words first to the session it continues.
+        # ponytail: a crash before that session starts resumes the last Attempt's session on retry.
+        opening = entry.name in at.opening
+        at.opening.discard(entry.name)
+        follow = opening and at.cause == "follow_up" and at.notes
+        asked = f"{FROM_PERSON}{at.notes[-1]}\n\n" if follow else ""
+        work = f"Work the whiteboard of stage {at.stage_name} until no task is ready."
+
         def spec(resume: str | None) -> SessionSpec:
             return SessionSpec(
                 system_prompt=self._system_prompt(at, entry),
-                prompt=f"Work the whiteboard of stage {at.stage_name} until no task is ready.",
+                prompt=asked + work,
                 cwd=self.files.stage_folder(at.world_id, at.run_id, at.stage_id),
                 plugin=at.world_folder,
                 tools=self._tools(
@@ -631,7 +687,8 @@ class Swarm:
                 model=entry.model,
             )
 
-        self._session(at, entry.name, "worker", spec, allowed, lambda _: None)
+        fresh = opening and at.cause == "rerun"
+        self._session(at, entry.name, "worker", spec, allowed, lambda _: None, fresh=fresh)
 
     def _judge(self, at: "_At", kind: OutputType | None) -> None:
         board, files = self.board, self.files

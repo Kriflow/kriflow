@@ -357,3 +357,14 @@ def test_the_retro_sees_the_messages_people_sent_a_running_stage() -> None:
     ) in text
     (r,) = recurrences(events, "wf_1")
     assert (r.kind, r.stage, r.runs) == ("message", "research", ["run_1", "run_2", "run_3"])
+
+
+def test_the_retro_sees_the_follow_ups_people_asked_of_a_finished_stage() -> None:
+    """Issue 535: a Follow-up is a Run Change the retro reads as an intervention."""
+    note = {"note": "Cut the third point."}
+    follow = {"kind": "follow_up", "stage_name": "draft", "payload": note}
+    e = evidence([run_event("run_1", [], changes=[follow])], "run_1")
+    assert [(i.kind, i.stage, i.what) for i in e.interventions] == [
+        ("follow_up", "draft", "Cut the third point.")
+    ]
+    assert "- draft: Cut the third point." in prompt(e, [], [], [], None)

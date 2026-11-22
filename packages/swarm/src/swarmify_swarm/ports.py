@@ -14,7 +14,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from swarmify_swarm.model import Agent, AgentRole, AgentStatus, LogEntry, LogKind, Task, Verdict
+from swarmify_swarm.model import (
+    Agent,
+    AgentRole,
+    AgentStatus,
+    Attempt,
+    LogEntry,
+    LogKind,
+    Task,
+    Verdict,
+)
 
 
 class Storage(Protocol):
@@ -134,6 +143,22 @@ class Storage(Protocol):
 
     def list_log(self, stage_id: str) -> list[LogEntry]:
         """Oldest first."""
+        ...
+
+    def start_attempt(
+        self, world_id: str, run_id: str, stage_id: str, visit: int, cause: dict[str, Any] | None
+    ) -> tuple[Attempt, bool]:
+        """The stage's Attempt for its `visit` (the run's send-back count): the latest one again
+        when it has that visit (a retried or resumed stage), else the next one. True when it is
+        new."""
+        ...
+
+    def end_attempt(self, stage_id: str) -> None:
+        """Mark the stage's latest Attempt ended now."""
+        ...
+
+    def list_attempts(self, stage_id: str) -> list[Attempt]:
+        """Oldest first, each with what its agents spent."""
         ...
 
     def take(self, stage_id: str, agent: str) -> list[LogEntry]:

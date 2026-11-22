@@ -139,6 +139,8 @@ def _interventions(run: dict[str, Any], tasks: list[dict[str, Any]]) -> list[Int
     for c in run.get("changes") or []:
         if c.get("kind") == "message":
             out.append(Intervention(run["id"], "message", c["stage_name"], c["payload"]["text"]))
+        elif c.get("kind") == "follow_up":
+            out.append(Intervention(run["id"], "follow_up", c["stage_name"], c["payload"]["note"]))
     return out
 
 
@@ -268,6 +270,8 @@ def prompt(
         *(f"- {i.stage}: {i.what}" for i in run.interventions if i.kind == "task"),
         "# Messages people sent the agents while a stage ran",
         *(f"- {i.stage}: {i.what}" for i in run.interventions if i.kind == "message"),
+        "# Changes people asked of a finished stage (Follow-ups)",
+        *(f"- {i.stage}: {i.what}" for i in run.interventions if i.kind == "follow_up"),
     ]
     if run.failure:
         lines += ["# The failure: the failed stage, then the last lines of its log", *run.failure]

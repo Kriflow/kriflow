@@ -20,7 +20,7 @@ import shutil
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, closing, suppress
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -877,7 +877,8 @@ def create_app(
     def run_swarm(run: Run, stage_id: str, stage: StageDef) -> None:
         folder = world_svc.folder(run.world_id)
         learning_svc.sync(run.world_id)  # shared skills the world lacks load from its folder
-        note = run.send_back_note(stage.name)  # an older send-back's note no longer applies
+        cause = run.visit_cause(stage.name)  # an older send-back's note no longer applies
+        note = cause.note if cause else ""
         # The Cast as it stands when the stage starts: an edit reaches every later stage.
         # The stage's worker count (its `agents` or the start's), one when it has none (ADR 0020).
         members = world_svc.cast(run.world_id, stage.config.get("agents") or 1) or []
@@ -914,6 +915,7 @@ def create_app(
                 run.send_backs,
                 baseline=run.baseline,
                 cast=cast,
+                cause=None if cause is None else asdict(cause),
             )
         except Stopped as exc:
             raise OverBudget(str(exc)) from exc

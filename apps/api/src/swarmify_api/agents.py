@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 from swarmify_memory import ArtifactFile, Memory
 from swarmify_runs import Run
-from swarmify_swarm import Agent, LogEntry, Storage, Verdict
+from swarmify_swarm import Agent, Attempt, LogEntry, Storage, Verdict
 
 
 def run_artifacts(memory: Memory, run: Run, before: int | None = None) -> list[ArtifactFile]:
@@ -52,6 +52,14 @@ def router(
         stage_of(run_id, stage_id)
         return board.list_log(stage_id)
 
+    @api.get("/runs/{run_id}/stages/{stage_id}/attempts")
+    def get_attempts(run_id: str, stage_id: str) -> list[Attempt]:
+        """Each execution of the swarm stage, oldest first (issue 535): when it started and
+        ended, what its agents spent, and what started it (a send-back, Rerun or Follow-up,
+        with its note). Its log lines are those from its start to the next one's."""
+        stage_of(run_id, stage_id)
+        return board.list_attempts(stage_id)
+
     @api.get("/runs/{run_id}/stages/{stage_id}/verdicts")
     def get_verdicts(run_id: str, stage_id: str) -> list[Verdict]:
         """The judge's verdict on every loop of the stage, oldest first."""
@@ -69,14 +77,17 @@ def router(
         return run_artifacts(memory, run, before)
 
     @api.get("/runs/{run_id}/stages/{stage_id}/artifacts")
-    def get_artifacts(run_id: str, stage_id: str, folder: str = "") -> list[ArtifactFile]:
+    def get_artifacts(
+        run_id: str, stage_id: str, folder: str = "", attempt: int | None = None
+    ) -> list[ArtifactFile]:
         """The stage's artifact files as they are on disk: projected ones carry their type and
         fields (an idea's rank and source references) in `fields`. With `folder`, those of
-        that subfolder: a fan-out stage gathers each Item's files under its key. 422 for a
+        that subfolder: a fan-out stage gathers each Item's files under its key. With
+        `attempt`, those an earlier Attempt left, kept when the next one started. 422 for a
         folder that is not a plain name."""
         run = stage_of(run_id, stage_id)
         try:
-            return memory.stage_artifacts(run.world_id, run_id, stage_id, folder)
+            return memory.stage_artifacts(run.world_id, run_id, stage_id, folder, attempt)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 

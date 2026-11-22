@@ -408,3 +408,34 @@ def test_a_rerun_of_a_failed_stage_while_its_retro_waits_runs_it_again_in_place(
     run = at(runner, run.id, "waiting_gate")
     assert calls.ran == [("write", ""), ("write", "Mind the length."), ("render", "")]
     assert statuses(run) == ["done", "done", "done", "skipped", "waiting"]
+
+
+def test_a_follow_up_sends_the_run_back_like_a_rerun_and_names_its_cause(
+    runner: Runner, calls: Calls
+) -> None:
+    """Issue 535: a Follow-up on a finished swarm stage resets it and every later stage as a
+    Rerun does, the gate waiting again; the stage's visit names it as the cause. It needs words,
+    and only a swarm stage has a session to continue."""
+    run = runner.start("world_1", "wf_1", 1, "Short", [WRITE, RENDER, CONFIRM])
+    run = at(runner, run.id, "waiting_gate")
+    follow = change(run, "follow_up", "write", "Cut the intro.")
+
+    proposal = runner.propose(run.id, follow)
+    assert proposal.violations == []
+    assert proposal.before == {"write": "done", "render": "done", "confirm": "waiting"}
+    assert runner.propose(run.id, change(run, "follow_up", "render", "Louder.")).violations == [
+        "render has no agent session to continue: rerun it instead"
+    ]
+    with pytest.raises(ValueError, match="needs the change"):
+        runner.apply(run.id, change(run, "follow_up", "write"), proposal.revision, "operator")
+
+    applied = runner.apply(run.id, follow, proposal.revision, "operator")
+    assert (applied.kind, applied.payload) == ("follow_up", {"note": "Cut the intro."})
+    wait_for(lambda: len(calls.ran) == 4)
+    run = at(runner, run.id, "waiting_gate")
+    assert calls.ran[2:] == [("write", "Cut the intro."), ("render", "")]
+    cause = run.visit_cause("write")
+    assert cause is not None and (cause.kind, cause.note, cause.by) == (
+        "follow_up", "Cut the intro.", "operator",
+    )  # fmt: skip
+    assert run.visit_cause("render") is None

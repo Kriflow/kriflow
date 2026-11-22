@@ -13,6 +13,7 @@ from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 from swarmify_runs.machine import MAX_SEND_BACKS, Illegal, RunState
 from swarmify_runs.model import (
+    RERUNS,
     AppliedChange,
     Decision,
     Gate,
@@ -837,11 +838,11 @@ def _inputs(config: dict[str, Any]) -> list[str]:
 
 
 def notes(decisions: list[Decision], changes: list[AppliedChange], stage_name: str) -> list[str]:
-    """The notes of the send-backs and Reruns addressed to the stage, oldest first."""
+    """The notes of the send-backs, Reruns and Follow-ups addressed to the stage, oldest first."""
     sent = [(d.decided_at, d.note) for d in decisions if d.send_back_to == stage_name]
     sent += [
         (c.at, c.payload["note"])
         for c in changes
-        if c.kind == "rerun" and c.stage_name == stage_name
+        if c.kind in RERUNS and c.stage_name == stage_name
     ]
     return [note for _, note in sorted(sent) if note]

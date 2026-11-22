@@ -345,14 +345,21 @@ class Memory:
         ]
 
     def stage_artifacts(
-        self, world_id: str, run_id: str, stage_id: str, folder: str = ""
+        self,
+        world_id: str,
+        run_id: str,
+        stage_id: str,
+        folder: str = "",
+        attempt: int | None = None,
     ) -> list[ArtifactFile]:
         """The stage's artifacts by name, sidecars standing in for their files; with `folder`,
-        those of that subfolder (a fan-out stage's Item key). Raises ValueError for a `folder`
-        that is not a plain name."""
+        those of that subfolder (a fan-out stage's Item key); with `attempt`, those an earlier
+        Attempt left in `attempts/<n>`. Raises ValueError for a `folder` that is not a plain
+        name."""
         if folder and ("/" in folder or "\\" in folder or folder.startswith(".")):
             raise ValueError(f"{folder} is not a folder of the stage's artifacts")
-        root = self.world_folder(world_id) / "runs" / run_id / stage_id / "artifacts"
+        stage = self.world_folder(world_id) / "runs" / run_id / stage_id
+        root = stage / "attempts" / str(attempt) if attempt is not None else stage / "artifacts"
         files = [p for p in (root / folder).glob("[!.]*") if p.is_file()]  # dotfiles: state
         return self._artifacts(world_id, files)
 
