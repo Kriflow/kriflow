@@ -25,6 +25,7 @@ import shlex
 import stat
 import threading
 import time
+import tomllib
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
@@ -55,7 +56,7 @@ from swarmify_connectors.model import (
 )
 from swarmify_connectors.packages import (
     LOCAL,
-    MANIFEST,
+    ContractError,
     InstallError,
     ManifestError,
     Package,
@@ -80,6 +81,7 @@ from swarmify_kernel import AGENT_TOOLS, new_id, posts_privately, scrub
 
 __all__ = [
     "CURVES",
+    "DEFAULT_LIST",
     "KINDS",
     "MIGRATIONS",
     "STAGE_TYPES",
@@ -90,6 +92,7 @@ __all__ = [
     "ConnectorError",
     "ConnectorTransport",
     "Connectors",
+    "ContractError",
     "Credentials",
     "FakeTransport",
     "HealthCheck",
@@ -112,7 +115,34 @@ __all__ = [
 
 log = logging.getLogger(__name__)
 DEFAULTS = "connectors"
-"""The folder of this repository whose packages are the defaults every world is given."""
+"""The folder of this repository holding the core's own packages."""
+CORE_DEFAULTS = ("python_script",)
+"""The core's own default packages, installed from their folders of `connectors/`."""
+DEFAULT_LIST = Path(__file__).with_name("defaults.toml")
+"""The Default List the core ships (issue 585): the packages repository and a tag per package."""
+_TAG = re.compile(r"^([a-z][a-z0-9_]{0,59})-v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$")
+
+
+def default_list() -> tuple[str, list[tuple[str, str, str]]]:
+    """The Default List `SWARMIFY_DEFAULT_PACKAGES` names, else DEFAULT_LIST: its git URL and
+    each package's name, release tag and the version that tag names (`<name>-v<version>`), so
+    an installed version is known without a fetch. Raises ValueError saying what is wrong."""
+    file = Path(os.environ.get("SWARMIFY_DEFAULT_PACKAGES") or DEFAULT_LIST).expanduser()
+    try:
+        data = tomllib.loads(file.read_text())
+        git, entries = str(data["git"]), data.get("packages", [])
+        listed = []
+        for entry in entries:
+            name, ref = str(entry["name"]), str(entry["ref"])
+            tag = _TAG.fullmatch(ref)
+            if tag is None or tag[1] != name:
+                raise ValueError(f"{ref} is not a release tag of {name}, as {name}-v1.2.0")
+            listed.append((name, ref, tag[2]))
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(f"{file}: {exc!r}") from exc
+    return git, listed
+
+
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,59}$")
 TYPE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 """A declared type's name, as a swarm stage's `output_type` names it."""
@@ -509,30 +539,53 @@ class Connectors:
     # Default packages (ADR 0023): this repository's own, given to every world
 
     def install_defaults(self) -> dict[str, str]:
-        """Install each package of this repository's `connectors/` folder whose version is not
-        installed yet, and keep them as the defaults worlds are given, but for those whose
-        Manifest says `enable_by_default = false`, which a world enables when it wants them.
-        The first install of a package carries what V1 kept for it into its shared Setup: a
-        Setting from the app's env and a Credential from the credentials file, each found by its
-        field's `env` name, and an oauth field's V1 refresh token (`_carry`). One that does not
-        install is logged and left out; the others still are."""
-        for manifest in sorted((self.packages.repo / DEFAULTS).glob(f"*/{MANIFEST}")):
-            source = f"{DEFAULTS}/{manifest.parent.name}"
+        """Install each default package whose version is not installed yet, and keep them as
+        the defaults worlds are given, but for those whose Manifest says
+        `enable_by_default = false`, which a world enables when it wants them. The defaults are
+        the core's own packages (CORE_DEFAULTS, folders of `connectors/`) and the Default List
+        (`default_list`): each listed package installed from git at its release tag, trusted as
+        the core's own and sharing uv's and npm's caches. A listed version already installed
+        is never fetched. The first install of a package carries what V1 kept for it into its
+        shared Setup: a Setting from the app's env and a Credential from the credentials file,
+        each found by its field's `env` name, and an oauth field's V1 refresh token
+        (`_carry`). One that does not install is logged and left out; the others still are."""
+        for name in CORE_DEFAULTS:
+            source = f"{DEFAULTS}/{name}"
             try:
-                m = read_manifest(manifest.parent)
-                first = not (self.packages.root / m["name"]).is_dir()
-                try:
-                    self.packages.manifest(m["name"], m["version"])
-                except InstallError:
-                    self.packages.install(source)
+                m = read_manifest(self.packages.repo / source)
+                self._default(m["name"], m["version"], lambda s=source: self.packages.install(s))
             except (ManifestError, InstallError) as exc:
                 log.error("the default package %s did not install: %s", source, exc)
-                continue
-            if first:
-                self._carry(m)
-            if m.get("enable_by_default", True):
-                self.defaults[m["name"]] = m["version"]
+        try:
+            git, listed = default_list()
+        except ValueError as exc:
+            log.error("the Default List was not read, so no listed default installs: %s", exc)
+            git, listed = "", []
+        for name, ref, version in listed:
+
+            def fetch(name: str = name, ref: str = ref) -> Package:
+                return self.packages.install(git, ref=ref, subfolder=name, shared_caches=True)
+
+            try:
+                self._default(name, version, fetch)
+            except (ManifestError, InstallError) as exc:
+                log.error("the default package %s %s did not install: %s", name, version, exc)
         return self.defaults
+
+    def _default(self, name: str, version: str, install: Callable[[], Package]) -> None:
+        """`name` at `version` installed (by `install` when it is not yet), carried over from V1
+        on its first install, and kept as a default unless its Manifest says otherwise. Raises
+        ManifestError or InstallError."""
+        first = not (self.packages.root / name).is_dir()
+        try:
+            m = self.packages.manifest(name, version)
+        except InstallError:
+            install()
+            m = self.packages.manifest(name, version)  # the tag may hold another version
+        if first:
+            self._carry(m)
+        if m.get("enable_by_default", True):
+            self.defaults[name] = version
 
     def _carry(self, m: dict[str, Any]) -> None:
         try:
@@ -1636,6 +1689,12 @@ class Connectors:
         name = str(config.get("calls", ""))
         connector = self.find(world_id, name, pins)
         if connector is None:
+            enabled = self.enabled(world_id)
+            if name in enabled:  # pinned but unusable (a contract this core does not run): why
+                try:
+                    self.packages.manifest(name, (pins or {}).get(name, enabled[name]))
+                except (InstallError, ManifestError) as exc:
+                    raise ConnectorError(str(exc)) from exc
             raise ConnectorError(f"no connector named '{name}' in this world")
         if "connector" not in connector.stage_types:
             raise ConnectorError(f"connector '{name}' is not allowed in connector stages")

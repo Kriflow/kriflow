@@ -105,3 +105,38 @@ def _until(check: Callable[[], object]) -> None:
 def until() -> Callable[[Callable[[], object]], None]:
     """Polls `check` every 0.1 s for up to 20 s, for state no locator shows."""
     return _until
+
+
+@pytest.fixture
+def voice(tmp_path_factory: pytest.TempPathFactory) -> Callable[[httpx.Client, str], None]:
+    """Enable `voice` in a world: the echo fixture renamed, so it never meets a test's own echo,
+    installed once per app; the first argument is a client of the app's /api. The scripted app
+    answers its tool as a speech package would."""
+    import shutil
+    import tomllib
+
+    def enable(api: httpx.Client, world_id: str) -> None:
+        folder = tmp_path_factory.getbasetemp() / "voice"
+        if not folder.exists():
+            shutil.copytree(REPO / "packages/connectors/tests/fixtures/packages/echo", folder)
+            toml = folder / "swarmify-connector.toml"
+            text = toml.read_text().replace('name = "echo"', 'name = "voice"', 1)
+            # answered by the scripted app's transport alone: no check, setup test or types tool
+            for line in (
+                'test = "check_setup"',
+                'capabilities = ["check"]',
+                'world_types = "echo_types"',
+            ):
+                text = text.replace(f"{line}\n", "")
+            toml.write_text(text.replace('label = "Echo"', 'label = "Voice"', 1))
+            assert tomllib.loads(toml.read_text())["name"] == "voice"
+        if not any(p["name"] == "voice" for p in api.get("/packages").json()):
+            review = api.post("/packages/review", json={"source": str(folder)}).json()
+            body = {"source": str(folder), "approved": review["permissions"]}
+            assert api.post("/packages", json=body).status_code == 201
+        enabled = api.put(f"/worlds/{world_id}/packages/voice", json={"version": "1.0.0"})
+        assert enabled.is_success, enabled.text
+        setup = {"shared": {"api_key": "k"}, "world": {}}
+        assert api.put(f"/worlds/{world_id}/packages/voice/setup", json=setup).is_success
+
+    return enable

@@ -61,6 +61,11 @@ CAPABILITIES = (
     "templates",
     "safe_resume",
 )
+OLDEST_CONTRACT = 1
+"""The oldest Package Contract this core still runs; raising it drops packages (an ADR)."""
+NEWEST_CONTRACT = 1
+"""The newest Package Contract this core knows: raised, with a line in the README's Package
+contracts, by any change to what a package may declare or answer."""
 FIELD_TYPES = ("string", "text", "number", "integer", "boolean", "choice", "url", "path", "oauth")
 _PYTHON = {"string": str, "text": str, "url": str, "path": str, "choice": str}
 _PYTHON |= {"number": (int, float), "integer": int, "boolean": bool}
@@ -101,6 +106,7 @@ SCHEMA: dict[str, Any] = {
     "required": ["name", "version", "label", "about", "kind", "stage_types", "runtime"],
     "properties": {
         # What it is
+        "contract": {"type": "integer", "minimum": 1},  # the Package Contract; absent is 1
         "name": {"type": "string", "pattern": _SNAKE},
         "version": {"type": "string", "pattern": _VERSION},
         "label": {"type": "string", "minLength": 1, "maxLength": 60},
@@ -317,6 +323,11 @@ class ManifestError(ValueError):
     """An invalid Manifest; the message starts with the field, as `config[1].options: ...`."""
 
 
+class ContractError(ManifestError):
+    """A Manifest written for a Package Contract this core does not run; the message says what
+    to do."""
+
+
 class InstallError(RuntimeError):
     """A package that could not be installed; nothing of it is left behind."""
 
@@ -373,8 +384,35 @@ def _is_schema(schema: dict[str, Any]) -> str | None:
     return None
 
 
+def contract_problem(name: str, version: str, contract: int) -> str | None:
+    """Why this core cannot run a package written for `contract`, or None when it can."""
+    runs = (
+        f"contract {NEWEST_CONTRACT}"
+        if OLDEST_CONTRACT == NEWEST_CONTRACT
+        else f"contracts {OLDEST_CONTRACT} to {NEWEST_CONTRACT}"
+    )
+    if contract > NEWEST_CONTRACT:
+        return (
+            f"{name} {version} needs package contract {contract}, and this Kriflow runs {runs}."
+            f" Update Kriflow first, or install an older {name}."
+        )
+    if contract < OLDEST_CONTRACT:
+        return (
+            f"{name} {version} was written for package contract {contract}, and this Kriflow"
+            f" runs {runs}. Install a newer {name}."
+        )
+    return None
+
+
 def check_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
-    """The Manifest when it is valid. Raises ManifestError naming the first bad field."""
+    """The Manifest when it is valid. Raises ContractError for a Package Contract this core does
+    not run, checked first so a newer package's new fields do not hide it, else ManifestError
+    naming the first bad field."""
+    contract = manifest.get("contract", 1)
+    if type(contract) is int and contract >= 1:  # anything else is the schema's to name
+        name, version = manifest.get("name", "this package"), manifest.get("version", "")
+        if problem := contract_problem(str(name), str(version), contract):
+            raise ContractError(problem)
     error = best_match(Draft202012Validator(SCHEMA).iter_errors(manifest))
     if error is not None:
         raise _schema_error(error)
@@ -756,10 +794,11 @@ class Packages:
         """Install a Manifest Swarmify wrote as a local package. An installed local version
         with the same Manifest is reused; else it installs as the next free `0.0.N`. Raises
         ManifestError for a bad Manifest."""
-        name = manifest["name"]
+        name, manifest = manifest["name"], {**manifest, "contract": NEWEST_CONTRACT}
         mine = [p for p in self.list() if p.name == name and p.source == LOCAL]
         for p in mine:
-            if p.state == "installed" and self.manifest(name, p.version) == {
+            # one written before contracts is contract 1
+            if p.state == "installed" and {"contract": 1, **self.manifest(name, p.version)} == {
                 **manifest,
                 "version": p.version,
             }:
@@ -865,12 +904,14 @@ class Packages:
         commit: str | None = None,
         approved: Collection[str] | None = None,
         subfolder: str | None = None,
+        shared_caches: bool = False,
     ) -> Package:
         """Copy the package at `source` (cloned at `commit`, the one reviewed, else at `ref`;
         its `subfolder`, when given) to `<root>/<name>/<version>/` and run its install step
         there. `approved`, the permissions the operator approved, must hold every one it
         declares, or nothing of it runs; None for this repository's own packages and local
-        ones, which Swarmify trusts. Raises
+        ones, which Swarmify trusts. `shared_caches` lets its install step share uv's and npm's
+        caches as this repository's own packages do: for a default from the Default List. Raises
         ManifestError for a bad Manifest, InstallError when a permission is not approved, the
         version is installed already or the step fails; either way nothing new is left
         behind."""
@@ -878,7 +919,7 @@ class Packages:
             record = {"source": record_as or source}
             if subfolder:
                 record["subfolder"] = subfolder
-            return self._install(folder, record, ref or commit, resolved, approved)
+            return self._install(folder, record, ref or commit, resolved, approved, shared_caches)
 
     def _install(
         self,
@@ -887,6 +928,7 @@ class Packages:
         ref: str | None,
         commit: str | None,
         approved: Collection[str] | None,
+        shared_caches: bool = False,
     ) -> Package:
         manifest = read_manifest(folder)
         if approved is not None:
@@ -901,7 +943,8 @@ class Packages:
         try:
             shutil.copytree(folder, target, ignore=COPY_SKIPS)
             if manifest.get("install"):
-                self._run_install(manifest, target, folder.is_relative_to(self.repo.resolve()))
+                ours = shared_caches or folder.is_relative_to(self.repo.resolve())
+                self._run_install(manifest, target, ours)
             record: dict[str, Any] = {
                 **source,
                 "installed_at": datetime.now(UTC).isoformat(),

@@ -3,6 +3,7 @@ Connector Packages installed for the whole install."""
 
 import hashlib
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
@@ -17,6 +18,7 @@ from swarmify_connectors import (
     Connector,
     ConnectorError,
     Connectors,
+    ContractError,
     HealthCheck,
     InstallError,
     KeyCheck,
@@ -27,9 +29,24 @@ from swarmify_connectors import (
 )
 from swarmify_connectors.index import INDEX_URL, IndexUnavailable, read_index
 from swarmify_connectors.oauth import CALLBACK, SignInNeeded
+from swarmify_connectors.packages import NEWEST_CONTRACT, OLDEST_CONTRACT, contract_problem
 from swarmify_connectors.setup import env_name, fields, needs_sign_in, scope, secret
 from swarmify_workflows import Workflows
 from swarmify_worlds import Worlds
+
+_OLD_HELP = re.compile(
+    r"^https://github\.com/(?:wagleanuj|Kriflow)/swarmify/(?:tree|blob)/[^/]+/connectors/([a-z0-9_]+)(.*)$"
+)
+"""A help link into the core's old `connectors/` folder, which the packages left (issue 585)."""
+
+
+def help_link(url: str | None) -> str | None:
+    """A Setup form's help link. Legacy: a version installed before the packages moved to
+    Kriflow/packages keeps a link under the core's old `connectors/<name>`, answered as the same
+    place in the package's new home."""
+    if url and (old := _OLD_HELP.fullmatch(url)):
+        return f"https://github.com/Kriflow/packages/tree/main/{old[1]}{old[2]}"
+    return url
 
 
 class NewConnector(BaseModel):
@@ -122,7 +139,7 @@ class PackageSource(BaseModel):
     """The tag, branch or commit to install from git; none for a git URL's default branch, or
     for a folder copied as it is. A local path given one is cloned at it."""
     subfolder: Ref | None = None
-    """The folder of the repository the package is in, as `connectors/speech`; none for its
+    """The folder of the repository the package is in, as `speech`; none for its
     root."""
 
 
@@ -170,12 +187,20 @@ class IndexEntry(BaseModel):
     subfolder: str | None
     ref: str
     permissions: list[str]
+    contract: int
+    """The Package Contract it needs; 1 when the index says none."""
+    runnable: bool
+    """Whether this core runs that contract; when not, `problem` says what to do."""
+    problem: str | None
 
 
 class PackageIndex(BaseModel):
     url: str
     """Where the index was read from: the `SWARMIFY_CONNECTOR_INDEX` setting."""
     packages: list[IndexEntry]
+    oldest_contract: int
+    newest_contract: int
+    """The range of Package Contracts this core runs."""
 
 
 class EnabledPackage(BaseModel):
@@ -382,14 +407,25 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
     @api.get("/packages/index")
     def package_index() -> PackageIndex:
         """The curated index of known packages, read from `SWARMIFY_CONNECTOR_INDEX` (an https
-        URL or a local file; by default the swarmify-connectors repository's `index.toml`). 502
+        URL or a local file; by default Kriflow/packages' `index.toml`). 502
         saying why when it cannot be fetched or read."""
         url = os.environ.get("SWARMIFY_CONNECTOR_INDEX") or INDEX_URL
         try:
             entries = read_index(url)
         except IndexUnavailable as exc:
             raise HTTPException(502, f"Could not read the index at {url}: {exc}") from exc
-        return PackageIndex(url=url, packages=[IndexEntry(**e) for e in entries])
+
+        def entry(e: dict[str, Any]) -> IndexEntry:
+            version = e["ref"].removeprefix(f"{e['name']}-v")  # a release tag names its version
+            problem = contract_problem(e["name"], version, e["contract"])
+            return IndexEntry(**e, runnable=problem is None, problem=problem)
+
+        return PackageIndex(
+            url=url,
+            packages=[entry(e) for e in entries],
+            oldest_contract=OLDEST_CONTRACT,
+            newest_contract=NEWEST_CONTRACT,
+        )
 
     @api.get("/packages/{name}/{version}/icon", response_class=Response)
     def package_icon(name: str, version: str) -> Response:
@@ -419,6 +455,8 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         a symlink out of the package, that version installed already)."""
         try:
             review = packages.review(body.source, body.ref, body.subfolder)
+        except ContractError as exc:
+            raise HTTPException(422, str(exc)) from exc
         except ManifestError as exc:
             raise HTTPException(422, f"invalid Manifest: {exc}") from exc
         except InstallError as exc:
@@ -440,6 +478,8 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
                 approved=body.approved,
                 subfolder=body.subfolder,
             )
+        except ContractError as exc:
+            raise HTTPException(422, str(exc)) from exc
         except ManifestError as exc:
             raise HTTPException(422, f"invalid Manifest: {exc}") from exc
         except InstallError as exc:
@@ -534,7 +574,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         return SetupView(
             package=name,
             version=connector.version or "",
-            help_url=m.get("setup", {}).get("help_url"),
+            help_url=help_link(m.get("setup", {}).get("help_url")),
             test=m.get("setup", {}).get("test"),
             fields=[
                 SetupField.model_validate(

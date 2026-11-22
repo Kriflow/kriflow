@@ -77,7 +77,7 @@ def resumer(connectors: Connectors, tmp_path: Path) -> None:
         )
     )
     connectors.packages = Packages(connectors.packages.root, repo)
-    connectors.install_defaults()
+    connectors.packages.install("connectors/clicks")
     connectors.enable(W, "clicks", "1.0.0")
     connectors.save_setup(W, "clicks", {"token": "t"}, {})
 
@@ -178,7 +178,7 @@ def test_outcomes_come_from_each_publish_connector_offering_them_with_its_setup(
     repo = tmp_path / "repo"
     shutil.copytree(FIXTURES / "packages/clicks", repo / "connectors/clicks")
     connectors.packages = Packages(connectors.packages.root, repo)
-    connectors.install_defaults()
+    connectors.packages.install("connectors/clicks")
     connectors.enable(W, "clicks", "1.0.0")
     (clicks,) = connectors.outcome_reporters(W)
     assert clicks.manifest["primary_metric"] == "clicks"

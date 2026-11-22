@@ -3,7 +3,7 @@ draft the workflow, run it through a pick gate, a render, a review gate and a pu
 gate, then find the artifacts on the timeline and in the library and the files on disk; then
 upkeep writes the views back and retention prunes the video.
 
-Behind the API: the scripted agent CLI (no model) and the fake render and YouTube connectors."""
+Behind the API: the scripted agent CLI (no model) and the fake render and publish fixtures."""
 
 import os
 import re
@@ -32,12 +32,12 @@ def test_draft_with_the_planner_run_every_gate_and_publish(
 
 
 def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[..., None]) -> None:
-    # YouTube's account, as signing in on the Connectors page leaves it (Google is not reachable)
+    # fake_publish's account, as signing in on the Connectors page leaves it
     store = SetupStore(data_dir / "setup.json")
-    store.put_value("youtube", None, "youtube_client_id", "id")
-    store.put_value("youtube", None, "youtube_client_secret", "s")
+    store.put_value("fake_publish", None, "account_client_id", "id")
+    store.put_value("fake_publish", None, "account_client_secret", "s")
     tokens = {"access_token": "at", "refresh_token": "rt", "expires_at": time.time() + 3600}
-    store.put_value("youtube", None, "youtube", tokens)
+    store.put_value("fake_publish", None, "account", tokens)
 
     # The planner drafts it from plain words; the stage rail and the check follow the draft.
     page.get_by_test_id("no-workflows").get_by_role("link", name="Write a workflow").click()
@@ -86,9 +86,10 @@ def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[
     expect(page.get_by_test_id("no-gates")).to_be_visible(timeout=20_000)
 
     page.goto(f"{base_url}/worlds/{world}/runs/{run}")
-    expect(status).to_have_text(re.compile(r"^Done in .*\. Posted to YouTube\.$"), timeout=20_000)
+    posted = re.compile(r"^Done in .*\. Posted to Fake Publish\.$")
+    expect(status).to_have_text(posted, timeout=20_000)
     expect(page.get_by_role("link", name="Open the post").first).to_have_attribute(
-        "href", "https://youtu.be/e2e-video"
+        "href", "https://fake.example.org/v/e2e-video"
     )
     rail = page.get_by_test_id("timeline")
 
@@ -115,7 +116,9 @@ def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[
     expect(page.get_by_test_id("publish")).to_contain_text("Five hooks that work")
     page.get_by_role("tab", name="Details").click()
     page.get_by_text("Technical details").click()
-    expect(page.get_by_test_id("call-response")).to_contain_text("https://youtu.be/e2e-video")
+    expect(page.get_by_test_id("call-response")).to_contain_text(
+        "https://fake.example.org/v/e2e-video"
+    )
 
     page.goto(f"{base_url}/worlds/{world}/library")
     library = page.get_by_test_id("library")
@@ -133,7 +136,7 @@ def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[
     assert any(f.endswith("artifacts/short.mp4") for f in files)
     assert any(f.endswith("artifacts/short.mp4.md") for f in files)
     (publish,) = folder.rglob("publish.md")
-    assert "https://youtu.be/e2e-video" in publish.read_text()
+    assert "https://fake.example.org/v/e2e-video" in publish.read_text()
 
     # Upkeep writes the video's views beside the publish record and onto the scorecard (84, 85);
     # the record itself, which the graph reads, stays as it was.

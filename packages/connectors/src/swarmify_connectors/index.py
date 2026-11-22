@@ -1,9 +1,9 @@
 """The curated index (ADR 0019, issue 226): one TOML file in a public repository listing known
 Connector Packages, where each is fetched from and the permissions it declares, so the
 Connectors page can browse them. There is no marketplace: authors add a package by pull
-request (see `docs/index-repo/README.md`). An entry's permissions are a summary for browsing;
-installing it goes through the normal review, whose permissions, read from the clone, are what
-the operator approves.
+request (see the README of Kriflow/packages, which holds the index). An entry's permissions are
+a summary for browsing; installing it goes through the normal review, whose permissions, read
+from the clone, are what the operator approves.
 
 The format, one `[[packages]]` table per package (fields the format does not name are ignored,
 so a newer index still reads):
@@ -15,6 +15,7 @@ so a newer index still reads):
     subfolder = "connectors/speech"    # optional: where the package is in the repository
     ref = "v1.0.0"                     # the recommended tag, branch or commit
     permissions = ["network: api.example.org"]  # as the review lists them
+    contract = 1                       # optional: the Package Contract it needs, absent is 1
 """
 
 import time
@@ -27,7 +28,7 @@ import httpx
 from jsonschema.exceptions import best_match
 from jsonschema.validators import Draft202012Validator
 
-INDEX_URL = "https://raw.githubusercontent.com/wagleanuj/swarmify-connectors/main/index.toml"
+INDEX_URL = "https://raw.githubusercontent.com/Kriflow/packages/main/index.toml"
 """The default for the `SWARMIFY_CONNECTOR_INDEX` setting."""
 MAX_BYTES = 1_000_000
 TIMEOUT_SECONDS = 10.0
@@ -49,12 +50,13 @@ SCHEMA: dict[str, Any] = {
                     "subfolder": {**_TEXT, "maxLength": 200},
                     "ref": {"type": "string", "pattern": "^(?!-)[A-Za-z0-9._/-]{1,200}$"},
                     "permissions": {"type": "array", "items": {**_TEXT, "maxLength": 400}},
+                    "contract": {"type": "integer", "minimum": 1},
                 },
             },
         }
     },
 }
-FIELDS = ("name", "description", "git", "subfolder", "ref", "permissions")
+FIELDS = ("name", "description", "git", "subfolder", "ref", "permissions", "contract")
 
 
 class IndexUnavailable(RuntimeError):
@@ -89,8 +91,8 @@ def _download(url: str, transport: httpx.BaseTransport | None) -> bytes:
 
 def read_index(where: str, transport: httpx.BaseTransport | None = None) -> list[dict[str, Any]]:
     """The entries of the index at `where`, an https URL or a local file path, each with the
-    FIELDS (`subfolder` None when absent). Raises IndexUnavailable saying why it could not be
-    fetched, or naming the first bad field (`packages[2].ref: ...`)."""
+    FIELDS (`subfolder` None and `contract` 1 when absent). Raises IndexUnavailable saying why it
+    could not be fetched, or naming the first bad field (`packages[2].ref: ...`)."""
     scheme = urlsplit(where).scheme
     if scheme == "https":
         raw = _download(where, transport)
@@ -111,4 +113,7 @@ def read_index(where: str, transport: httpx.BaseTransport | None = None) -> list
     if error is not None:
         field = "".join(f"[{p}]" if isinstance(p, int) else f".{p}" for p in error.absolute_path)
         raise IndexUnavailable(f"{field.lstrip('.') or 'index'}: {error.message}")
-    return [{f: entry.get(f) for f in FIELDS} for entry in index["packages"]]
+    return [
+        {f: entry.get(f, 1 if f == "contract" else None) for f in FIELDS}
+        for entry in index["packages"]
+    ]

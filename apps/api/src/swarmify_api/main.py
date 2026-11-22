@@ -141,7 +141,7 @@ from swarmify_worlds import MIGRATIONS as WORLDS_MIGRATIONS
 log = logging.getLogger(__name__)
 VERSION = version("swarmify-api")
 REPO = Path(__file__).parents[4]
-"""This repository, whose `connectors/` folder holds the first-party Connector Packages."""
+"""This repository, whose `connectors/` folder holds the core's own package, python_script."""
 WEB_DIST = Path(os.environ.get("SWARMIFY_WEB_DIST", REPO / "apps/web/dist"))
 
 

@@ -2,20 +2,24 @@
 only where a world enables it with its Setup done, stays off by default when its Manifest says
 so, and its long-lived process is wanted once per distinct set of Setup values."""
 
-import shutil
 from pathlib import Path
 
-from swarmify_connectors import Connectors, FakeTransport, Packages
+import pytest
+
+from swarmify_connectors import Connectors, FakeTransport
+from swarmify_connectors.fake import default_list
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_a_remote_approver_is_used_only_where_its_setup_is_done(
-    connectors: Connectors, transport: FakeTransport, tmp_path: Path
+    connectors: Connectors,
+    transport: FakeTransport,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo = tmp_path / "repo"
-    shutil.copytree(FIXTURES / "packages/pager", repo / "connectors/pager")
-    connectors.packages = Packages(connectors.packages.root, repo)
+    listed = default_list(tmp_path / "packages", {"pager": FIXTURES / "packages/pager"})
+    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(listed))
     assert connectors.install_defaults() == {}  # installed, but no world is given it
     connectors.offer_defaults("w1")
     assert connectors.enabled("w1") == {}

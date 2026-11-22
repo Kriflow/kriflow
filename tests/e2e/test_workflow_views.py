@@ -39,7 +39,7 @@ def test_stage_list_and_yaml_stay_in_step_and_every_rule_shows(page: Page, base_
         page.get_by_role("button", name="Add stage").click()
         expect(cards.locator("li")).to_have_count(3)
         # A new connector stage names no connector until you do (#219).
-        page.get_by_label("Calls of new step").fill("remotion_render")
+        page.get_by_label("Calls of new step").fill("kit")
         page.get_by_label("Output of new step").fill("short.mp4")  # story 15
         expect(cards).to_contain_text("new step")
 
@@ -55,13 +55,10 @@ def test_stage_list_and_yaml_stay_in_step_and_every_rule_shows(page: Page, base_
             expect(yaml).to_contain_text(line)
         expect(yaml).to_contain_text("kind: approve")
         expect(yaml).to_contain_text("connector: new step")
-        # A render stage names its script, Remotion project and composition before it can be
-        # saved; its project is one of the world's Templates.
-        expect(page.get_by_test_id("problems")).to_contain_text("needs params.project")
-        expect(page.get_by_test_id("problems")).to_contain_text("needs an input, the script")
+        # A render stage's project is one of the world's Templates.
         fixed = re.sub(
-            r"( *)calls: remotion_render\n",
-            r"\g<0>\1input: ideas.md\n\1params: {project: shorts, composition: Short}\n",
+            r"( *)calls: kit\n",
+            r"\g<0>\1params: {project: shorts}\n",
             yaml.input_value(),
         )
         yaml.fill(

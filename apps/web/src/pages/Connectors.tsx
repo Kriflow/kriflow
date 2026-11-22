@@ -759,7 +759,7 @@ function InstallPackage({ from, onInstalled }: { from: PackageFrom; onInstalled:
  * and the permissions the index says it declares. Picking one opens the usual review, which reads
  * what the package itself declares; that, not this summary, is what the operator approves. */
 function BrowseIndex({ installed, onPick }: { installed: Package[]; onPick: (e: IndexEntry) => void }) {
-  const [index, setIndex] = useState<{ url: string; packages: IndexEntry[] } | null>(null);
+  const [index, setIndex] = useState<components["schemas"]["PackageIndex"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -807,6 +807,18 @@ function BrowseIndex({ installed, onPick }: { installed: Package[]; onPick: (e: 
                     <span className="con-main">
                       <b className="mono">{e.name}</b>
                       <span className="faint">{e.description}</span>
+                      {!e.runnable && (
+                        <>
+                          <span className="pill warning">Needs a newer Kriflow</span>
+                          <span>
+                            Written for package contract {e.contract}. This Kriflow runs{" "}
+                            {index.oldest_contract === index.newest_contract
+                              ? `contract ${index.newest_contract}`
+                              : `contracts ${index.oldest_contract} to ${index.newest_contract}`}
+                            .
+                          </span>
+                        </>
+                      )}
                       <span className="faint">
                         Asks for: {e.permissions.length === 0 ? "no permissions" : e.permissions.join(", ")}
                       </span>
@@ -816,7 +828,12 @@ function BrowseIndex({ installed, onPick }: { installed: Package[]; onPick: (e: 
                       </span>
                     </span>
                     {versions.length > 0 && <span className="pill">Installed {versions.join(", ")}</span>}
-                    <button type="button" onClick={() => onPick(e)} aria-label={`Review and install ${e.name}`}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(e)}
+                      disabled={!e.runnable}
+                      aria-label={`Review and install ${e.name}`}
+                    >
                       Review and install
                     </button>
                   </li>

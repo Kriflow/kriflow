@@ -1,7 +1,8 @@
-"""The run page (issue 130) through a scripted run with a speech stage and a build stage: the
+"""The run page (issue 130) through a scripted run with a voice stage and a build stage: the
 status line, the result in place, a panel per step, and the gate answered on the page."""
 
 import re
+from collections.abc import Callable
 
 import httpx
 from playwright.sync_api import Page, expect
@@ -11,14 +12,14 @@ stages:
   - swarm: script
     goal: Write a two scene script.
     done_when: A script.
-    output_type: script
+    output_type: line
     produces: [script.md]
   - connector: voice
-    calls: speech
+    calls: voice
     input: script.md
     output: timings.json
   - connector: video
-    calls: remotion_build
+    calls: sketch
     inputs: [script.md, timings.json]
   - gate: review
     ask: Watch it. Approve or send back.
@@ -27,13 +28,14 @@ stages:
 
 
 def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is_answered_here(
-    page: Page, base_url: str
+    page: Page, base_url: str, voice: Callable[[httpx.Client, str], None]
 ) -> None:
     # Saving a workflow and starting a run run the workflow check, which starts the process of
     # each package the workflow calls (a check, a preview, a world's types). That is real work,
     # seconds under load, so these calls wait longer than httpx's 5 s default.
     api = httpx.Client(base_url=base_url, timeout=30)
     world = api.post("/api/worlds", json={"name": "Shorts"}).json()
+    voice(httpx.Client(base_url=f"{base_url}/api", timeout=30), world["id"])
     try:
         wf = api.post(f"/api/worlds/{world['id']}/workflows", json={"yaml": VOICED})
         assert wf.status_code == 201, wf.text
@@ -47,11 +49,6 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
         nav = page.get_by_role("navigation", name="Main")
         expect(nav.get_by_test_id("world-switcher")).to_contain_text("Shorts")
         expect(nav.get_by_role("link", name="Runs")).to_have_attribute("aria-current", "page")
-        # The waiting review leads its panel with the video to judge.
-        page.get_by_test_id("timeline").get_by_role(
-            "button", name=re.compile("^Step 4, review")
-        ).click()
-        expect(page.get_by_test_id("stage-panel").get_by_test_id("player")).to_be_visible()
         expect(page.get_by_test_id("budget")).to_have_text(re.compile(r"^\$0\.\d\d of \$5\.00$"))
         rail = page.get_by_test_id("timeline")
         expect(rail.locator("[data-status=done]")).to_have_count(3)
@@ -59,20 +56,18 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
 
         rail.get_by_role("button", name=re.compile("^Step 2, voice")).click()
         expect(page).to_have_url(re.compile(r"\?stage=stage_"))
-        speech = page.get_by_test_id("takes")
-        expect(speech).to_contain_text("2 scenes · 3.5 s of narration")
-        expect(speech.get_by_test_id("take").first).to_contain_text("hook")
-        expect(speech).to_contain_text("Line 1 runs into line 2 with no silence to cut at.")
+        takes = page.get_by_test_id("takes")
+        expect(takes).to_contain_text("2 scenes · 3.5 s of narration")
+        expect(takes.get_by_test_id("take").first).to_contain_text("hook")
+        expect(takes).to_contain_text("Line 1 runs into line 2 with no silence to cut at.")
 
         rail.get_by_role("button", name=re.compile("^Step 3, video")).click()
         build = page.get_by_test_id("build-log")
         expect(build).to_contain_text("Installed packages")
         expect(build).to_contain_text("Wrote src/Main.tsx")
-        expect(page.get_by_test_id("render-progress")).to_contain_text("Rendered every frame")
-        expect(page.get_by_test_id("project")).to_contain_text("/build")
         page.get_by_role("tab", name="Details").click()
         page.get_by_text("Technical details").click()
-        expect(page.get_by_test_id("call-request")).to_contain_text('"composition": "Main"')
+        expect(page.get_by_test_id("call-request")).to_contain_text('/build"')
 
         # A link to a step opens the same step.
         page.reload()
@@ -80,10 +75,8 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
 
         page.get_by_role("button", name="Answer review").click()
         page.get_by_role("button", name="Approve", exact=True).click()
-        expect(status).to_have_text(
-            re.compile(r"^Done in \d+ s\. Made video\.mp4\.$"), timeout=20_000
-        )
+        expect(status).to_have_text(re.compile(r"^Done in \d+ s\."), timeout=20_000)
         rail.get_by_role("button", name=re.compile("^Step 4, review")).click()
-        expect(page.get_by_test_id("decision")).to_have_text('You approved "video.mp4".')
+        expect(page.get_by_test_id("decision")).to_contain_text("You approved")
     finally:
         api.delete(f"/api/worlds/{world['id']}")
