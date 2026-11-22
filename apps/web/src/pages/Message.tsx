@@ -18,10 +18,12 @@ const agents = (n: number) => (n === 1 ? "1 agent" : `${n} agents`);
 export function receipt(lines: LogEntry[]): { queued: boolean; text: string } {
   const sent = [...new Set(lines.map((e) => e.agent))];
   const delivered = new Set(lines.filter((e) => said(e).state === "delivered").map((e) => e.agent));
-  const waiting = sent.filter((a) => !delivered.has(a));
+  const dropped = new Set(lines.filter((e) => said(e).state === "dropped").map((e) => e.agent));
+  if (dropped.size && !delivered.size) return { queued: true, text: "Not delivered: the stage ended first" };
+  const waiting = sent.filter((a) => !delivered.has(a) && !dropped.has(a));
   const to = delivered.size === 1 && sent.length === 1 ? who(sent[0]!) : agents(delivered.size);
   if (!waiting.length) return { queued: false, text: `Delivered to ${to}, saved as a run change` };
-  const why = lines.map((e) => said(e).why).find(Boolean) ?? "gets it at the next turn.";
+  const why = lines.filter((e) => said(e).state === "queued").map((e) => said(e).why).find(Boolean) ?? "gets it at the next turn.";
   const names = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(waiting.map(who));
   const head = delivered.size ? `Delivered to ${agents(delivered.size)}. ` : "";
   const queued = waiting.length === 1 ? `Queued: ${names} is ${why}` : `Queued for ${names}: each is ${why}`;

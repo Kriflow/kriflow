@@ -119,7 +119,12 @@ export function AttemptPin({ attempt }: { attempt: Attempt }) {
   const head = c.kind === "send_back" ? "Sent back" : c.kind === "rerun" ? "Your rerun" : "Your change";
   const chips =
     c.kind === "follow_up"
-      ? [`Continues attempt ${attempt.number - 1}'s session`, "Saved as a run change", "Retro will see it"]
+      ? [
+          // A Fork's stage starts at attempt 1 with new sessions, so there is no session to continue.
+          attempt.number > 1 ? `Continues attempt ${attempt.number - 1}'s session` : "New session, your words first",
+          "Saved as a run change",
+          "Retro will see it",
+        ]
       : c.kind === "rerun"
         ? ["Started clean", "Saved as a run change", "Retro will see it"]
         : ["Continues the session"];

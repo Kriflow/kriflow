@@ -1231,6 +1231,7 @@ def test_a_message_the_attempt_never_took_is_dropped_not_carried_on(
     _seed(board)
     script = Script([GRAPH, CLAIM, FINISH], PASS, [CLAIM, FINISH], PASS)
     swarm = _swarm(board, tmp_path, script)
+    assert board.list_attempts(S) == []  # a stage from before Attempts has none, no error
     board.start_attempt(W, R, S, 0, None)
     board.agent(W, R, S, "ghost", "worker")
     swarm.message(R, S, "change_1", "Old words.", names=["ghost"])  # an agent that never runs

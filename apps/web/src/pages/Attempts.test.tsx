@@ -1,8 +1,9 @@
 import { expect, test } from "vitest";
+import { render } from "vitest-browser-react";
 
 import type { LogEntry } from "../api/events";
 import { run, stage } from "../test/fakes";
-import { type Attempt, attemptLine, attemptLog, rerunWarning } from "./Attempts";
+import { type Attempt, AttemptPin, attemptLine, attemptLog, rerunWarning } from "./Attempts";
 
 const one: Attempt = { number: 1, started_at: "2026-11-21T10:00:00Z", ended_at: "2026-11-21T10:01:40Z", spent_usd: 0.31, cause: null };
 const two: Attempt = { number: 2, started_at: "2026-11-21T10:05:00Z", ended_at: "2026-11-21T10:06:10Z", spent_usd: 0.22, cause: { kind: "follow_up", note: "Cut it.", by: "operator", at: "2026-11-21T10:05:00Z" } };
@@ -27,4 +28,12 @@ test("the warning names the later stages that run again and the gates that wait 
   expect(rerunWarning(r, r.stages[0]!, p)).toBe("A change here reruns Check and Approve. Approve waits for you again.");
   const ended = { before: { Draft: "done" }, in_place: false, fork_from: "Draft" } as never;
   expect(rerunWarning(r, r.stages[0]!, ended)).toBe("Nothing after it runs again. The run has ended, so this continues as a new run from Draft.");
+});
+
+test("a Follow-up's first Attempt (a Fork's) starts a new session, not attempt 0's", async () => {
+  const screen = await render(<AttemptPin attempt={{ ...two, number: 1 }} />);
+  await expect.element(screen.getByText("New session, your words first")).toBeVisible();
+  expect(screen.getByText(/attempt 0/).query()).toBeNull();
+  const again = await render(<AttemptPin attempt={two} />);
+  await expect.element(again.getByText("Continues attempt 1's session")).toBeVisible();
 });

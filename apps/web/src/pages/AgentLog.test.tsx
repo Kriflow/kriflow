@@ -230,3 +230,12 @@ test("no message box once no agent of the stage is working", async () => {
   await expect.element(screen.getByTestId("transcript")).toBeVisible();
   await expect.element(screen.getByTestId("message-box")).not.toBeInTheDocument();
 });
+
+test("a message its Attempt ended before any agent took reads as not delivered", async () => {
+  const { receipt } = await import("./Message");
+  const said = (state: string, why: string | null) => ({ seq: 1, agent: "worker-1", stage_id: "stage_1", kind: "message", ts, detail: "Hi.", input: { state, why } }) as LogEntry;
+  expect(receipt([said("queued", "between sessions and gets this first when its session resumes."), said("dropped", "the stage ended first")])).toEqual({
+    queued: true,
+    text: "Not delivered: the stage ended first",
+  });
+});

@@ -19,7 +19,7 @@ import { Whiteboard } from "./Whiteboard";
 import { StageLook } from "./RunHero";
 import { ActivityViews } from "./Transcript";
 import { MessageBox, messageable } from "./Message";
-import { AttemptPin, AttemptTabs, attemptLog, attemptSeconds, FollowUpBox, followable, useAttemptFiles, useAttempts } from "./Attempts";
+import { AttemptPin, AttemptTabs, attemptLog, causeOf, attemptSeconds, FollowUpBox, followable, useAttemptFiles, useAttempts } from "./Attempts";
 import { cap } from "../skin";
 
 type Stage = Run["stages"][number];
@@ -736,7 +736,11 @@ export function StagePanel(p: PanelProps) {
   // blocking its render) still gets the live log.
   const log = attemptLog(p.log, attempts, on);
   const shownLog = kind === "build" ? log.filter((e) => e.agent !== "builder") : log;
-  const working = p.agents.filter((a) => a.status === "working");
+  // A message goes to the workers (as the API's recipients): the live ones, else, while the
+  // stage still runs (its judge scoring), every worker, queued for its next session.
+  const workers = p.agents.filter((a) => a.role === "worker");
+  const live = workers.filter((a) => a.status === "working");
+  const working = live.length ? live : p.agents.some((a) => a.status === "working") ? workers : [];
   const prev = run.stages[stage.index - 1];
   const next = run.stages[stage.index + 1];
   const files = (
@@ -932,7 +936,8 @@ export function StagePanel(p: PanelProps) {
         </p>
       )}
       {/* A swarm stage pins each Attempt's words above; any other stage lists its notes. */}
-      {stage.type !== "swarm" &&
+      {/* Attempt rows began with issue 535: a swarm stage from before has only its notes. */}
+      {(stage.type !== "swarm" || !attempts.some((a) => causeOf(a))) &&
         (stage.notes ?? []).map((note, i) => (
           <p className="faint" key={i}>
             Sent back with: {note}

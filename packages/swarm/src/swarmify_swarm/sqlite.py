@@ -389,6 +389,8 @@ class SqliteStorage:
             (spent,) = conn.execute(
                 "SELECT coalesce(sum(cost_usd), 0) FROM agents WHERE stage_id = ?", (stage_id,)
             ).fetchone()
+        if not rows:  # a stage from before Attempts, or one that never ran
+            return []
         after = [r["spent_before"] for r in rows[1:]] + [spent]
         ends = [r["started_at"] for r in rows[1:]] + [None]
         return [
