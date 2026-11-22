@@ -57,6 +57,7 @@ from swarmify_api import (
     logins,
     mcp,
     notifications,
+    person_checks,
     planner,
     remote,
     review_feeds,
@@ -1008,6 +1009,9 @@ def create_app(
                     cast=cast,
                     cause=None if cause is None else asdict(cause),
                 )
+                # a Person Check stopped or unanswered fails the stage (person_check.py)
+                if why := registry.checks.failure(stage_id):
+                    raise ConnectorError(why)
         except Stopped as exc:
             raise OverBudget(str(exc)) from exc
         finally:
@@ -1292,6 +1296,7 @@ def create_app(
         return (run.name, stage.name) if run and stage else None
 
     app.include_router(logins.router(registry.logins, world_svc, workflow_svc, run_label))
+    app.include_router(person_checks.router(registry.checks, run_label))
     app.add_exception_handler(RequestValidationError, logins.no_echo)
     app.include_router(tasks.router(whiteboard, runner.get, clock))
     app.include_router(lists.router(lists_svc, lambda w: world_svc.get(w) is not None))

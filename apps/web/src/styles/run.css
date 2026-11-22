@@ -406,3 +406,14 @@ a.made-file:hover { background: var(--raised); }
   .follow button { min-height: 44px; } /* "Go there", shown whenever a finished stage is open */
   .msg-box .field button.icon[aria-pressed="true"] { border-color: var(--text); color: var(--text); background: var(--raised); }
 }
+
+/* A Person Check: a run waits mid-stage for a code or a look (World Logins spec). */
+.person-checks { display: grid; gap: 12px; margin: 12px 0; }
+.person-check { display: grid; gap: 12px; min-width: 0; border-left: 3px solid var(--accent); }
+.person-check .pc-status { margin: 0; }
+.person-check .pc-shot { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border); }
+.person-check .pc-ask { display: grid; gap: 8px; }
+.person-check .pc-ask label { display: grid; gap: 6px; }
+.person-check .pc-ask input { min-height: 44px; font-size: 1.25rem; letter-spacing: 0.1em; }
+.person-check button { min-height: 44px; }
+.person-check .pc-actions { display: flex; flex-wrap: wrap; gap: 8px; }

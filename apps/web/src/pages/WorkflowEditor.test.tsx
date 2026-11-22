@@ -412,7 +412,8 @@ test("a stage whose package accepts a login picks one of the world's logins as c
   await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/voice.*connector/);
   expect(screen.getByRole("group", { name: "Login of voice" }).elements()).toHaveLength(0);
   await screen.getByRole("tab", { name: "YAML" }).click();
-  await expect.element(screen.getByLabelText("Workflow YAML")).not.toHaveValue(/shop_admin/);
+  await expect.element(screen.getByLabelText("Workflow YAML")).toBeVisible();
+  expect((screen.getByLabelText("Workflow YAML").element() as HTMLTextAreaElement).value).not.toContain("shop_admin");
 });
 
 test("a direct render stage picks one of its package's Templates as its project", async () => {

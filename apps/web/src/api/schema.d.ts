@@ -1355,6 +1355,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/person-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Checks
+         * @description Every open Person Check, oldest first; one world's with `world_id`.
+         */
+        get: operations["open_checks_api_person_checks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/person-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Checks */
+        get: operations["run_checks_api_runs__run_id__person_checks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/person-checks/{check_id}/screenshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Screenshot */
+        get: operations["screenshot_api_person_checks__check_id__screenshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/person-checks/{check_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer
+         * @description A code (kind `code`), or `try_again` or `stop`. 404 once it is closed, 422 for an
+         *     answer that does not fit it. The code is never returned or put in an event.
+         */
+        post: operations["answer_api_person_checks__check_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/stages/{stage_id}/tasks": {
         parameters: {
             query?: never;
@@ -4081,7 +4156,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review" | "feed" | "updating";
+            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review" | "feed" | "updating" | "person_check";
             /** Text */
             text: string;
             /** World Id */
@@ -4272,6 +4347,45 @@ export interface components {
             index: number;
             baseline: components["schemas"]["Side"];
             swarm: components["schemas"]["Side"];
+        };
+        /** PersonAnswer */
+        PersonAnswer: {
+            /** Code */
+            code?: string | null;
+            /** Action */
+            action?: ("try_again" | "stop") | null;
+        };
+        /** PersonCheckView */
+        PersonCheckView: {
+            /** Id */
+            id: string;
+            /** World Id */
+            world_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Run Name */
+            run_name: string | null;
+            /** Stage Id */
+            stage_id: string;
+            /** Stage Name */
+            stage_name: string | null;
+            /** Package */
+            package: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "code" | "look";
+            /** Ask */
+            ask: string;
+            /** Site */
+            site: string | null;
+            /** Has Screenshot */
+            has_screenshot: boolean;
+            /** Opened At */
+            opened_at: string;
+            /** Closes At */
+            closes_at: string;
         };
         /** PinBody */
         PinBody: {
@@ -8416,6 +8530,130 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UseView"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_checks_api_person_checks_get: {
+        parameters: {
+            query?: {
+                world_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCheckView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_checks_api_runs__run_id__person_checks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCheckView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screenshot_api_person_checks__check_id__screenshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                check_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_api_person_checks__check_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                check_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonAnswer"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

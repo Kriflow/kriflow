@@ -212,3 +212,84 @@ def test_a_secret_a_stage_leaks_is_scrubbed_everywhere_its_output_goes(
         for file in (data / "worlds" / w / "runs").rglob("*"):
             assert not file.is_file() or value.encode() not in file.read_bytes(), file
     assert "[secret: shop_admin]" in stored
+
+
+def start(client: TestClient, w: str, yaml: str) -> str:
+    saved = client.post(f"/api/worlds/{w}/workflows", json={"yaml": yaml})
+    assert saved.status_code == 201, saved.text
+    return client.post(f"/api/workflows/{saved.json()['workflow_id']}/runs", json={}).json()["id"]
+
+
+def ended(client: TestClient, run_id: str) -> dict[str, Any]:
+    deadline = time.monotonic() + 90
+    while (run := client.get(f"/api/runs/{run_id}").json())["status"] not in ("done", "failed"):
+        assert time.monotonic() < deadline, run
+        time.sleep(0.1)
+    return run
+
+
+def waiting_check(client: TestClient, run_id: str) -> dict[str, Any]:
+    deadline = time.monotonic() + 60
+    while not (found := client.get(f"/api/runs/{run_id}/person-checks").json()):
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    return found[0]
+
+
+def test_a_person_check_is_answered_with_a_code_on_the_web_and_the_code_stays_secret(
+    client: TestClient, tmp_path: Path, site: FakeSite
+) -> None:
+    """Seam 3, Person Check: the signer's request opens a check on the run and in Needs you, with
+    its screenshot; the code typed reaches the process in a mode-600 file and nowhere else."""
+    data = tmp_path / "data"
+    w = signer_world(client, tmp_path, site)
+    yaml = (
+        "name: Code\nstages:\n  - connector: sign\n    calls: signer\n"
+        "    params: {login: shop_admin, tool: ask, kind: code, ask: 'Enter the code we sent'}\n"
+    )
+    run_id = start(client, w, yaml)
+    check = waiting_check(client, run_id)
+    assert (check["kind"], check["ask"], check["site"]) == (
+        "code",
+        "Enter the code we sent",
+        site.host_a,
+    )
+    assert (check["run_name"], check["stage_name"]) == ("Code", "sign")
+    assert client.get("/api/person-checks").json()[0]["id"] == check["id"]
+    notices = client.get("/api/notices").json()
+    assert any(n["kind"] == "person_check" and n["run_id"] == run_id for n in notices)
+    shot = client.get(f"/api/person-checks/{check['id']}/screenshot")
+    assert shot.status_code == 200 and shot.content.startswith(b"\x89PNG")
+
+    url = f"/api/person-checks/{check['id']}"
+    assert client.post(url, json={"code": "two\nlines"}).status_code == 422
+    assert client.post(url, json={"code": "Code-90210"}).status_code == 204
+    assert client.post(url, json={"code": "Code-90210"}).status_code == 404  # answered once
+    run = ended(client, run_id)
+    assert run["status"] == "done", run
+    said = client.get(f"/api/stages/{run['stages'][0]['id']}/call").json()["response"]
+    assert said["answer_mode"] == "0o600" and said["echo"] == "[secret: shop_admin]"
+    with closing(connect(data / "swarmify.db")) as conn:
+        stored = json.dumps([list(r) for r in conn.execute("SELECT * FROM events")])
+    assert "Code-90210" not in stored and "code given" in stored
+    assert not client.get("/api/person-checks").json()
+
+
+def test_stop_at_a_person_check_fails_the_stage(
+    client: TestClient, tmp_path: Path, site: FakeSite
+) -> None:
+    w = signer_world(client, tmp_path, site)
+    yaml = (
+        "name: Look\nstages:\n  - connector: sign\n    calls: signer\n"
+        "    params: {login: shop_admin, tool: ask, kind: look, ask: 'A captcha'}\n"
+    )
+    run_id = start(client, w, yaml)
+    check = waiting_check(client, run_id)
+    assert check["kind"] == "look"
+    assert (
+        client.post(f"/api/person-checks/{check['id']}", json={"action": "stop"}).status_code == 204
+    )
+    run = ended(client, run_id)
+    assert (
+        run["status"] == "failed" and "You stopped the sign-in check" in run["stages"][0]["error"]
+    )

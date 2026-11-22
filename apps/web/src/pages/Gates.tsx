@@ -39,6 +39,7 @@ import { RunRef } from "./Runs";
 import { PublishValue } from "./Connectors";
 import { GateAsk } from "./GateAsk";
 import { Menu } from "./Menu";
+import { PersonChecks } from "./PersonChecks";
 import { useRefresh } from "../refresh";
 import { PullToRefresh } from "../PullToRefresh";
 
@@ -275,6 +276,7 @@ export function Gates() {
           </select>
         </label>
       </header>
+      <PersonChecks linked />
       {error && <p role="alert">{error}</p>}
       {stalled.filter(inWorld).map((s) => (
         <p key={s.world_id} role="alert" className="notice" data-testid="stalled-memory">
@@ -484,6 +486,8 @@ const NOTICE_KIND: Record<Notice["kind"], [one: string, many: string, failed: bo
   review: ["list waits for you", "lists wait for you", false],
   feed: ["app has things for you", "apps have things for you", false],
   updating: ["update under way", "updates under way", false],
+  // shown above as its own card, to answer here
+  person_check: ["run waits for your sign-in", "runs wait for your sign-in", false],
 };
 const DISMISSED = "swarmify.dismissed-notices";
 // Digits stripped, as push does: a notice whose minutes tick up is the same notice. A dismissed
@@ -512,7 +516,7 @@ function Notices({ notices }: { notices: Notice[] }) {
     }
   };
   const shown = notices.filter((n) => !dismissed.includes(noticeKey(n)));
-  const kinds = (Object.keys(NOTICE_KIND) as Notice["kind"][]).filter((k) => shown.some((n) => n.kind === k));
+  const kinds = (Object.keys(NOTICE_KIND) as Notice["kind"][]).filter((k) => k !== "person_check" && shown.some((n) => n.kind === k));
   if (!kinds.length) return null;
   return (
     <section className="notices" aria-label="Notices">

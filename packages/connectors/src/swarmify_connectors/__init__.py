@@ -62,6 +62,7 @@ from swarmify_connectors.packages import (
     read_manifest,
     resource_names,
 )
+from swarmify_connectors.person_check import PersonChecks
 from swarmify_connectors.ports import ConnectorTransport, Storage
 from swarmify_connectors.sandbox import (
     REGISTRIES,
@@ -357,6 +358,8 @@ class Connectors:
         """Logins handed to processes others start, by stage, settled when it ends (`settle`)."""
         self.setups = SetupStore(self.data_dir / "setup.json")
         self.logins = Logins(storage, FileSecrets(self.data_dir / "secrets.json"))
+        self.checks = PersonChecks(self.data_dir, storage.append_event)
+        """Person Checks the processes of stages open (person_check.py)."""
         """The world's World Logins; their secrets in their own mode-600 file, so deleting one
         never touches Setup."""
         self._sign_ins: dict[str, dict[str, Any]] = {}
@@ -792,6 +795,8 @@ class Connectors:
         if handed is not None:
             assert stage is not None
             handoff = self._place_session(connector, confined, handed, env, stage)
+        if stage is not None and confined is not None:
+            self._watch(connector, confined, stage, handed)
 
         def report() -> None:
             run_id = stage[0] if stage else None
@@ -807,6 +812,8 @@ class Connectors:
                     said = answer.get(LOGIN_RESULT) if isinstance(answer, dict) else None
                     if handoff is not None and isinstance(said, str):
                         handoff.result = said
+                    if stage is not None and (why := self.checks.failure(stage[1])):
+                        raise ConnectorError(why)
                     return answer
                 except ConnectorError as exc:
                     if marks and connector.version is not None and oauth.is_auth_failure(str(exc)):
@@ -822,8 +829,22 @@ class Connectors:
                 yield caller(call)
         finally:
             report()
+            if confined is not None:
+                self.checks.unwatch(confined.folder / "home")
             if handoff is not None:
                 self._settle_login(handoff)
+
+    def _watch(
+        self, connector: Connector, confined: Confined, stage: Stage, handed: Handed | None
+    ) -> None:
+        """Watch a stage process's scratch folder for the Person Checks it asks for."""
+        assert connector.world_id is not None
+        login = handed.login if handed else None
+        site = login.domains[0] if login else None
+        self.checks.watch(
+            confined.folder / "home", connector.world_id, stage, connector.name,
+            login.name if login else None, site,
+        )  # fmt: skip
 
     # World Logins (spec: World Logins And Browser Connector)
 
@@ -902,6 +923,7 @@ class Connectors:
         """A stage has ended: the logins its swarm's tool servers received settle, a secret in
         any text file it wrote is replaced (UTF-8 files under 5 MB; binaries are skipped), and
         its secrets are forgotten."""
+        self.checks.unwatch_stage(stage_id)
         for handoff in self._handoffs.pop((run_id, stage_id), []):
             self._settle_login(handoff)
         if scrub.holds(stage_id):
@@ -1281,6 +1303,8 @@ class Connectors:
             if handed is not None and where is not None:
                 handoff = self._place_session(connector, confined, handed, env, where)
                 self._handoffs.setdefault(where, []).append(handoff)
+            if where := stage or run:
+                self._watch(connector, confined, where, handed)
             servers[name] = {
                 "type": "stdio",
                 "command": sandboxed.command[0],

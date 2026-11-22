@@ -76,10 +76,10 @@ class LoginView(BaseModel):
 
 
 async def no_echo(request: Request, exc: Exception) -> Response:
-    """A 422 for a body the API could not read. On a login's routes, without the `input`
-    pydantic adds: its body holds the password."""
+    """A 422 for a body the API could not read. On a login's or a Person Check's routes, without
+    the `input` pydantic adds: the body holds a password or a code."""
     assert isinstance(exc, RequestValidationError)
-    if "/logins" not in request.url.path:
+    if "/logins" not in request.url.path and "/person-checks" not in request.url.path:
         return await request_validation_exception_handler(request, exc)
     errors = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
     return JSONResponse({"detail": errors}, status_code=422)
