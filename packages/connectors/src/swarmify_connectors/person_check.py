@@ -14,14 +14,15 @@ the process that asked is gone, and its stage runs again.
 import json
 import logging
 import os
+import re
 import secrets
-import shutil
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from swarmify_connectors import safefile
 from swarmify_kernel import Event, scrub
 
 log = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ TIMEOUT = 600.0
 """Seconds a check waits for a person before it fails its stage."""
 ASKS = "asks"
 SHOT_BYTES = 10 * 1024 * 1024
+REQUEST_BYTES = 64 * 1024
+ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+"""A request's id, which names its answer file: a plain name, never a path."""
+PNG, JPEG = b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff"
 KINDS = ("code", "look")
 STOPPED, TIMED_OUT = "You stopped the sign-in check", "Nobody answered the sign-in check"
 
@@ -177,14 +182,32 @@ class PersonChecks:
             time.sleep(self.poll)
 
     def _scan(self, home: Path, w: _Watched) -> None:
-        asks = home / ASKS
-        if not asks.is_dir():
+        """New requests in the process's `asks/`, a plain folder (never a link), each a regular
+        file read without following a link, its id a plain name."""
+        try:
+            with safefile.folder(home, ASKS) as at:
+                names = sorted(os.listdir(at))
+                fresh = [
+                    n for n in names
+                    if n.endswith(".json") and not n.endswith(".answer.json") and n not in w.seen
+                ]  # fmt: skip
+                requests = []
+                for name in fresh:
+                    w.seen.add(name)
+                    try:
+                        requests.append(
+                            (name, json.loads(safefile.read_at(at, name, REQUEST_BYTES)))
+                        )
+                    except (OSError, ValueError):
+                        log.warning("refused a Person Check request %s in %s", name, home)
+        except (FileNotFoundError, safefile.Unsafe):
             return
-        for file in sorted(asks.glob("*.json")):
-            if file.name.endswith(".answer.json") or file.name in w.seen:
+        for name, request in requests:
+            asked = request.get("id") if isinstance(request, dict) else None
+            asked = asked if asked is not None else name.removesuffix(".json")
+            if not isinstance(asked, str) or not ID.fullmatch(asked):
+                log.warning("refused a Person Check request with id %r in %s", asked, home)
                 continue
-            w.seen.add(file.name)
-            request = json.loads(file.read_text())
             kind = request.get("kind") if request.get("kind") in KINDS else "look"
             run_id, stage_id = w.stage
             check = PersonCheck(
@@ -197,7 +220,7 @@ class PersonChecks:
                 scrub.text(str(request.get("ask") or "The site asks for you."), stage_id)[:500],
                 time.time(),
                 site=w.site,
-                asked=str(request.get("id") or file.stem),
+                asked=asked,
                 home=home,
             )
             check.screenshot = self._copy(home, request.get("screenshot"), check)
@@ -206,38 +229,45 @@ class PersonChecks:
             self._event("person_check.opened", check, kind=check.kind, ask=check.ask)
 
     def _copy(self, home: Path, named: object, check: PersonCheck) -> Path | None:
-        """The screenshot, copied into the stage's folder when it is a regular image file in the
-        process's own scratch folder: a request cannot name any other file of the box."""
+        """The screenshot, copied into the stage's folder when it is a PNG or JPEG regular file
+        inside the process's own scratch folder, read once from a descriptor opened without
+        following a link, and written into a `person-check` folder that is no link either: a
+        request can name no other file of the box, nor send the copy anywhere else."""
         if not isinstance(named, str) or not named:
             return None
-        found = (home / named) if not os.path.isabs(named) else Path(named)
+        path = Path(named)
+        if path.is_absolute():
+            for base in (home, home.resolve()):
+                if path.is_relative_to(base):
+                    path = path.relative_to(base)
+                    break
+            else:
+                return None
         try:
-            real = found.resolve(strict=True)
-        except OSError:
+            data = safefile.read(home, path, SHOT_BYTES)
+        except (OSError, safefile.Unsafe):
             return None
-        if (
-            found.is_symlink()
-            or not real.is_relative_to(home.resolve())
-            or not real.is_file()
-            or real.suffix.lower() not in (".png", ".jpg", ".jpeg")
-            or real.stat().st_size > SHOT_BYTES
-        ):
+        suffix = ".png" if data.startswith(PNG) else ".jpg" if data.startswith(JPEG) else None
+        if suffix is None:
             return None
         runs = self.data_dir / "worlds" / check.world_id / "runs"
-        to = runs / check.run_id / check.stage_id / "person-check" / f"{check.id}{real.suffix}"
-        to.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(real, to)
-        return to
+        runs.mkdir(parents=True, exist_ok=True)
+        where = Path(check.run_id, check.stage_id, "person-check")
+        try:
+            with safefile.folder(runs, where, make=True) as at:
+                safefile.write(at, f"{check.id}{suffix}", data, 0o644)
+        except OSError:
+            log.warning("could not keep the screenshot of Person Check %s", check.id)
+            return None
+        return runs / where / f"{check.id}{suffix}"
 
     def _reply(self, check: PersonCheck, answer: dict[str, str]) -> None:
-        to = check.home / ASKS / f"{check.asked}.answer.json"
-        tmp = to.with_name(to.name + ".tmp")
+        """The answer, mode 600, beside the request: a fresh file moved into place in an `asks/`
+        opened without following a link, so nothing the process planted is written through."""
         try:
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                json.dump(answer, f)
-            os.replace(tmp, to)
-        except OSError:  # its scratch folder is gone with the process
+            with safefile.folder(check.home, ASKS) as at:
+                safefile.write(at, f"{check.asked}.answer.json", json.dumps(answer).encode())
+        except OSError:  # its scratch folder is gone with the process, or is not a plain folder
             log.warning("could not answer Person Check %s", check.id)
 
     def _fail(self, check: PersonCheck, why: str, said: str) -> None:

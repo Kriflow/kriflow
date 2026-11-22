@@ -16,11 +16,13 @@ A long job is a tool answer carrying `job_id` and `poll`, the tool to poll with
 
 import functools
 import hmac
+import json
 import logging
 import os
 import re
 import secrets
 import shlex
+import stat
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -34,7 +36,7 @@ import httpx
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-from swarmify_connectors import build_session, oauth, publish, resources, setup
+from swarmify_connectors import build_session, oauth, publish, resources, safefile, setup
 from swarmify_connectors.credentials import Credentials
 from swarmify_connectors.fake import FakeTransport
 from swarmify_connectors.logins import FileSecrets, Handed, Logins
@@ -241,6 +243,43 @@ SCAN_BYTES = 5 * 1024 * 1024
 """The largest text file of a stage holding a login that is scanned for its secrets."""
 LOGIN_RESULT = "login_result"
 """A tool answer's key saying what came of its sign-in (logins.RESULTS), for `login.used`."""
+
+
+SESSION_BYTES = 1024 * 1024
+"""The largest Saved Session a process may hand back."""
+
+
+def _saved_session(home: Path) -> str | None:
+    """The session a login's process wrote back, when it is a regular file in its own HOME (never
+    a link it planted to another file), under SESSION_BYTES and shaped as Playwright's storage
+    state: a JSON object with a `cookies` list (and an `origins` list, if any). None otherwise."""
+    try:
+        raw = safefile.read(home, SESSION_OUT, SESSION_BYTES)
+        state = json.loads(raw.decode())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(state, dict) or not isinstance(state.get("cookies"), list):
+        return None
+    if not isinstance(state.get("origins", []), list):
+        return None
+    return raw.decode()
+
+
+def _scrub_files(folder: Path, stage_id: str) -> None:
+    """Every UTF-8 text file under `folder` (under SCAN_BYTES) with the stage's secrets
+    replaced, read and written without following a link the stage's process left there."""
+    if not folder.is_dir() or folder.is_symlink():
+        return
+    for rel in safefile.files(folder):
+        try:
+            *dirs, name = rel.parts
+            with safefile.folder(folder, Path(*dirs) if dirs else "") as at:
+                said = safefile.read_at(at, name, SCAN_BYTES).decode()
+                if (clean := scrub.text(said, stage_id)) != said:
+                    mode = stat.S_IMODE(os.stat(name, dir_fd=at, follow_symlinks=False).st_mode)
+                    safefile.write(at, name, clean.encode(), mode)
+        except (OSError, UnicodeDecodeError):
+            continue
 
 
 def _without_login(params: Any) -> dict[str, Any]:
@@ -892,28 +931,21 @@ class Connectors:
         `env` before the process starts."""
         assert confined is not None and connector.world_id is not None  # `_hand` checked
         home = confined.folder / "home"
-        session = home / SESSION_IN
         if handed.session is not None:
-            fd = os.open(session, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                f.write(handed.session)
-        env["SWARMIFY_LOGIN_SESSION"] = str(session)
+            safefile.write_in(home, SESSION_IN, handed.session.encode())
+        env["SWARMIFY_LOGIN_SESSION"] = str(home / SESSION_IN)
         return _Handoff(connector.world_id, stage, connector.name, handed.login.name, home)
 
     def _settle_login(self, handoff: _Handoff) -> None:
         """Once the process ended: keep the session it saved, delete both session files at once
         (not at the scratch folder's daily prune) and record `login.used`, with no values."""
-        out = handoff.home / SESSION_OUT
-        try:
-            saved = out.read_text()
-        except OSError:
-            saved = ""
-        if saved.strip():
+        saved = _saved_session(handoff.home)
+        if saved is not None:
             self.logins.keep_session(handoff.world_id, handoff.login, saved)
             run_id, stage_id = handoff.stage
             scrub.add(stage_id, run_id, handoff.login, scrub.cookies(saved))
         for name in (SESSION_IN, SESSION_OUT):
-            (handoff.home / name).unlink(missing_ok=True)
+            safefile.remove(handoff.home, name)
         run_id, stage_id = handoff.stage
         self.logins.used(
             handoff.world_id, run_id, stage_id, handoff.package, handoff.login, handoff.result
@@ -928,15 +960,7 @@ class Connectors:
             self._settle_login(handoff)
         if scrub.holds(stage_id):
             folder = self.data_dir / "worlds" / world_id / "runs" / run_id / stage_id
-            for file in folder.rglob("*") if folder.is_dir() else []:
-                if file.is_symlink() or not file.is_file() or file.stat().st_size > SCAN_BYTES:
-                    continue
-                try:
-                    said = file.read_bytes().decode()
-                except (OSError, UnicodeDecodeError):
-                    continue
-                if (clean := scrub.text(said, stage_id)) != said:
-                    file.write_text(clean)
+            _scrub_files(folder, stage_id)
         scrub.drop(stage_id)
 
     # The sandbox (ADR 0021)

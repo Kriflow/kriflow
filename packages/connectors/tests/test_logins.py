@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors
+from swarmify_connectors import Connectors, _Handoff
 from swarmify_connectors.logins import FileSecrets, SecretStore, Taken, domain_problem, totp
 from swarmify_connectors.packages import MANIFEST
 from swarmify_kernel.sqlite import connect
@@ -131,6 +131,7 @@ def test_a_deleted_world_takes_its_logins_and_their_secrets(
 
 
 SIGNER = Path(__file__).parent / "fixtures/packages/signer"
+NEW_SESSION = '{"cookies": [{"name": "sid", "value": "n3w-session-value"}], "origins": []}'
 
 
 def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
@@ -166,13 +167,44 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
     assert "/runs/run_1/stg_1" in plan  # it writes the stage's folder, confined to it
     session = home / "login-session.json"
     assert stat.S_IMODE(session.stat().st_mode) == 0o600
-    (home / "login-session.out.json").write_text('{"sid": "new"}')
+    (home / "login-session.out.json").write_text(NEW_SESSION)
 
     connectors.settle("w1", "run_1", "stg_1")
-    assert connectors.logins.hand("w1", "shop").session == '{"sid": "new"}'
+    assert connectors.logins.hand("w1", "shop").session == NEW_SESSION
     assert not session.exists() and not (home / "login-session.out.json").exists()
     [use] = connectors.logins.uses("w1", "shop")
     assert (use.run_id, use.stage_id, use.package, use.result) == (
         "run_1", "stg_1", "signer", "received"
     )  # fmt: skip
     assert "SWARMIFY_LOGIN_PASSWORD" in connectors.secret_names("w1")
+
+
+def test_a_session_handed_back_through_a_link_or_in_another_shape_is_not_kept(
+    connectors: Connectors, tmp_path: Path
+) -> None:
+    """Regression (security review of #577): a process that links login-session.out.json to the
+    secrets file (or hands back a folder, a huge file or JSON that is no storage state) gets
+    nothing kept; the link itself is deleted, never its target."""
+    connectors.logins.add("w1", "shop", ["shop.example.com"], "ana", "pa55-word")
+    secrets_file = tmp_path / "secrets.json"
+    before = secrets_file.read_text()
+    home = tmp_path / "scratch" / "home"
+    home.mkdir(parents=True)
+    out = home / "login-session.out.json"
+    for plant in ("link", "folder", "shape", "huge"):
+        if plant == "link":
+            out.symlink_to(secrets_file)
+        elif plant == "folder":
+            out.mkdir()
+        elif plant == "shape":
+            out.write_text('{"logins/w1/shop/password": "x"}')
+        else:
+            out.write_text('{"cookies": [], "pad": "' + "x" * (2 * 1024 * 1024) + '"}')
+        handoff = _Handoff("w1", ("run_1", "stg_1"), "signer", "shop", home)
+        connectors._settle_login(handoff)
+        assert connectors.logins.hand("w1", "shop").session is None, plant
+        if out.is_dir():
+            out.rmdir()
+        assert not out.is_symlink()
+    assert secrets_file.read_text() == before
+    assert stat.S_ISREG(secrets_file.lstat().st_mode)
