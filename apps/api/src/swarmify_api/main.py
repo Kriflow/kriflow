@@ -21,7 +21,7 @@ import re
 import shutil
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
-from contextlib import asynccontextmanager, closing, suppress
+from contextlib import asynccontextmanager, closing, contextmanager, suppress
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
@@ -31,6 +31,7 @@ from typing import Any, Protocol
 import yaml
 from anyio import to_thread
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from jsonschema.exceptions import best_match
 from jsonschema.validators import validator_for
@@ -53,8 +54,10 @@ from swarmify_api import (
     learning,
     library,
     lists,
+    logins,
     mcp,
     notifications,
+    person_checks,
     planner,
     remote,
     review_feeds,
@@ -76,12 +79,13 @@ from swarmify_connectors import (
     McpTransport,
     Packages,
     Unsure,
+    accepts_login,
     build_session,
     publish,
     resources,
 )
 from swarmify_connectors import SqliteStorage as ConnectorStorage
-from swarmify_kernel import AGENT_TOOLS, Event
+from swarmify_kernel import AGENT_TOOLS, Event, scrub
 from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
 from swarmify_kernel.sqlite import connect, migrate
 from swarmify_learning import MIGRATIONS as LEARNING_MIGRATIONS
@@ -225,6 +229,7 @@ def workflow_service(
                 c.version,
                 (c.manifest or {}).get("private_when", {}),
                 "build_session" in (c.manifest or {}).get("capabilities", []),
+                accepts_login(c),
             )
             for c in registry.list_all(world_id, pins)
         }
@@ -235,7 +240,7 @@ def workflow_service(
             live = workflow is not None and workflow.archived_at is None
             control.schedule(version.workflow_id, version.model.schedule if live else None)
 
-    workflows = Workflows(WorkflowStorage(migrated_db(root)), refs, on_saved)
+    workflows = Workflows(WorkflowStorage(migrated_db(root)), refs, on_saved, registry.logins.names)
     return workflows
 
 
@@ -460,6 +465,24 @@ def run_control(root: Path, notifier: Notifier | None = None) -> RunControl:
     )
     control.lists = world_lists(root)
     return control
+
+
+@contextmanager
+def scrubbed(stage_id: str) -> Iterator[None]:
+    """A stage's error with the secrets it holds (a World Login's) replaced, as the run records
+    it; the original is not chained, so no traceback carries it either."""
+    try:
+        yield
+    except Exception as exc:
+        said = str(exc)
+        clean = scrub.text(said, stage_id)
+        if clean == said:
+            raise
+        try:
+            again = type(exc)(clean)
+        except Exception:
+            again = ConnectorError(clean)
+        raise again from None
 
 
 def run_file(world_folder: Path, run: Run, name: str) -> Path:
@@ -895,23 +918,39 @@ def create_app(
 
     def connector_stage(run: Run, stage_id: str, stage: StageDef) -> str | None:
         try:
-            call_connector(run, stage_id, stage)
+            with scrubbed(stage_id):
+                call_connector(run, stage_id, stage)
         except Unsure as exc:  # it waits at the "Did this post go out?" gate with this question
             return str(exc)
         except JobCancelled as exc:  # stopped as agents are, so the run ends aborted, not failed
             raise OverBudget(str(exc)) from exc
+        finally:
+            registry.settle(run.world_id, run.id, stage_id)
 
     worlds_dir = root / "worlds"
     worlds_dir.mkdir(parents=True, exist_ok=True)
     index = graph_index or McpGraphIndex(worlds_dir)
     writer = GraphWriter(migrated_db(root), worlds_dir, extract, graph_debounce)
     memory = Memory(migrated_db(root), root)
+    stage_logins: dict[str, str] = {}
+    """The World Login each running swarm stage names, by stage id."""
+
+    def stage_servers(
+        world_id: str,
+        names: list[str],
+        pins: Mapping[str, str] | None = None,
+        run: tuple[str, str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """A swarm stage's tool servers; those that accept a login get the one it names."""
+        login = stage_logins.get(run[1]) if run else None
+        return registry.agent_servers(world_id, names, pins, run=run, login=login)
+
     swarm = Swarm(
         whiteboard,
         runtime or SdkRuntime(sandboxed_cli=os.environ.get("SWARMIFY_SANDBOX_CLI") or None),
         memory,
         graphs=graph.WorldGraphs(world_svc, index),
-        servers=registry.agent_servers,
+        servers=stage_servers,
         clock=clock,
         budget=lambda run_id: runner.check_stop(run_id),  # the Budget, pause and abort live in Runs
         network=network,
@@ -947,22 +986,37 @@ def create_app(
             made = {r.id: r.status for r in others if r.id != run.id and r.status in UNSPOILED}
             promoted = {r.promoted_from for r in others if r.promoted_from}  # unparks a card
             config["made"] = memory.made(run.world_id, made, promoted)
+        if login := stage.config.get("login"):
+            # checked again at the start: a login deleted since the save fails the stage here
+            if login not in registry.logins.names(run.world_id):
+                raise ConnectorError(
+                    f"this world has no login named {login} any more: add it on Settings, or"
+                    " take it out of the stage"
+                )
+            stage_logins[stage_id] = str(login)
         try:
-            swarm.run_stage(
-                run.world_id,
-                run.id,
-                stage_id,
-                stage.name,
-                config,
-                folder,
-                [note] if note else [],
-                run.send_backs,
-                baseline=run.baseline,
-                cast=cast,
-                cause=None if cause is None else asdict(cause),
-            )
+            with scrubbed(stage_id):
+                swarm.run_stage(
+                    run.world_id,
+                    run.id,
+                    stage_id,
+                    stage.name,
+                    config,
+                    folder,
+                    [note] if note else [],
+                    run.send_backs,
+                    baseline=run.baseline,
+                    cast=cast,
+                    cause=None if cause is None else asdict(cause),
+                )
+                # a Person Check stopped or unanswered fails the stage (person_check.py)
+                if why := registry.checks.failure(stage_id):
+                    raise ConnectorError(why)
         except Stopped as exc:
             raise OverBudget(str(exc)) from exc
+        finally:
+            stage_logins.pop(stage_id, None)
+            registry.settle(run.world_id, run.id, stage_id)
 
     def run_retro(run: Run, stage_id: str, stage: StageDef) -> bool:
         """The Retro stage: a judge-style session over the world's events, through the swarm's
@@ -1235,6 +1289,15 @@ def create_app(
         return resources.snapshot(registry.packages.sandbox.resources)
 
     app.include_router(connectors.router(registry, world_svc, workflow_svc))
+
+    def run_label(run_id: str, stage_id: str) -> tuple[str, str] | None:
+        run = runner.get(run_id)
+        stage = next((s for s in run.stages if s.id == stage_id), None) if run else None
+        return (run.name, stage.name) if run and stage else None
+
+    app.include_router(logins.router(registry.logins, world_svc, workflow_svc, run_label))
+    app.include_router(person_checks.router(registry.checks, run_label))
+    app.add_exception_handler(RequestValidationError, logins.no_echo)
     app.include_router(tasks.router(whiteboard, runner.get, clock))
     app.include_router(lists.router(lists_svc, lambda w: world_svc.get(w) is not None))
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))
@@ -1281,6 +1344,7 @@ def create_app(
         lists=lists_svc,
         retro=retro,
         ask=asker.ask,
+        logins=registry.logins,
     )
     app.include_router(planner.router(world_svc, asked, tools, registry))
     app.include_router(assistant.router(*reads, cards=cards))

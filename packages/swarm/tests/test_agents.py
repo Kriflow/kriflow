@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from swarmify_kernel import scrub
 from swarmify_kernel.events import read_after
 from swarmify_kernel.sqlite import connect
 from swarmify_swarm import Refused, SqliteStorage
@@ -129,3 +130,44 @@ def test_migration_9_keeps_agents_and_their_log(tmp_path: Path) -> None:
     assert board.log("stage_1", "judge", "session").seq == 2
     board.delete_world("world_1")
     assert board.list_log("stage_1") == []
+
+
+def test_a_login_the_stage_holds_never_reaches_its_log_transcript_or_events(
+    board: SqliteStorage, db: Path
+) -> None:
+    board.agent("world_1", "run_1", "stage_1", "worker-1", "worker")
+    scrub.add("stage_1", "run_1", "shop_admin", ["pa55-w0rd-1"])
+    try:
+        board.log(
+            "stage_1", "worker-1", "output", "page says pa55-w0rd-1", input={"t": "pa55-w0rd-1"}
+        )
+    finally:
+        scrub.drop("stage_1")
+    [entry] = board.list_log("stage_1")
+    assert entry.detail == "page says [secret: shop_admin]"
+    assert entry.input == {"t": "[secret: shop_admin]"}
+    with closing(connect(db)) as conn:
+        assert "pa55-w0rd-1" not in str([e.payload for e in read_after(conn, None, 0)])
+
+
+def test_a_login_the_stage_holds_never_reaches_its_whiteboard_or_verdicts(
+    board: SqliteStorage,
+) -> None:
+    """Regression (security review of #578): task titles, bodies, notes and the judge's verdict
+    are scrubbed too."""
+    scrub.add("stage_1", "run_1", "shop_admin", ["pa55-w0rd-1"])
+    try:
+        task = board.add_task(
+            "world_1", "run_1", "stage_1", "Sign in with pa55-w0rd-1", added_by="planner",
+            body="password pa55-w0rd-1",
+        )  # fmt: skip
+        board.claim(task.id, "worker-1")
+        board.finish(task.id, "worker-1", note="used pa55-w0rd-1")
+        verdict = board.record_verdict(
+            "world_1", "run_1", "stage_1", passed=True, reasons=["it took pa55-w0rd-1"],
+            gaps=[], items=[{"body": "pa55-w0rd-1"}], path="v.md", added_by="judge",
+        )  # fmt: skip
+    finally:
+        scrub.drop("stage_1")
+    stored = str([board.list_tasks("stage_1"), board.list_verdicts("stage_1"), verdict])
+    assert "pa55-w0rd-1" not in stored and "[secret: shop_admin]" in stored

@@ -5,9 +5,10 @@ import sqlite3
 from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from swarmify_connectors.model import Call, Connector
-from swarmify_kernel import Event
+from swarmify_kernel import Event, scrub
 from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 
@@ -65,7 +66,8 @@ class SqliteStorage:
             return _call(row) if row else None
 
     def save_call(self, call: Call) -> Call:
-        fields = asdict(call)
+        # a World Login's values never reach the call record or its event (scrub.py)
+        fields = scrub.value(asdict(call), run_id=call.run_id)
         for key in _JSON:
             fields[key] = json.dumps(fields[key]) if fields[key] is not None else None
         names = ", ".join(fields)
@@ -80,7 +82,7 @@ class SqliteStorage:
                 "connector_call.updated",
                 world_id=call.world_id,
                 run_id=call.run_id,
-                payload=asdict(call),
+                payload=asdict(call),  # scrubbed as every event is
             )
             append(conn, event)
             conn.execute("COMMIT")
@@ -144,4 +146,76 @@ class SqliteStorage:
             conn.execute("DELETE FROM world_packages WHERE world_id = ?", (world_id,))
             conn.execute("DELETE FROM world_default_packages WHERE world_id = ?", (world_id,))
             conn.execute("DELETE FROM connector_calls WHERE world_id = ?", (world_id,))
+            conn.execute("DELETE FROM world_logins WHERE world_id = ?", (world_id,))
             conn.execute("COMMIT")
+
+    # World Logins (logins.py): their state and events, never a secret
+
+    def logins(self, world_id: str) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM world_logins WHERE world_id = ? ORDER BY name", (world_id,)
+            )
+            return [{**dict(r), "domains": json.loads(r["domains"])} for r in rows]
+
+    def add_login(self, row: dict[str, Any], event: Event) -> bool:
+        """Insert the login and its event; False when its name is taken in the world."""
+        fields = {**row, "domains": json.dumps(row["domains"])}
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(
+                    f"INSERT INTO world_logins ({', '.join(fields)})"
+                    f" VALUES ({', '.join('?' for _ in fields)})",
+                    tuple(fields.values()),
+                )
+            except sqlite3.IntegrityError:
+                conn.execute("ROLLBACK")
+                return False
+            append(conn, event)
+            conn.execute("COMMIT")
+        return True
+
+    def update_login(self, world_id: str, name: str, fields: dict[str, Any], event: Event) -> bool:
+        values = {k: json.dumps(v) if k == "domains" else v for k, v in fields.items()}
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            found = conn.execute(
+                f"UPDATE world_logins SET {', '.join(f'{k} = ?' for k in values)}"
+                " WHERE world_id = ? AND name = ?",
+                (*values.values(), world_id, name),
+            ).rowcount
+            if found:
+                append(conn, event)
+            conn.execute("COMMIT")
+        return found > 0
+
+    def delete_login(self, world_id: str, name: str, event: Event) -> bool:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            found = conn.execute(
+                "DELETE FROM world_logins WHERE world_id = ? AND name = ?", (world_id, name)
+            ).rowcount
+            if found:
+                append(conn, event)
+            conn.execute("COMMIT")
+        return found > 0
+
+    def append_event(self, event: Event) -> None:
+        with self._conn() as conn:
+            append(conn, event)
+
+    def login_uses(self, world_id: str, name: str | None, limit: int) -> list[Event]:
+        """The newest `login.used` events of the world, of one login when `name` is given."""
+        where = " AND json_extract(payload, '$.login') = ?" if name else ""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM events WHERE world_id = ? AND type = 'login.used'"
+                f"{where} ORDER BY seq DESC LIMIT ?",
+                (world_id, *([name] if name else []), limit),
+            ).fetchall()
+        return [
+            Event(r["id"], r["world_id"], r["type"], json.loads(r["payload"]), r["ts"],
+                  r["run_id"], r["seq"])
+            for r in rows
+        ]  # fmt: skip

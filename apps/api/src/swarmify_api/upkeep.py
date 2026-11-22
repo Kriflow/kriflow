@@ -42,7 +42,10 @@ HIDDEN_AFTER = timedelta(hours=24)
 class Notice(BaseModel):
     """Something the operator should fix that no gate asks about."""
 
-    kind: Literal["sign_in", "outcomes", "visibility", "network", "review", "feed", "updating"]
+    kind: Literal[
+        "sign_in", "outcomes", "visibility", "network", "review", "feed", "updating",
+        "person_check",
+    ]  # fmt: skip
     text: str
     world_id: str | None = None
     """The world whose Connectors page (sign_in, outcomes) or run (visibility, network) fixes
@@ -241,6 +244,12 @@ def notice_source(
         first = everyone[0].id if everyone else None
         out += [Notice(kind="outcomes", text=t, world_id=first) for t in outcome_notices.values()]
         out += network_notices(waiting(), clock())
+        for check in registry.checks.open_checks():
+            where = f" to {check.site}" if check.site else ""
+            text = f"A run is waiting for you to sign in{where}: {check.ask}"
+            out.append(
+                Notice(kind="person_check", text=text, world_id=check.world_id, run_id=check.run_id)
+            )
         return out + feeds()
 
     return notices

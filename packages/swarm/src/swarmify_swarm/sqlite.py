@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from swarmify_kernel import Event, new_id
+from swarmify_kernel import Event, new_id, scrub
 from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 from swarmify_swarm.model import (
@@ -177,6 +177,8 @@ class SqliteStorage:
         path: str,
         added_by: str,
     ) -> Verdict:
+        reasons, gaps = scrub.value(reasons, stage_id), scrub.value(gaps, stage_id)
+        items = scrub.value(items, stage_id)
         with self._write() as conn:
             (loop,) = conn.execute(
                 "SELECT count(*) + 1 FROM verdicts WHERE stage_id = ?", (stage_id,)
@@ -500,7 +502,8 @@ def _insert_task(
     body: str,
     depends_on: tuple[str, ...],
 ) -> str:
-    title = title.strip()
+    # a World Login's values never reach the whiteboard either (scrub.py)
+    title, body = scrub.text(title, stage_id).strip(), scrub.text(body, stage_id)
     if not title:
         raise Refused("a task needs a title")
     for dep in dict.fromkeys(depends_on):
@@ -523,6 +526,8 @@ def _insert_task(
 
 
 def _note(conn: sqlite3.Connection, task_id: str, author: str, body: str, ts: str) -> None:
+    row = conn.execute("SELECT stage_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    body = scrub.text(body, row["stage_id"]) if row else body
     conn.execute(
         "INSERT INTO task_notes (task_id, author, body, ts) VALUES (?, ?, ?, ?)",
         (task_id, author, body, ts),
@@ -573,6 +578,8 @@ def _log(
     ).fetchone()
     if row is None:
         raise KeyError(agent)
+    # a World Login's values never reach the stage log, its transcript or its event
+    detail, input = scrub.text(detail, stage_id), scrub.value(input, stage_id)
     ts = _iso(None)
     seq = conn.execute(
         "INSERT INTO agent_log"

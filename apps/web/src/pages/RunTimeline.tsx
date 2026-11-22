@@ -28,6 +28,7 @@ import { RunAssistant } from "./RunAssistant";
 import { RunRef, version } from "./Runs";
 import { type MenuItem, Menu } from "./Menu";
 import { mainArtifact, Result, resultStage, StagePanel } from "./StagePanel";
+import { PersonChecks } from "./PersonChecks";
 import { RunHero, StageRail } from "./RunHero";
 import { FeedLine, MadeInRun, SpendByStage } from "./RunSide";
 import { PullToRefresh } from "../PullToRefresh";
@@ -610,6 +611,7 @@ export function RunTimeline() {
           </p>
         }
       />
+      <PersonChecks runId={run.id} />
       <FeedLine worldId={worldId} runId={run.id} />
       <StageRail
         run={run}

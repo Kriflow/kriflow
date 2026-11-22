@@ -3,6 +3,7 @@ the space check."""
 
 import os
 import sqlite3
+import stat
 import subprocess
 import tarfile
 
@@ -56,6 +57,7 @@ def test_backup_leaves_out_what_can_be_made_again_and_keeps_the_newest(tmp_path,
     old, new = backup_data.backups(dest)[::-1]
     assert old.name == f"{backup_data.PREFIX}old2-20260101-0000.tgz"
     assert new.name.startswith(f"{backup_data.PREFIX}t-") and new.name.endswith(".tar.zst")
+    assert stat.S_IMODE(new.stat().st_mode) == 0o600  # it holds secrets.json (security review)
     tar_bytes = subprocess.run(["zstd", "-dc", new], capture_output=True, check=True).stdout
     (tmp_path / "new.tar").write_bytes(tar_bytes)
     with tarfile.open(tmp_path / "new.tar") as tar:

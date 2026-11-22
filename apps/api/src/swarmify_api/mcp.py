@@ -18,7 +18,7 @@ from swarmify_api.assistant import Card, Message, RunAssistant, Unanswered, read
 from swarmify_api.auth import CALLER
 from swarmify_api.lists import entry_view
 from swarmify_api.runs import checker, pinner, start_pinned
-from swarmify_connectors import Connectors
+from swarmify_connectors import Connectors, Logins
 from swarmify_connectors.resources import snapshot
 from swarmify_memory import Memory
 from swarmify_runs import TERMINAL, Illegal, Run, RunChange, RunControl, WorldLists
@@ -38,6 +38,7 @@ def server(
     retro: bool = True,
     ask: Callable[[Run, str], Awaitable[Message]] | None = None,
     lists: WorldLists | None = None,
+    logins: Logins | None = None,
 ) -> MCPServer:
     """`control` acts on runs hosted by the API process, and records the runs it starts queued
     for that process to adopt; `delete` is the composition root's world delete
@@ -108,6 +109,17 @@ def server(
     @mcp.tool(description="List every world in creation order.")
     def list_worlds() -> list[dict[str, Any]]:
         return [asdict(w) for w in worlds.list_all() if scope() in (None, w.id)]
+
+    if logins is not None:
+
+        @mcp.tool(
+            description="List a world's World Logins: name, domains, username, whether it has an"
+            " authenticator secret and a saved session, and when it was last used. Never a"
+            " password. Logins are added and rotated on the world's Settings page only."
+        )
+        def list_logins(world_id: str) -> list[dict[str, Any]]:
+            reach(world_id)
+            return [asdict(x) for x in logins.list_all(world_id)]
 
     @mcp.tool(description="Get one world by id.")
     def get_world(world_id: str) -> dict[str, Any]:
@@ -722,7 +734,7 @@ def stdio_server(root: Path, control: RunControl) -> MCPServer:
         learning_service(root),
         world_lists(root),
     )
-    return server(worlds, workflows, whiteboard, control, delete)
+    return server(worlds, workflows, whiteboard, control, delete, logins=registry.logins)
 
 
 def main() -> None:

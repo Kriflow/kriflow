@@ -286,3 +286,19 @@ test("on a phone the page's title fades into the top bar once it scrolls under i
   scrollTo(0, 0);
   await expect.poll(() => bar.hasAttribute("data-titled")).toBe(false);
 });
+
+test("an open Person Check counts in Needs you, and its closing drops the count", async () => {
+  let checks = [{ id: "pc_1", world_id: "world_1", run_id: "run_1" }];
+  fakeFetch({
+    "GET /api/worlds": () => Response.json(worlds),
+    "GET /api/gates": () => Response.json([gate("pick", { run_id: "run_2", stage_id: "s2" })]),
+    "GET /api/person-checks": () => Response.json(checks),
+    "GET /api/worlds/world_1/runs": () => Response.json([]),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs");
+  const nav = screen.getByRole("navigation", { name: "Main" });
+  await expect.element(nav.getByRole("link", { name: /^Needs you/ })).toHaveAccessibleName("Needs you 2 waiting");
+  checks = [];
+  FakeEventSource.emit("person_check.closed", { payload: { id: "pc_1" } });
+  await expect.element(nav.getByRole("link", { name: /^Needs you/ })).toHaveAccessibleName("Needs you 1 waiting");
+});

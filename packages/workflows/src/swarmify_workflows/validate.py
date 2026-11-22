@@ -4,7 +4,8 @@ Pure: the caller supplies the connectors the world allows and, for every stored 
 workflow ids its current version runs. Every broken rule is returned, none raises.
 """
 
-from collections.abc import Mapping, Sequence
+import re
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -18,9 +19,12 @@ from swarmify_workflows.model import (
     WorkflowModel,
     WorkflowStage,
     children,
+    login_of,
 )
 
 MAX_DEPTH = 2
+NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+"""A World Login's name, as the Connectors context gives one."""
 # Explicit, not mimetypes: that marks text like .srt, .ts and .sh as binary and reads the host's
 # /etc/mime.types, so the same workflow could pass on one machine and fail on another.
 BINARY_EXTENSIONS = frozenset(
@@ -40,7 +44,10 @@ def validate(
     workflow_id: str | None,
     connectors: Mapping[str, ConnectorRef],
     references: Mapping[str, Sequence[str]],
+    logins: Collection[str] | None = None,
 ) -> list[Violation]:
+    """`logins`, the World Logins the world keeps, which a stage may name; None leaves out the
+    check that a named one exists."""
     out: list[Violation] = []
     produced: set[str] = set(model.given)
     swarm_made: dict[str, SwarmStage] = {}
@@ -70,7 +77,29 @@ def validate(
             )
         return ref
 
+    def check_login(stage: SwarmStage | ConnectorStage, names: list[str]) -> None:
+        """A named login must exist in the world, and one of the stage's connectors take it."""
+        login = login_of(stage)
+        if login is None:
+            return
+        if not NAME.fullmatch(login):
+            message = f"login '{login}' is not a login name, like shop_admin"
+            out.append(Violation("login", message, stage.name))
+        elif logins is not None and login not in logins:
+            message = f"this world has no login named '{login}': add it on Settings"
+            out.append(Violation("login", message, stage.name))
+        if not any((ref := connectors.get(n)) and ref.accepts_login for n in names):
+            who = (
+                "none of its tools accepts"
+                if isinstance(stage, SwarmStage)
+                else "it does not accept"
+            )
+            message = f"stage '{stage.name}' names login '{login}', but {who} a login"
+            out.append(Violation("login", message, stage.name))
+
     for index, stage in enumerate(model.stages):
+        if isinstance(stage, SwarmStage | ConnectorStage):
+            check_login(stage, stage.tools if isinstance(stage, SwarmStage) else [stage.calls])
         if isinstance(stage, SwarmStage):
             for tool in stage.tools:
                 if tool not in AGENT_TOOLS:  # the core gives these, no connector needed

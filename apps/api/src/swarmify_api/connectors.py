@@ -25,6 +25,7 @@ from swarmify_connectors import (
     ManifestError,
     Package,
     Tool,
+    accepts_login,
 )
 from swarmify_connectors.index import INDEX_URL, IndexUnavailable, read_index
 from swarmify_connectors.oauth import CALLBACK, SignInNeeded
@@ -119,6 +120,8 @@ class ConnectorView(BaseModel):
     icon: str | None
     """The logo its Manifest names, served at `/api/packages/{name}/{version}/icon`; null for
     none."""
+    accepts_login: bool
+    """Its Manifest's `[login] accepts`: a stage calling it may name a World Login."""
 
 
 class Tested(BaseModel):
@@ -167,7 +170,8 @@ class PackageReview(BaseModel):
     """The commit a git source's ref resolved to; null for a folder."""
     permissions: list[str]
     """Every permission it declares, as `network: api.example.org`; the kinds are network,
-    install_network, prepare_network, folders, services, owned_folders, credentials, sign_in,
+    install_network, prepare_network, folders, services, owned_folders, credentials, logins,
+    sign_in,
     capabilities."""
     upgrade: Upgrade | None
     """For a package with a version installed already, how its permissions change."""
@@ -332,6 +336,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
             missing=connectors.missing(connector),
             sign_in=connectors.sign_in_needed(connector),
             icon=m.get("icon"),
+            accepts_login=accepts_login(connector),
         )
 
     def world_or_404(world_id: str) -> None:

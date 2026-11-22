@@ -158,7 +158,10 @@ def inside(label: str, root: Path, dest: Path, keep: int, dry: bool, owner: str)
             old.unlink()
             print(f"deleted {old}")
     part = dest / (name + ".part")
-    with tempfile.TemporaryDirectory(dir=dest) as tmp, part.open("wb") as out:
+    # The archive holds secrets.json and setup.json: only its owner may read it, as they are.
+    fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    with tempfile.TemporaryDirectory(dir=dest) as tmp, os.fdopen(fd, "wb") as out:
         with subprocess.Popen(pack, stdin=subprocess.PIPE, stdout=out) as zp:
             # ponytail: one Python thread writes the tar, fine up to a few hundred MB/s
             with tarfile.open(fileobj=zp.stdin, mode="w|", bufsize=1 << 20) as tar:
@@ -181,6 +184,7 @@ def inside(label: str, root: Path, dest: Path, keep: int, dry: bool, owner: str)
     final = part.rename(dest / name)
     uid, gid = (int(n) for n in owner.split(":"))
     os.chown(final, uid, gid)
+    os.chmod(final, 0o600)
     print(f"wrote and verified {final} ({final.stat().st_size / gb:.2f} GB)")
     for old in to_prune(dest, keep):
         old.unlink()

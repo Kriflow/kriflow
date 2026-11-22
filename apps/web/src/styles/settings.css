@@ -114,3 +114,27 @@ fieldset.set-panel { display: grid; min-width: 0; }
 p.push-legend { margin-bottom: -10px; }
 .push-kinds .check { align-items: baseline; }
 .push-kinds small { display: block; }
+
+/* World Logins (Settings): a card per login, 44 px and up, the add and login sheets. */
+.logins-empty p { margin: 0 0 6px; }
+.logins-empty ul { margin: 0; padding-left: 1.2em; }
+.login-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.login-card { display: grid; gap: 4px; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; justify-items: start; white-space: normal; }
+.login-name { font-size: 1.0625rem; overflow-wrap: anywhere; }
+.login-status { font-size: 0.875rem; }
+.login-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.login-chips .chip { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.login-sheet { height: 90dvh; }
+.login-form, .login-detail, .login-actions { display: grid; gap: 12px; min-width: 0; }
+.login-field, .login-field label { display: grid; gap: 6px; min-width: 0; }
+.login-field input, .login-field textarea { width: 100%; min-height: 44px; font-size: 1rem; }
+.login-password { display: flex; gap: 8px; min-width: 0; }
+.login-password input { flex: 1 1 auto; min-width: 0; }
+.login-sheet button { min-height: 44px; }
+.login-head h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
+.login-head { display: grid; gap: 2px; }
+.login-uses { list-style: none; margin: 0; padding: 0; display: grid; }
+.login-uses li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.login-uses li a { grid-column: 1 / -1; min-height: 24px; overflow-wrap: anywhere; }
+.login-confirm-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.login-detail .bad, .login-form .bad { color: var(--pill-negative-ink); font-size: 0.875rem; }

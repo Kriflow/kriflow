@@ -148,8 +148,9 @@ def environment(manifest: dict[str, Any], resolved: Values, data_dir: Path) -> d
     return out
 
 
-class SetupStore:
-    """The setup file. Refuses one that group or others can read, as the credentials file does."""
+class PrivateJson:
+    """A JSON file only Kriflow's user can read: mode 600, written atomically, refused when group
+    or others can read it, as the credentials file is."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -163,6 +164,19 @@ class SetupStore:
                 f"{self.path} is mode {mode:o}; run `chmod 600 {self.path}` so only you can read it"
             )
         return dict(json.loads(self.path.read_text()))
+
+    def _write(self, data: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=1)
+        os.chmod(tmp, 0o600)  # O_CREAT's mode is masked by umask and ignored for an existing tmp
+        os.replace(tmp, self.path)
+
+
+class SetupStore(PrivateJson):
+    """The setup file."""
 
     def values(self, package: str, world_id: str) -> tuple[Values, Values]:
         """The package's shared values and the world's own."""
@@ -194,12 +208,3 @@ class SetupStore:
             for p in data.values():
                 p.get("worlds", {}).pop(world_id, None)
             self._write(data)
-
-    def _write(self, data: dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=1)
-        os.chmod(tmp, 0o600)  # O_CREAT's mode is masked by umask and ignored for an existing tmp
-        os.replace(tmp, self.path)

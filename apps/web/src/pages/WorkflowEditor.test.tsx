@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 
 import "../index.css";
 
-import { FakeEventSource, fakeFetch } from "../test/fakes";
+import { CONNECTORS, FakeEventSource, fakeFetch } from "../test/fakes";
 import { answerConfirm, mountAt } from "../test/mount";
 
 const STARTER = `name: Weekly short
@@ -363,6 +363,57 @@ test("a connector stage whose package has Templates picks one as its base; the s
   await screen.getByTestId("stage-rows").getByRole("button", { name: /voice/ }).click();
   await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/voice.*connector/);
   expect(screen.getByLabelText("Template of voice").elements()).toHaveLength(0);
+});
+
+test("a stage whose package accepts a login picks one of the world's logins as chips; None takes it out", async () => {
+  const login = (name: string, last: object | null = null) => ({
+    name,
+    domains: ["admin.myshop.com"],
+    username: "ana",
+    has_totp: false,
+    has_session: false,
+    created_at: video.created_at,
+    updated_at: video.created_at,
+    rotated_at: video.created_at,
+    last_used_at: null,
+    workflows: [],
+    last_use: last,
+  });
+  const used = { run_id: "run_1", stage_id: "s", run_name: "Pilot", stage_name: "sign", package: "browser", result: "signed_in", at: video.created_at };
+  fake({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "POST /api/worlds/world_1/workflows/check": check,
+    "GET /api/worlds/world_1/logins": () => Response.json([login("shop_admin", used), login("supplier")]),
+    "GET /api/worlds/world_1/connectors": () =>
+      Response.json([...CONNECTORS, { ...CONNECTORS[4], name: "browser", label: "Browser", stage_types: ["swarm", "connector"], accepts_login: true }]),
+  });
+  const { screen } = await mountAt("/worlds/world_1/workflows/new?tab=yaml");
+  await screen
+    .getByLabelText("Workflow YAML")
+    .fill("name: Shop\nstages:\n  - connector: order\n    calls: browser\n  - swarm: look\n    goal: g\n    done_when: d\n    tools: [browser]\n  - connector: voice\n    calls: speech\n");
+  await screen.getByRole("tab", { name: "Stages" }).click();
+
+  const chips = screen.getByRole("group", { name: "Login of order" });
+  expect(chips.getByRole("radio").elements().map((r) => (r as HTMLInputElement).value)).toEqual(["", "shop_admin", "supplier"]);
+  await chips.getByRole("radio", { name: "shop_admin" }).click();
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/Last time: Signed in/);
+  await screen.getByTestId("stage-rows").getByRole("button", { name: /look/ }).click();
+  await screen.getByRole("group", { name: "Login of look" }).getByRole("radio", { name: "supplier" }).click();
+  await screen.getByRole("tab", { name: "YAML" }).click();
+  await expect.element(screen.getByLabelText("Workflow YAML")).toHaveValue(
+    "name: Shop\nstages:\n  - connector: order\n    calls: browser\n    params:\n      login: shop_admin\n  - swarm: look\n    goal: g\n    done_when: d\n    tools: [ browser ]\n    login: supplier\n  - connector: voice\n    calls: speech\n",
+  );
+
+  await screen.getByRole("tab", { name: "Stages" }).click();
+  await screen.getByTestId("stage-rows").getByRole("button", { name: /order/ }).click();
+  await screen.getByRole("group", { name: "Login of order" }).getByRole("radio", { name: "None" }).click();
+  // a package that takes no login offers no picker
+  await screen.getByTestId("stage-rows").getByRole("button", { name: /voice/ }).click();
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/voice.*connector/);
+  expect(screen.getByRole("group", { name: "Login of voice" }).elements()).toHaveLength(0);
+  await screen.getByRole("tab", { name: "YAML" }).click();
+  await expect.element(screen.getByLabelText("Workflow YAML")).toBeVisible();
+  expect((screen.getByLabelText("Workflow YAML").element() as HTMLTextAreaElement).value).not.toContain("shop_admin");
 });
 
 test("a direct render stage picks one of its package's Templates as its project", async () => {

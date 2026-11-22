@@ -19,7 +19,7 @@
 // launcher stops that whole group.
 
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, existsSync, fstatSync, openSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime";
 
@@ -105,7 +105,58 @@ function save() {
   saving = undefined;
   if (plan.stderr && tail.length) writeFileSync(plan.stderr, tail.join("\n") + "\n");
 }
-function said(line) {
+// A World Login (spec: World Logins) reaches its process through a mode-600 file in its scratch
+// folder that the core names in SWARMIFY_LOGIN_FILE, never a command line or an MCP config (the
+// agent runtime passes those as arguments, which `ps` shows): read once, deleted at once, and
+// handed to the command as its environment. Its values never leave in a stderr line either.
+function loginValues(file) {
+  if (!file) return {};
+  try {
+    const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      if (!fstatSync(fd).isFile()) return {};
+      const read = JSON.parse(readFileSync(fd, "utf8"));
+      return Object.fromEntries(Object.entries(read).filter(([k, v]) => k.startsWith("SWARMIFY_LOGIN_") && typeof v === "string"));
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return {};
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+const login = loginValues(process.env.SWARMIFY_LOGIN_FILE);
+const cookies = (x) =>
+  !x || typeof x !== "object" ? [] : Object.entries(x).flatMap(([k, v]) => (k === "value" && typeof v === "string" && v.length >= 8 ? [v] : cookies(v)));
+let kept = [];
+try {
+  const session = login.SWARMIFY_LOGIN_SESSION;
+  kept = session && existsSync(session) ? cookies(JSON.parse(readFileSync(session, "utf8"))) : [];
+} catch {
+  // a session that does not parse holds nothing to look for
+}
+// Each value in the forms the core's scrub.py lists too: itself, inside a JSON string (ASCII
+// escaped or not), URL-encoded as Python's quote and quote_plus do, and in a Basic header.
+const pyQuote = (v) => encodeURIComponent(v).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+const forms = (v) => {
+  const json = JSON.stringify(v).slice(1, -1);
+  const user = login.SWARMIFY_LOGIN_USERNAME;
+  return [
+    v,
+    json,
+    json.replace(/[\u0080-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")),
+    pyQuote(v),
+    pyQuote(v).replaceAll("%20", "+"),
+    ...(user ? [Buffer.from(`${user}:${v}`).toString("base64")] : []),
+  ];
+};
+const secrets = [...new Set([login.SWARMIFY_LOGIN_PASSWORD, login.SWARMIFY_LOGIN_TOTP, ...kept].filter((v) => v && v.length >= 6).flatMap(forms))].sort(
+  (a, b) => b.length - a.length,
+);
+const hidden = `[secret: ${login.SWARMIFY_LOGIN_NAME ?? "login"}]`;
+function said(raw) {
+  const line = secrets.reduce((l, s) => l.replaceAll(s, hidden), raw);
   process.stderr.write(line + "\n");
   tail.push(line.slice(0, LINE));
   if (tail.length > TAIL) tail.shift();
@@ -195,6 +246,7 @@ try {
     env: {
       ...Object.fromEntries([...BASE, ...plan.pass].filter((k) => k in process.env).map((k) => [k, process.env[k]])),
       ...plan.env,
+      ...login,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
