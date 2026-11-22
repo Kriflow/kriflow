@@ -45,6 +45,8 @@ from swarmify_runs.machine import (
     transition,
 )
 from swarmify_runs.model import (
+    POSTED,
+    POSTED_CHOICES,
     RERUNS,
     AppliedChange,
     ChangeProposal,
@@ -489,6 +491,8 @@ class RunControl:
         self, run: Run, index: int, edits: dict[str, Any] | None = None
     ) -> PublishPreview | None:
         try:
+            if self.storage.stage_def(run.id, index)[1].type == "connector":
+                return None  # its own `posted` gate, after which nothing new is confirmed
             _, after = self.storage.stage_def(run.id, index + 1)
         except KeyError:
             return None
@@ -553,6 +557,10 @@ class RunControl:
         kind = stage.config.get("kind") or "approve"
         if stage.type == "workflow":
             kind = "approve_items" if stage.config.get("approve") else "items"
+        if stage.type == "connector":
+            kind = POSTED
+        if kind == POSTED and choice not in POSTED_CHOICES:
+            raise ValueError("a 'Did this post go out?' gate takes choice posted or post")
         if kind == "items" and choice not in ITEMS_CHOICES:
             raise ValueError("a fan-out stage's items gate takes choice retry or continue")
         if kind == "approve_items" and any(
@@ -582,7 +590,7 @@ class RunControl:
                 times = "once" if limit == 1 else f"{limit} times"
                 raise Illegal(f"already sent back {times}; approve or abort")
             event: RunEvent = SentBack(index, targets[0])
-        elif kind == "items" and choice == "retry":
+        elif (kind == "items" and choice == "retry") or kind == POSTED:
             event = ItemsRetried(index)
         else:
             event = GateAnswered(index)
@@ -1557,6 +1565,9 @@ def decision_markdown(run: Run, decision: Decision) -> str:
         outcome = f"Picked {decision.choice}."
     elif decision.kind == "confirm":
         outcome = "Confirmed."
+    elif decision.kind == POSTED:
+        said = "It posted" if decision.choice == "posted" else "Post it now"
+        outcome = f"Asked whether the post went out: {said}."
     elif decision.kind == "skill":
         outcome = f"Skill proposal {decision.choice or 'approved'}."
     else:

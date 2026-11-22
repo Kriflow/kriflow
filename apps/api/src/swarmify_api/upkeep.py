@@ -42,7 +42,7 @@ HIDDEN_AFTER = timedelta(hours=24)
 class Notice(BaseModel):
     """Something the operator should fix that no gate asks about."""
 
-    kind: Literal["sign_in", "outcomes", "visibility", "network", "review", "feed"]
+    kind: Literal["sign_in", "outcomes", "visibility", "network", "review", "feed", "updating"]
     text: str
     world_id: str | None = None
     """The world whose Connectors page (sign_in, outcomes) or run (visibility, network) fixes

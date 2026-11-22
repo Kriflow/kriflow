@@ -39,6 +39,7 @@ def _serve(data_dir: Path, **env: str) -> Iterator[str]:
         "SWARMIFY_WEB_DIST": str(WEB_DIST),
         "SWARMIFY_DATA_DIR": str(data_dir),
         "PYTHONPATH": str(Path(__file__).parent),
+        "SWARMIFY_DRAIN_SECONDS": "0",  # a stopped server does not wait for stages at work
         **env,
     }
     cmd = [

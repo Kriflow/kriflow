@@ -48,6 +48,7 @@ from swarmify_connectors.model import (
     JobCancelled,
     KeyCheck,
     Tool,
+    Unsure,
 )
 from swarmify_connectors.packages import (
     LOCAL,
@@ -99,6 +100,7 @@ __all__ = [
     "SqliteStorage",
     "Storage",
     "Tool",
+    "Unsure",
     "read_manifest",
 ]
 
@@ -119,6 +121,31 @@ _RUNTIMES = {
     "docker": "container",
     "podman": "container",
 }
+
+
+AGAIN = "post again: a person checked it did not go out"
+"""A publish call's error once Post it now was answered at its gate: it calls again, new key."""
+_UNSURE = re.compile(r"\bunsure:\s*(.*)", re.S)
+
+
+def _unsure(error: str | None) -> str | None:
+    """Why a publish call could not tell whether it posted, from its `unsure:` error; else None."""
+    found = _UNSURE.search(error or "")
+    return found.group(1).strip().rstrip(".") if found else None
+
+
+def _ask(connector: Connector, config: dict[str, Any], why: str) -> str:
+    """The question of the "Did this post go out?" gate, naming where to look."""
+    label = str(connector.manifest.get("label") or connector.name)
+    platforms = (config.get("confirmed") or {}).get("platforms")
+    if isinstance(platforms, list) and platforms:
+        label_of = " and ".join(str(p).capitalize() for p in platforms)
+    else:
+        label_of = label
+    return (
+        f"{label} was cut off while posting and could not check whether it posted: {why}."
+        f" Look for it on {label_of}, then answer."
+    )
 
 
 DOMAIN = re.compile(r"^(\*\.)?[a-z0-9.-]+(:\d+)?$")
@@ -1373,15 +1400,21 @@ class Connectors:
             raise ConnectorError(f"connector '{name}' is not allowed in connector stages")
         if not connector.has_server:
             raise ConnectorError(f"connector '{name}' has no MCP server installed yet")
+        # a new key per visit, so a connector that dedupes on it does the rework
+        key = f"{stage_id}.{visit}" if visit else stage_id
         if connector.kind == "publish":
-            if done is not None and done.status == "running":
-                # A crash mid-call: the post may be out already. Never risk posting twice.
-                raise ConnectorError(
-                    f"an earlier {name} call was interrupted and may have posted; check"
-                    f" {name} and start a new run if it did not"
-                )
             if not isinstance(config.get("confirmed"), dict):
                 raise ConnectorError(f"{name} publishes only the values a gate confirmed")
+            if done is not None and done.error == AGAIN:  # Post it now: a fresh Publish Record
+                key = f"{key}.again{done.attempts}"
+            elif done is not None and done.status in ("running", "failed"):
+                # Cut off mid-call: the post may be out already. Never risk posting twice.
+                why = _unsure(done.error)
+                if why is None and "safe_resume" not in connector.manifest.get("capabilities", []):
+                    why = "it does not say whether it can resume safely"
+                if why is not None:
+                    raise Unsure(_ask(connector, config, why))
+                key = str(done.request.get("idempotency_key") or key)
         env = self._env(connector)
         call = done
         # One process for the call and the polls of its long job, so the sandbox it runs in,
@@ -1391,13 +1424,30 @@ class Connectors:
             self._open(connector, env, (run_id, stage_id)) as tool,
         ):
             if call is None or call.status != "polling":
-                call = self._call(connector, world_id, run_id, stage_id, visit, config, tool, call)
+                call = self._call(
+                    connector, world_id, run_id, stage_id, visit, config, tool, call, key
+                )
             while call.status == "polling":
                 time.sleep(self.poll_seconds)
                 if self.aborted(run_id):
                     self._cancel(connector, call, tool)
                 call = self._poll(connector, call, tool)
         return call
+
+    def answer_unsure(self, stage_id: str, links: dict[str, str] | None) -> None:
+        """A person's answer at the "Did this post go out?" gate of the stage's publish call:
+        the links they found (It posted), recorded as its answer, so the stage finishes without
+        posting; or None (Post it now): the stage calls again under a new key. KeyError when the
+        stage made no call."""
+        call = self.storage.get_call(stage_id)
+        if call is None:
+            raise KeyError(f"no call for stage {stage_id}")
+        if links:
+            response = {"links": links, "recorded_by": "person"}
+            call = replace(call, status="done", response=response, error=None, progress=1.0)
+        else:
+            call = replace(call, status="failed", error=AGAIN)
+        self.storage.save_call(replace(call, updated_at=_now()))
 
     @contextmanager
     def _held(self, connector: Connector, stage: Stage) -> Iterator[None]:
@@ -1444,11 +1494,10 @@ class Connectors:
         config: dict[str, Any],
         call_tool: Caller,
         before: Call | None,
+        idempotency_key: str,
     ) -> Call:
         params = dict(config.get("params") or {})
         tool = str(params.pop("tool", connector.name))
-        # a new key per visit, so a connector that dedupes on it does the rework
-        idempotency_key = f"{stage_id}.{visit}" if visit else stage_id
         request: dict[str, Any] = {**params, "idempotency_key": idempotency_key}
         for key in ("input", "inputs", "output"):
             if config.get(key):
@@ -1478,6 +1527,8 @@ class Connectors:
             response = call_tool(tool, request)
         except Exception as exc:
             self._fail(call, str(exc))
+            if connector.kind == "publish" and (why := _unsure(str(exc))) is not None:
+                raise Unsure(_ask(connector, config, why)) from exc
             raise
         if response.get("job_id") and response.get("poll"):
             return self.storage.save_call(

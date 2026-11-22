@@ -81,7 +81,7 @@ permissions = [
   "sign_in: www.facebook.com",
   "sign_in: graph.facebook.com",
   "capabilities: publish",
-  "capabilities: outcomes",
+  "capabilities: outcomes",  "capabilities: safe_resume",
 ]
 
 [[packages]]
@@ -192,5 +192,5 @@ permissions = [
   "sign_in: accounts.google.com",
   "sign_in: oauth2.googleapis.com",
   "capabilities: publish",
-  "capabilities: outcomes",
+  "capabilities: outcomes",  "capabilities: safe_resume",
 ]

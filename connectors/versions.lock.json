@@ -16,8 +16,8 @@
     "files": "bd3a3a5cd4ee81de25a34ff7cb1bebde224bc8e0c64a4f0bbdcdd69c6b90e28c"
   },
   "meta": {
-    "version": "1.2.0",
-    "files": "01982ece36fd17781ecda0faf68838e97da9e4da388d15f1e6899718c2fc0f93"
+    "version": "1.3.0",
+    "files": "6bd42f98b5e554f6bc49ff539e5db01dd142151942baa94895c872448a7f1db9"
   },
   "python_script": {
     "version": "1.0.0",
@@ -44,7 +44,7 @@
     "files": "eaf577b5c8ab2ac0a961fa02517fe573c14cc84dcecd83e9cdf968e266934201"
   },
   "youtube": {
-    "version": "1.5.0",
-    "files": "d09d0c56c2b40e985a626b48553a878e07b80fced5fb7028845a6d275f317091"
+    "version": "1.6.0",
+    "files": "b401542c38a6d5d1b53c587607e1f4df48615e8712add761639532b4cdc5a831"
   }
 }

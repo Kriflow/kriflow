@@ -15,6 +15,15 @@ core shows the fields at the gate, lets the person edit the editable ones, refus
 there are problems, and records the values confirmed. Every publish connector is a Connector Package
 answering both as MCP tools, as the publish packages in `connectors/` do.
 
+A package whose `publish` resumes safely declares the `safe_resume` capability: called again with
+the same key after an interruption, it checks the platform first, answers `already_posted: true`
+beside the links when it finds the post an earlier try made (posting nothing), and fails with an
+error starting `unsure:` and the reason when it cannot tell whether that try posted, never
+posting blind. The core calls an interrupted publish again only for such a package; for any other,
+and on any `unsure:` answer, the stage waits at the "Did this post go out?" gate, whose It posted
+records the links a person found, and whose Post it now calls again under a new key, so the
+package starts afresh.
+
 A publish connector may also offer the `outcomes` Capability, naming its `primary_metric` in its
 Manifest: `outcomes` gets `posts`, every publish record of a world as `{connector, id, links}`
 (`id` the post's as its connector answered it, else the record's path), and answers
@@ -54,7 +63,9 @@ def checked_preview(raw: Any) -> dict[str, Any]:
 def result(connector: str, response: dict[str, Any]) -> dict[str, Any]:
     """What came back, normalized: `status` (published or scheduled), `links` (platform
     to URL), `id` (the post or scheduler job), `failed` (platform to error), `public` and
-    `scheduled_for` (None when the connector does not say)."""
+    `scheduled_for` (None when the connector does not say), `already_posted` (an earlier try
+    made the post; nothing new went out) and `recorded_by` (`person` when someone answered the
+    "Did this post go out?" gate with the links)."""
     links = response.get("links")
     links = {str(k): str(v) for k, v in links.items()} if isinstance(links, dict) else {}
     if response.get("url"):
@@ -62,7 +73,11 @@ def result(connector: str, response: dict[str, Any]) -> dict[str, Any]:
     failed = response.get("failed")
     failed = {str(k): str(v) for k, v in failed.items()} if isinstance(failed, dict) else {}
     status = "scheduled" if response.get("status") == "scheduled" else "published"
-    public, when = response.get("public"), response.get("scheduled_for")
+    public, when, by = (
+        response.get("public"),
+        response.get("scheduled_for"),
+        response.get("recorded_by"),
+    )
     return {
         "status": status,
         "links": links,
@@ -70,6 +85,8 @@ def result(connector: str, response: dict[str, Any]) -> dict[str, Any]:
         "failed": failed,
         "public": public if isinstance(public, bool) else None,
         "scheduled_for": when if isinstance(when, str) and when else None,
+        "already_posted": response.get("already_posted") is True,
+        "recorded_by": by if isinstance(by, str) else None,
     }
 
 
@@ -92,6 +109,10 @@ def markdown(connector: str, fields: list[dict[str, Any]], out: dict[str, Any]) 
     else:
         landed = [f"- no link yet: {connector} job {out['id']} is {out['status']}"]
     landed += [f"- {p} failed: {error}" for p, error in out["failed"].items()]
+    if out.get("already_posted"):
+        landed.append("- found the post an earlier try made; nothing new went out")
+    if out.get("recorded_by") == "person":
+        landed.append("- recorded by a person, who found the post and gave its links")
     return (
         f"# {title}\n\nSent to {connector}:\n\n"
         + "\n".join(sent)

@@ -65,6 +65,13 @@ class ItemView:
     every Item is."""
 
 
+POSTED = "posted"
+"""The kind of the "Did this post go out?" gate a connector stage raises when its publish could not
+tell whether it posted. Its choices: `posted` (the links a person found are recorded) or `post`
+(post again, under a new key); either runs the stage again. Abort ends the run as at any gate."""
+POSTED_CHOICES = ("posted", "post")
+
+
 def items_gate(config: dict[str, Any], items: list[ItemView]) -> tuple[str, str]:
     """The kind and ask of the gate a fan-out stage raised once every Item settled: `items`
     when some failed, or `approve_items` on a stage with `approve` until every Item is approved

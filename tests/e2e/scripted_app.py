@@ -11,7 +11,8 @@ builder session installs packages and writes src/Main.tsx.
 The planner chat, told apart by its system prompt too, drafts GOLDEN. The Remotion render,
 speech and YouTube connectors answer from a fake ConnectorTransport (render writes the video and
 its sidecar, as the real wrapper does; speech writes timings.json and a silent take per scene;
-YouTube posts and counts 1,234 views, while its preview is the youtube package's own, over MCP);
+YouTube posts and counts 1,234 views, while its preview is the youtube package's own, over MCP;
+with SWARMIFY_E2E_GOOGLE set, YouTube posts with the package's own code against that fake Google);
 a connector a test adds goes through the real MCP transport. Every world has the Remotion
 Template `shorts` its workflows render. remotion_render installs with an `npm` and `npx` that do
 nothing, so each app does not fetch the Remotion CLI and Chrome (800 MB) its fake renders never
@@ -20,6 +21,7 @@ use. Upkeep runs every second.
 The GraphWriter's extract writes a fixed graph instead of calling graphify's model, a second
 after the last change; the real graphify MCP process answers queries over it."""
 
+import importlib.util
 import json
 import os
 import tempfile
@@ -29,6 +31,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 from claude_agent_sdk import ClaudeAgentOptions
 from fastapi import FastAPI
 
@@ -42,7 +45,8 @@ from swarmify_swarm import SdkRuntime, tool_id
 from swarmify_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedTransport
 from swarmify_worlds import World, Worlds
 
-BUILDER_SYSTEM = (Path(__file__).parents[2] / "connectors/remotion_build/system.md").read_text()
+REPO = Path(__file__).parents[2]
+BUILDER_SYSTEM = (REPO / "connectors/remotion_build/system.md").read_text()
 """The remotion_build package's system prompt for its Build Session."""
 IDEAS_MD = """# Ideas
 
@@ -212,6 +216,34 @@ def voice(out: Path) -> dict[str, Any]:
     }
 
 
+GOOGLE = os.environ.get("SWARMIFY_E2E_GOOGLE", "")
+"""A fake Google's address: when set, YouTube posts with the youtube package's own publish code,
+against that fake, which a test serves outside the app so it outlives a restart."""
+
+
+class _ToGoogle(httpx.HTTPTransport):
+    """Google's hosts, sent to the fake Google instead."""
+
+    def __init__(self, base: str) -> None:
+        super().__init__()
+        self.base = httpx.URL(base)
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        request.url = request.url.copy_with(
+            scheme=self.base.scheme, host=self.base.host, port=self.base.port
+        )
+        return super().handle_request(request)
+
+
+def _youtube() -> Any:
+    """The youtube package's module, from its folder."""
+    spec = importlib.util.spec_from_file_location("youtube", REPO / "connectors/youtube/youtube.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class Transport(McpTransport):
     """The real MCP transport, but the render connector and YouTube's posting are fakes."""
 
@@ -234,6 +266,15 @@ class Transport(McpTransport):
             front = "\n".join(f"{k}: {json.dumps(v)}" for k, v in head.items())
             out.with_name(f"{out.name}.md").write_text(f"---\n{front}\n---\n\n# {out.name}\n")
             return self.fake.call(connector, tool, arguments, env) | {"output": out.name}
+        if connector.name == "youtube" and tool == "publish" and GOOGLE:
+            with httpx.Client(transport=_ToGoogle(GOOGLE), timeout=60.0) as http:
+                return _youtube().publish_fields(
+                    http,
+                    env,
+                    arguments["fields"],
+                    arguments["input_path"],
+                    arguments.get("idempotency_key", ""),
+                )
         if connector.name == "youtube" and tool != "preview":
             return self.fake.call(connector, tool, arguments, env)
         if connector.name == "speech" and tool == "speech":  # its types answer for real

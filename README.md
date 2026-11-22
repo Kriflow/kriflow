@@ -1617,10 +1617,22 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
    Connectors page checks its `health`. A fixed host may instead be listed in
    `permissions.network` (`kokoro:8880`). A container on any other network is not reachable.
 
-- Updating: `git pull`, then the same `docker compose up -d --build`, and each package's
-  compose command. Only images whose inputs changed are rebuilt, and only their containers restart:
-  a change under `apps/web` alone restarts `web` and leaves the api and its runs alone. For a
-  UI-only update `docker compose up -d --build web` builds and restarts nothing else.
+- Updating: `git pull`, then `python3 tools/deploy.py` (add `--backup LABEL` when the update
+  changes stored data, see Backups), and each package's compose command. Safe at any time, with
+  no need to wait for a quiet moment: it builds every image while the api serves, then drains
+  the api (no new stage starts, and the stages at work finish; runs at a gate, waiting for a
+  time, on a child run or queued wait and go on after), stops the api, recreates the services
+  and waits until the new api answers, then says what it waited for. The drain waits up to
+  `SWARMIFY_DRAIN_SECONDS` (`.env`, 1200 by default; `--seconds N` for one deploy). At that
+  limit it cancels the drain and stops, deploying nothing, and lists the stages still at work;
+  `--cut` deploys anyway, and those stages run again from their start after the update. It needs
+  `SWARMIFY_API_TOKEN` in its environment: an API token from the Tokens page (one for every
+  world). For a UI-only update `python3 tools/deploy.py --web-only` rebuilds and restarts only
+  `web`, with no drain. While the api drains, Needs you says it is updating.
+  A plain `docker compose up -d`, `restart` or `stop` drains too: the api gets 21 minutes to
+  stop (`stop_grace_period`; raise it with the limit). `swarmify-drain status|start|cancel
+  [--seconds N]`, run in the api container (`docker compose exec -e SWARMIFY_API_TOKEN api
+  swarmify-drain status`), reads, starts or cancels a drain by hand.
 - Sign-in is enforced in one place, the api (`auth.py`). `web` passes `/api` and `/mcp`
   straight through and serves the skin's static files to anyone, so the sign-in page loads; no
   data comes back without a session or, on `/mcp`, an API token. While the api is down the

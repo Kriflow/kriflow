@@ -14,6 +14,7 @@ from swarmify_kernel.sqlite import connect
 from swarmify_runs.lists import release
 from swarmify_runs.machine import MAX_SEND_BACKS, Illegal, RunState
 from swarmify_runs.model import (
+    POSTED,
     RERUNS,
     AppliedChange,
     Decision,
@@ -248,8 +249,10 @@ class SqliteStorage:
                     "   ELSE started_at END,"
                     " ended_at = CASE WHEN :s IN ('pending', 'running', 'waiting') THEN NULL"
                     "   ELSE coalesce(ended_at, :now) END,"
+                    # a connector stage's posted gate asks its question as its error
                     " error = CASE WHEN :s = 'failed' THEN coalesce(:error, error)"
-                    "   WHEN :s IN ('pending', 'running', 'waiting') THEN NULL ELSE error END,"
+                    "   WHEN :s = 'waiting' AND type = 'connector' THEN :error"
+                    "   WHEN :s IN ('pending', 'running') THEN NULL ELSE error END,"
                     " child_run_id = CASE WHEN :s IN ('pending', 'running') THEN NULL"
                     "   ELSE child_run_id END"
                     " WHERE run_id = :run AND idx = :i AND status != :s",
@@ -531,10 +534,10 @@ class SqliteStorage:
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT s.id, s.idx, s.name, s.type, s.config, s.started_at, s.run_id,"
-                " r.world_id, r.name AS run_name, r.parent_run_id, r.over_budget"
+                " s.error, r.world_id, r.name AS run_name, r.parent_run_id, r.over_budget"
                 " FROM run_stages s JOIN runs r ON r.id = s.run_id"
                 " WHERE s.status = 'waiting'"
-                " AND (s.type IN ('gate', 'retro', 'workflow') OR r.over_budget = 1)"
+                " AND (s.type IN ('gate', 'retro', 'workflow', 'connector') OR r.over_budget = 1)"
                 " ORDER BY s.started_at DESC, s.id DESC"
             ).fetchall()
             gates: list[Gate] = []
@@ -548,6 +551,8 @@ class SqliteStorage:
                 limit = int(config.get("max_send_backs") or MAX_SEND_BACKS)
                 kind = config.get("kind") or "approve"
                 ask = config.get("ask") or ""
+                if g["type"] == "connector":  # its publish could not tell whether it posted
+                    kind, ask = POSTED, g["error"] or ""
                 if g["type"] == "workflow":  # a fan-out stage raised its items gate
                     views = [v for _, v in _items(conn, g["run_id"], g["idx"], None)]
                     kind, ask = items_gate(config, views)

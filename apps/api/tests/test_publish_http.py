@@ -16,7 +16,7 @@ from api_fakes import YOUTUBE_ENV, sign_in_youtube
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import FakeTransport, oauth
+from swarmify_connectors import ConnectorError, FakeTransport, oauth
 from swarmify_connectors.fake_oauth import FakeProvider
 
 MAKER = {
@@ -88,7 +88,7 @@ def test_youtube_is_a_package_whose_account_is_signed_in_from_the_connectors_pag
 ) -> None:
     world = running.post("/api/worlds", json={"name": "Video"}).json()["id"]
     listed = {c["name"]: c for c in running.get(f"/api/worlds/{world}/connectors").json()}
-    assert listed["youtube"]["version"] == "1.5.0"
+    assert listed["youtube"]["version"] == "1.6.0"
     assert listed["youtube"]["missing"] == ["youtube"]  # the account, not keys
     assert listed["upload_post"]["missing"] == ["api_key"]
 
@@ -514,3 +514,56 @@ def test_a_listed_entry_is_claimed_approved_and_published_by_both_stages_after_o
         "again": "https://again.example/v2",
     }
     assert running.get(f"{lists}/entries/later").json()["status"] == "new"
+
+
+def test_a_publish_that_cannot_tell_whether_it_posted_asks_and_it_posted_records_the_links(
+    running: TestClient, transport: FakeTransport, tmp_path: Path
+) -> None:
+    sign_in_youtube(tmp_path)
+    world, workflow = setup(running, weekly())
+    run = at_gate(running, tmp_path, world, workflow)
+    transport.outputs["publish"] = [ConnectorError("unsure: the upload session did not answer")]
+    assert running.post(f"/api/runs/{run['id']}/decision", json={}).status_code == 200
+    until(lambda: [g["kind"] for g in running.get("/api/gates").json()] == ["posted"])
+    (gate,) = running.get("/api/gates").json()
+    assert (gate["kind"], gate["stage_name"], gate["publish"]) == ("posted", "publish", None)
+    assert gate["ask"] == (
+        "YouTube was cut off while posting and could not check whether it posted: the upload"
+        " session did not answer. Look for it on YouTube, then answer."
+    )
+    url = f"/api/runs/{run['id']}/decision"
+    refused = running.post(url, json={"choice": "posted", "links": []})
+    assert refused.status_code == 422 and "link" in refused.json()["detail"]
+    assert running.post(url, json={"choice": "posted", "links": ["not a link"]}).status_code == 422
+    link = "https://www.youtube.com/shorts/vid1"
+    assert running.post(url, json={"choice": "posted", "links": [link]}).status_code == 200
+    until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] == "done")
+    assert [c[1] for c in transport.calls].count("publish") == 1  # never posted again
+
+    stage_id = run["stages"][2]["id"]
+    folder = tmp_path / "worlds" / world / "runs" / run["id"] / stage_id / "artifacts"
+    text = (folder / "publish.md").read_text()
+    assert f'links: {{"youtube": "{link}"}}\n' in text and 'recorded_by: "person"\n' in text
+    log = running.get(f"/api/runs/{run['id']}/stages/{stage_id}/log").text
+    assert "nothing was posted again" in log  # the stage's history says why
+
+
+def test_post_it_now_posts_again_under_a_new_key(
+    running: TestClient, transport: FakeTransport, tmp_path: Path
+) -> None:
+    sign_in_youtube(tmp_path)
+    world, workflow = setup(running, weekly())
+    run = at_gate(running, tmp_path, world, workflow)
+    transport.outputs["publish"] = [
+        ConnectorError("unsure: the upload session did not answer"),
+        {"id": "vid2", "url": "https://youtu.be/vid2", "public": True},
+    ]
+    running.post(f"/api/runs/{run['id']}/decision", json={})
+    until(lambda: [g["kind"] for g in running.get("/api/gates").json()] == ["posted"])
+    answered = running.post(f"/api/runs/{run['id']}/decision", json={"choice": "post"})
+    assert answered.status_code == 200
+    until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] == "done")
+    keys = [c[2]["idempotency_key"] for c in transport.calls if c[1] == "publish"]
+    assert len(keys) == 2 and keys[0] != keys[1]
+    decisions = running.get(f"/api/runs/{run['id']}").json()["decisions"]
+    assert (decisions[-1]["kind"], decisions[-1]["choice"]) == ("posted", "post")

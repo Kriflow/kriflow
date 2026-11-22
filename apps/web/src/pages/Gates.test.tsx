@@ -1000,3 +1000,48 @@ test("on a 390 px phone a package's Review Feed shows as one notice in its world
   }
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });
+
+test("on a phone a post that may have gone out asks Did this post go out?, and each answer says so", async () => {
+  await page.viewport(390, 844);
+  const sent: unknown[] = [];
+  const ask = "YouTube was cut off while posting and could not check whether it posted: the upload session did not answer. Look for it on YouTube, then answer.";
+  const asked = gate("posted", { run_id: "run_9", stage_id: "s9", stage_name: "publish", ask });
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([asked]),
+    "POST /api/runs/run_9/decision": async (req: Request) => {
+      sent.push(await req.json());
+      return Response.json(run("running", [stage(0, "publish", "connector", "running")], { id: "run_9" }));
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  const card = screen.getByTestId("gate-run_9");
+  await expect.element(card.getByRole("heading", { name: "Did this post go out?" })).toBeVisible();
+  await expect.element(card.getByTestId("gate-ask")).toHaveTextContent(ask);
+  const posted = card.getByRole("button", { name: "It posted" });
+  await expect.element(posted).toBeDisabled(); // it needs a link first
+  for (const name of ["It posted", "Post it now", "Abort the run"]) {
+    expect(card.getByRole("button", { name }).element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  }
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  await card.getByLabelText("Link to the post (one per Platform)").fill("https://youtu.be/vid1\n\n https://instagram.com/reel/1 ");
+  await posted.click();
+  await expect.poll(() => sent).toEqual([{ note: "", choice: "posted", links: ["https://youtu.be/vid1", "https://instagram.com/reel/1"] }]);
+  await page.viewport(1280, 800);
+});
+
+test("Post it now runs the publish again", async () => {
+  const sent: unknown[] = [];
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([gate("posted", { run_id: "run_9", stage_id: "s9", ask: "Meta was cut off while posting." })]),
+    "POST /api/runs/run_9/decision": async (req: Request) => {
+      sent.push(await req.json());
+      return Response.json(run("running", [], { id: "run_9" }));
+    },
+  });
+  const { screen } = await mountAt("/gates");
+  await screen.getByRole("button", { name: "Post it now" }).click();
+  await expect.poll(() => sent).toEqual([{ note: "", choice: "post" }]);
+  await expect.element(screen.getByText(/You asked to post it now/)).toBeVisible();
+});

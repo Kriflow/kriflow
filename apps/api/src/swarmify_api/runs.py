@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from swarmify_api.workflows import INVALID, Report
 from swarmify_runs import (
+    POSTED_CHOICES,
     AppliedChange,
     ChangeProposal,
     Gate,
@@ -135,6 +137,11 @@ class Decide(BaseModel):
     """At a gate before a publish stage: the values the gate showed, by key. A field that is not
     editable and has changed since (a relative schedule now resolving to tomorrow) is refused
     with 422, so the inbox can show it again."""
+    links: list[Annotated[str, StringConstraints(max_length=2_000)]] | None = Field(
+        default=None, max_length=10
+    )
+    """At a "Did this post go out?" gate answered `posted`: the link to the post on each
+    platform, which the stage records as what it posted."""
 
 
 class Change(BaseModel):
@@ -336,6 +343,18 @@ def start_pinned(
     )
 
 
+def platform_links(links: list[str]) -> dict[str, str]:
+    """The links a person pasted, by platform: its site's name (www.youtube.com is youtube).
+    ValueError on one that is not an http(s) link."""
+    out: dict[str, str] = {}
+    for link in filter(None, (s.strip() for s in links)):
+        url = urlparse(link)
+        if url.scheme not in ("http", "https") or not url.hostname:
+            raise ValueError(f"not a link: {link}")
+        out[url.hostname.removeprefix("www.").removeprefix("m.").split(".")[0]] = link
+    return out
+
+
 def act[T](action: Callable[[], T]) -> T:
     """The control layer's refusals as HTTP: unknown run 404, wrong moment 409 (a spent Monthly
     Budget too), bad input 422."""
@@ -397,13 +416,16 @@ def router(
     waiting: Callable[[], list[Waiting]] = lambda: [],
     resource_waits: Callable[[], list[dict[str, Any]]] = lambda: [],
     message: Callable[[str, RunChange, str], AppliedChange] | None = None,
+    answer_unsure: Callable[[str, dict[str, str] | None], None] = lambda _stage, _links: None,
 ) -> APIRouter:
     """`tools_for` names the world's connectors an Ad Hoc Run's stage gets as its tools. With
     `retro`, every run but a baseline ends with the Retro stage. `tasks_of` reads a swarm
     stage's whiteboard, whose hand-added tasks a run saved as a workflow keeps. `waiting` names
     the agents waiting for the network and `resource_waits` the processes waiting for a
     Resource (resources.waits), which a run's running stage then says. `message` records a
-    Message and delivers it to the stage's agents; by default it is only recorded."""
+    Message and delivers it to the stage's agents; by default it is only recorded.
+    `answer_unsure` records a person's answer at a "Did this post go out?" gate with the stage's
+    publish call: the links found (It posted), or None (Post it now)."""
     api = APIRouter(prefix="/api", tags=["runs"])
     pin = pinner(workflows)
 
@@ -611,8 +633,19 @@ def router(
 
     @api.post("/runs/{run_id}/decision", responses=ACTION_ERRORS)
     def decide(run_id: str, body: Decide) -> Run:
-        return act(
-            lambda: runner.decide(
+        """Answer the gate the run waits at. At a "Did this post go out?" gate, `choice` is
+        `posted` with `links` (422 without one) or `post`; the publish call learns it first."""
+
+        def go() -> Run:
+            run = runner.get(run_id)
+            waiting = [s for s in run.stages if s.status == "waiting"] if run else []
+            at = waiting[0] if waiting and run and not run.over_budget else None
+            if at is not None and at.type == "connector" and body.choice in POSTED_CHOICES:
+                links = platform_links(body.links or []) if body.choice == "posted" else None
+                if body.choice == "posted" and not links:
+                    raise ValueError("It posted needs the link to the post")
+                answer_unsure(at.id, links)
+            return runner.decide(
                 run_id,
                 body.choice,
                 body.note,
@@ -624,7 +657,8 @@ def router(
                 rejects=[r.model_dump() for r in body.rejects or []],
                 person=True,
             )
-        )
+
+        return act(go)
 
     @api.post("/runs/{run_id}/changes/propose", responses={**ACTION_ERRORS, 422: {}})
     def propose_change(run_id: str, body: Change) -> ChangeProposal:

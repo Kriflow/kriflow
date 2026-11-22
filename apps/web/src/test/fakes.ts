@@ -161,7 +161,7 @@ export function task(id: string, status: Task["status"], over: Partial<Task> = {
 }
 
 /** An open gate as `GET /api/gates` lists it. */
-export function gate(kind: "pick" | "approve" | "confirm" | "budget" | "skill" | "items" | "approve_items", over: Partial<Gate> = {}): Gate {
+export function gate(kind: "pick" | "approve" | "confirm" | "budget" | "skill" | "items" | "approve_items" | "posted", over: Partial<Gate> = {}): Gate {
   return {
     run_id: "run_1",
     world_id: "world_1",
@@ -178,6 +178,7 @@ export function gate(kind: "pick" | "approve" | "confirm" | "budget" | "skill" |
       skill: "The retro read this run and proposes a change. Approve it, edit it, or reject it.",
       items: "1 of 3 items did not finish. Retry them, continue without them, or abort.",
       approve_items: "2 of 3 items wait for review. Approve each item, or send it back with a note to make it again.",
+      posted: "YouTube was cut off while posting and could not check whether it posted. Look for it on YouTube, then answer.",
     }[kind],
     opened_at: ts,
     send_backs_left: 2,

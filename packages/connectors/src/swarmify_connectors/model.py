@@ -110,5 +110,10 @@ class ConnectorError(RuntimeError):
     """A connector could not start, refused a call, or reported a failed job."""
 
 
+class Unsure(ConnectorError):
+    """A publish call cut off mid-flight, or answering `unsure:`, could not tell whether it
+    posted. Its message is the question for the person: the stage waits at its gate."""
+
+
 class JobCancelled(ConnectorError):
     """The run was aborted while the stage's long job ran, so the job was cancelled."""
