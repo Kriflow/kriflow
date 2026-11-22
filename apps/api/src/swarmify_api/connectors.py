@@ -17,6 +17,7 @@ from swarmify_connectors import (
     Connector,
     ConnectorError,
     Connectors,
+    ContractError,
     HealthCheck,
     InstallError,
     KeyCheck,
@@ -26,6 +27,7 @@ from swarmify_connectors import (
 )
 from swarmify_connectors.index import INDEX_URL, IndexUnavailable, read_index
 from swarmify_connectors.oauth import CALLBACK, SignInNeeded
+from swarmify_connectors.packages import NEWEST_CONTRACT, OLDEST_CONTRACT, contract_problem
 from swarmify_connectors.setup import env_name, fields, needs_sign_in, scope, secret
 from swarmify_workflows import Workflows
 from swarmify_worlds import Worlds
@@ -166,12 +168,20 @@ class IndexEntry(BaseModel):
     subfolder: str | None
     ref: str
     permissions: list[str]
+    contract: int
+    """The Package Contract it needs; 1 when the index says none."""
+    runnable: bool
+    """Whether this core runs that contract; when not, `problem` says what to do."""
+    problem: str | None
 
 
 class PackageIndex(BaseModel):
     url: str
     """Where the index was read from: the `SWARMIFY_CONNECTOR_INDEX` setting."""
     packages: list[IndexEntry]
+    oldest_contract: int
+    newest_contract: int
+    """The range of Package Contracts this core runs."""
 
 
 class EnabledPackage(BaseModel):
@@ -384,7 +394,18 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
             entries = read_index(url)
         except IndexUnavailable as exc:
             raise HTTPException(502, f"Could not read the index at {url}: {exc}") from exc
-        return PackageIndex(url=url, packages=[IndexEntry(**e) for e in entries])
+
+        def entry(e: dict[str, Any]) -> IndexEntry:
+            version = e["ref"].removeprefix(f"{e['name']}-v")  # a release tag names its version
+            problem = contract_problem(e["name"], version, e["contract"])
+            return IndexEntry(**e, runnable=problem is None, problem=problem)
+
+        return PackageIndex(
+            url=url,
+            packages=[entry(e) for e in entries],
+            oldest_contract=OLDEST_CONTRACT,
+            newest_contract=NEWEST_CONTRACT,
+        )
 
     @api.get("/packages/{name}/{version}/icon", response_class=Response)
     def package_icon(name: str, version: str) -> Response:
@@ -414,6 +435,8 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         a symlink out of the package, that version installed already)."""
         try:
             review = packages.review(body.source, body.ref, body.subfolder)
+        except ContractError as exc:
+            raise HTTPException(422, str(exc)) from exc
         except ManifestError as exc:
             raise HTTPException(422, f"invalid Manifest: {exc}") from exc
         except InstallError as exc:
@@ -435,6 +458,8 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
                 approved=body.approved,
                 subfolder=body.subfolder,
             )
+        except ContractError as exc:
+            raise HTTPException(422, str(exc)) from exc
         except ManifestError as exc:
             raise HTTPException(422, f"invalid Manifest: {exc}") from exc
         except InstallError as exc:

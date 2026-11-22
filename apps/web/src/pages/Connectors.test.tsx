@@ -517,12 +517,12 @@ test("an upgrade adding no permission says so, and a refused source says why", a
 
 test("browsing the index searches it and installs an entry through the usual review", async () => {
   const sent: unknown[] = [];
-  const speech = { name: "speech", description: "Voices a script.", git: "https://github.com/wagleanuj/swarmify.git", subfolder: "connectors/speech", ref: "v2", permissions: ["services: engines", "owned_folders: voices"] };
-  const slack = { name: "slack", description: "Posts each gate to a channel.", git: "https://example.org/slack.git", subfolder: null, ref: "v1.0.0", permissions: [] };
+  const speech = { name: "speech", description: "Voices a script.", git: "https://github.com/wagleanuj/swarmify.git", subfolder: "connectors/speech", ref: "v2", permissions: ["services: engines", "owned_folders: voices"], contract: 1, runnable: true, problem: null };
+  const slack = { name: "slack", description: "Posts each gate to a channel.", git: "https://example.org/slack.git", subfolder: null, ref: "v1.0.0", permissions: [], contract: 1, runnable: true, problem: null };
   fakeFetch({
     "GET /api/worlds/world_1": () => Response.json(video),
     "GET /api/packages": () => Response.json([{ name: "slack", version: "1.0.0", label: "Slack", kind: "notify", about: "", source: "x", installed_at: "2026-10-30T10:00:00+00:00", state: "installed" }]),
-    "GET /api/packages/index": () => Response.json({ url: "https://example.org/index.toml", packages: [speech, slack] }),
+    "GET /api/packages/index": () => Response.json({ url: "https://example.org/index.toml", packages: [speech, slack], oldest_contract: 1, newest_contract: 1 }),
     "POST /api/packages/review": async (req) => {
       sent.push(await req.json());
       return Response.json({ name: "speech", version: "1.0.0", label: "Speech", about: "Voices a script.", commit: "abcdef0123456789", permissions: ["install_network: pypi.org", "services: engines"], upgrade: null });
@@ -549,6 +549,19 @@ test("browsing the index searches it and installs an entry through the usual rev
   const shown = form.getByRole("region", { name: "Permissions of speech 1.0.0" });
   await expect.element(shown).toMatchTextContent(/Hosts its install step reaches\s*pypi\.org/);
   expect(sent).toEqual([{ source: speech.git, ref: "v2", subfolder: "connectors/speech" }]);
+});
+
+test("an index entry needing a newer Kriflow says so and cannot be installed", async () => {
+  const later = { name: "later", description: "From the future.", git: "https://example.org/later.git", subfolder: null, ref: "later-v2.0.0", permissions: [], contract: 2, runnable: false, problem: "later 2.0.0 needs package contract 2." };
+  fakeFetch({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "GET /api/packages/index": () => Response.json({ url: "https://example.org/index.toml", packages: [later], oldest_contract: 1, newest_contract: 1 }),
+  });
+  const { screen } = await mountAt("/worlds/world_1/connectors");
+  await screen.getByRole("button", { name: "Browse the index" }).click();
+  const row = screen.getByRole("region", { name: "Browse the index" }).getByRole("listitem");
+  await expect.element(row).toMatchTextContent(/Needs a newer Kriflow\s*Written for package contract 2\. This Kriflow runs contract 1\./);
+  await expect.element(row.getByRole("button", { name: "Review and install later" })).toBeDisabled();
 });
 
 test("an index that cannot be read says why", async () => {

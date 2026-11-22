@@ -3521,6 +3521,12 @@ export interface components {
             ref: string;
             /** Permissions */
             permissions: string[];
+            /** Contract */
+            contract: number;
+            /** Runnable */
+            runnable: boolean;
+            /** Problem */
+            problem: string | null;
         };
         /**
          * ItemView
@@ -3998,6 +4004,10 @@ export interface components {
             url: string;
             /** Packages */
             packages: components["schemas"]["IndexEntry"][];
+            /** Oldest Contract */
+            oldest_contract: number;
+            /** Newest Contract */
+            newest_contract: number;
         };
         /** PackageInstall */
         PackageInstall: {

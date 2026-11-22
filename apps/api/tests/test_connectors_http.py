@@ -417,6 +417,16 @@ def test_an_invalid_manifest_is_refused_naming_the_field(
     refused = install(client, str(source))
     assert refused.status_code == 422
     assert refused.json()["detail"].startswith("invalid Manifest: kind: 'robot'")
+    newer = tmp_path / "newer"
+    shutil.copytree(fixture.parent / "packages/echo", newer)
+    toml = newer / "swarmify-connector.toml"
+    toml.write_text(f"contract = 2\n{toml.read_text()}")
+    refused = install(client, str(newer))
+    assert (refused.status_code, refused.json()["detail"]) == (
+        422,
+        "echo 1.0.0 needs package contract 2, and this Kriflow runs contract 1."
+        " Update Kriflow first, or install an older echo.",
+    )
     assert [p["name"] for p in client.get("/api/packages").json()] == [
         "blender_build",
         "blender_render",
@@ -517,6 +527,21 @@ permissions = ["network: api.example.org"]
     installed = client.post("/api/packages", json=approve)
     assert installed.status_code == 201, installed.text
     assert installed.json()["subfolder"] == "connectors/echo"
+
+    newer = tmp_path / "newer.toml"
+    newer.write_text(
+        index.read_text().replace('ref = "v1.0.0"', 'ref = "echo-v2.0.0"\ncontract = 2')
+    )
+    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", str(newer))
+    listed = client.get("/api/packages/index").json()
+    assert (listed["oldest_contract"], listed["newest_contract"]) == (1, 1)
+    assert {k: listed["packages"][0][k] for k in ("contract", "runnable", "problem")} == {
+        "contract": 2,
+        "runnable": False,
+        "problem": "echo 2.0.0 needs package contract 2, and this Kriflow runs contract 1."
+        " Update Kriflow first, or install an older echo.",
+    }
+    assert entry["contract"] == 1 and entry["runnable"] and entry["problem"] is None
 
     monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", "http://example.org/index.toml")
     down = client.get("/api/packages/index")

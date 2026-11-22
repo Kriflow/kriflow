@@ -53,6 +53,7 @@ from swarmify_connectors.model import (
 from swarmify_connectors.packages import (
     LOCAL,
     MANIFEST,
+    ContractError,
     InstallError,
     ManifestError,
     Package,
@@ -86,6 +87,7 @@ __all__ = [
     "ConnectorError",
     "ConnectorTransport",
     "Connectors",
+    "ContractError",
     "Credentials",
     "FakeTransport",
     "HealthCheck",
@@ -1395,6 +1397,12 @@ class Connectors:
         name = str(config.get("calls", ""))
         connector = self.find(world_id, name, pins)
         if connector is None:
+            enabled = self.enabled(world_id)
+            if name in enabled:  # pinned but unusable (a contract this core does not run): why
+                try:
+                    self.packages.manifest(name, (pins or {}).get(name, enabled[name]))
+                except (InstallError, ManifestError) as exc:
+                    raise ConnectorError(str(exc)) from exc
             raise ConnectorError(f"no connector named '{name}' in this world")
         if "connector" not in connector.stage_types:
             raise ConnectorError(f"connector '{name}' is not allowed in connector stages")

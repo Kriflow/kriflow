@@ -488,7 +488,9 @@ always install; unset, any existing folder does, as before.
 
 The curated index (ADR 0019, issue 226): one TOML file listing known packages, one
 `[[packages]]` table each with `name`, `description`, `git`, an optional `subfolder`, the
-recommended `ref` and its `permissions` as the review lists them. The format, and how authors
+recommended `ref`, its `permissions` as the review lists them and an optional `contract` (1
+when absent). `GET /api/packages/index` answers each entry's `contract`, `runnable` and, when
+this Kriflow cannot run it, the `problem`, beside `oldest_contract` and `newest_contract`. The format, and how authors
 add a package by pull request, is in `docs/index-repo/README.md`, which with `index.toml` and
 `LICENSE` beside it is the content of the `wagleanuj/swarmify-connectors` repository.
 `SWARMIFY_CONNECTOR_INDEX` says where it is read from: an https URL (no redirects, at most
@@ -527,6 +529,7 @@ before versions were recorded are stamped with their world's pins.
 The Manifest, every section checked at install even where Kriflow does not act on it yet:
 
 ```toml
+contract = 1                      # the Package Contract it was written for; absent is 1
 name = "echo"                     # lower_snake_case; workflows call the connector by it
 version = "1.0.0"                 # semver; installs side by side by version
 label = "Echo"                    # what the UI shows
@@ -621,6 +624,29 @@ hold = ["seat"]                   # Resources the core holds a Slot of around ea
 
 The full fixture is `packages/connectors/tests/fixtures/packages/echo`, and every rule has an
 invalid fixture beside it in `fixtures/manifests`.
+
+#### Package contracts
+
+A Package Contract is everything a package relies on from the core: the Manifest schema, the
+tools the core calls and the answers it reads, and what a package's process is given. Kriflow
+runs a range of contracts, oldest to newest (`OLDEST_CONTRACT` and `NEWEST_CONTRACT` in
+`swarmify_connectors/packages.py`). A Manifest's `contract` is checked before anything else of
+it, so a package outside the range is refused for that, not for a field this Kriflow does not
+know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contract 1.
+Update Kriflow first, or install an older {name}." (or, below the oldest, "... was written for
+package contract {N} ... Install a newer {name}."). The refusal shows at review and install
+(422), for a default at startup (logged), on the installed list (`invalid` with that
+`problem`), at enable and on a stage of a world that pins it. The index's optional `contract`
+per entry marks one this Kriflow cannot run on Browse the index, Install turned off. A local
+package the Connectors page writes carries the newest contract.
+
+A core change that adds anything a package may declare or answer raises `NEWEST_CONTRACT` and
+adds a line here; one that removes or renames something also raises `OLDEST_CONTRACT`, a
+breaking change that needs an ADR.
+
+| Contract | Since | What it added |
+| --- | --- | --- |
+| 1 | 2026-11-22 | The core as of the package contract: the Manifest, publish, outcomes and safe resume, check, Setup and sign-in, world types, long jobs, Build Sessions and Templates. |
 
 Once a world enables a package, the Connectors page draws its Setup form from the `[[config]]`
 fields. Values live in `<data dir>/setup.json`, mode 600,

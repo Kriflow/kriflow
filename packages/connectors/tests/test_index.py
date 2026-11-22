@@ -34,6 +34,7 @@ def test_a_local_index_lists_its_entries(tmp_path: Path) -> None:
             "subfolder": None,
             "ref": "v1.0.0",
             "permissions": ["network: api.example.org"],
+            "contract": 1,
         }
     ]
 
