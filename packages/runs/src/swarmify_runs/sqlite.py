@@ -603,9 +603,15 @@ class SqliteStorage:
             return row["id"], StageDef(row["name"], row["type"], json.loads(row["config"]))
 
     def list_runs(
-        self, world_id: str, limit: int | None = None, before: str | None = None
+        self,
+        world_id: str,
+        limit: int | None = None,
+        before: str | None = None,
+        archived: bool | None = None,
     ) -> list[Run]:
         sql, args = "SELECT id FROM runs WHERE world_id = ?", [world_id]
+        if archived is not None:
+            sql += f" AND archived_at IS {'NOT ' if archived else ''}NULL"
         if before:  # keyset on the sort key: runs started meanwhile never shift later pages
             sql += " AND (created_at, id) < (SELECT created_at, id FROM runs WHERE id = ?)"
             args.append(before)
@@ -615,6 +621,18 @@ class SqliteStorage:
         with self._conn() as conn:
             ids = conn.execute(sql, args).fetchall()
             return [r for (run_id,) in ids if (r := self._read(conn, run_id))]
+
+    def set_archived(self, run_ids: list[str], archived_at: str | None) -> list[Run]:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            saved = []
+            for run_id in run_ids:
+                conn.execute("UPDATE runs SET archived_at = ? WHERE id = ?", (archived_at, run_id))
+                if (run := self._read(conn, run_id)) is not None:
+                    append(conn, _updated(run))
+                    saved.append(run)
+            conn.execute("COMMIT")
+            return saved
 
     def queued_run_ids(self) -> list[str]:
         with self._conn() as conn:
@@ -732,6 +750,7 @@ class SqliteStorage:
             changes,
             forked_by,
             row["budget_warn_usd"],
+            archived_at=row["archived_at"],
         )
 
 

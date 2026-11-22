@@ -102,8 +102,9 @@ class Workflows:
     ) -> None:
         """`connectors_for(world id, pins)` gives the world's connectors, a package named in
         `pins` at that version over the world's pin. `on_saved` sees every new version once it
-        is stored: the composition root uses it to hand the version's `schedule` to the Runs
-        context, which owns the cron."""
+        is stored, and the current version when the workflow is archived or restored: the
+        composition root uses it to hand the version's `schedule` (none while archived) to the
+        Runs context, which owns the cron."""
         self.storage = storage
         self.connectors_for = connectors_for
         self.on_saved = on_saved
@@ -211,16 +212,41 @@ class Workflows:
         return self.save(world_id, current.yaml)
 
     def scheduled(self) -> dict[str, str]:
-        """Every workflow with a schedule, across worlds, to its cron expression."""
+        """Every live workflow with a schedule, across worlds, to its cron expression."""
         found: dict[str, str] = {}
-        for workflow_id, yaml in self.storage.current_yaml().items():
+        for workflow_id, yaml in self.storage.current_yaml(archived=False).items():
             model, _ = parse_workflow(yaml)
             if model is not None and model.schedule:
                 found[workflow_id] = model.schedule
         return found
 
-    def list_all(self, world_id: str) -> list[Workflow]:
-        return self.storage.list_workflows(world_id)
+    def list_all(self, world_id: str, archived: bool | None = None) -> list[Workflow]:
+        """Live ones only with `archived` False, archived ones only with True, every one with
+        None (the default, for readers that must see them all)."""
+        return self.storage.list_workflows(world_id, archived)
+
+    def archive(self, workflow_id: str) -> Workflow:
+        """Hide the workflow, drop its schedule and refuse new runs of it; runs already going
+        go on. Archiving an archived one changes nothing. Raises KeyError for an unknown one."""
+        return self._archived(workflow_id, datetime.now(UTC).isoformat())
+
+    def restore(self, workflow_id: str) -> Workflow:
+        """Undo `archive`: listed, scheduled and runnable again. Raises KeyError."""
+        return self._archived(workflow_id, None)
+
+    def _archived(self, workflow_id: str, at: str | None) -> Workflow:
+        workflow = self.get(workflow_id)
+        if workflow is None:
+            raise KeyError(workflow_id)
+        kind = "workflow.archived" if at else "workflow.restored"
+        payload = {"workflow_id": workflow_id, "name": workflow.name}
+        event = Event.new(kind, world_id=workflow.world_id, payload=payload)
+        saved = self.storage.set_archived(workflow_id, at and (workflow.archived_at or at), event)
+        current = self.version(workflow_id, workflow.current_version)
+        if saved is None or current is None:
+            raise KeyError(workflow_id)
+        self.on_saved(current)
+        return saved
 
     def get(self, workflow_id: str) -> Workflow | None:
         return self.storage.get_workflow(workflow_id)

@@ -173,6 +173,8 @@ class Workflow:
     name: str
     current_version: int
     created_at: str
+    archived_at: str | None = None
+    """When it was archived: hidden from lists, no schedule, no new runs. None while live."""
 
 
 @dataclass(frozen=True)
