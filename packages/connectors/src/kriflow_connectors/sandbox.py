@@ -43,7 +43,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from kriflow_connectors import resources
-from kriflow_kernel.settings import setting
+from kriflow_kernel.settings import both, setting
 
 HERE = Path(__file__).parent
 LAUNCHER = HERE.parents[1] / "sandbox" / "launcher.mjs"
@@ -239,13 +239,15 @@ class Sandbox:
         writes = [home, *(p.resolve() for p in grants.writes)]
         env = {**grants.env, "HOME": str(home), "TMPDIR": str(home)}
         named: list[str] = [*grants.resources, *(["gpu"] if grants.gpu else [])]
+        held: dict[str, str] = {}
         for name in dict.fromkeys(named):
             place, slots = resources.folder(self.resources, name)  # not a dated folder: kept
             writes.append(place)
-            env[resources.env_name(name)] = str(place)
-            env[resources.env_name(name) + "_SLOTS"] = str(slots)
+            held[resources.env_name(name)] = str(place)
+            held[resources.env_name(name) + "_SLOTS"] = str(slots)
             if name == "gpu":
-                env[GPU_LOCK] = str(place / "0.lock")
+                held[GPU_LOCK] = str(place / "0.lock")
+        env.update(both(held))  # under KRIFLOW_ too (kriflow#595)
         what = [cwd, home, *_around([p.resolve() for p in grants.reads], writes), *writes]
         reads = self._readable(what, path or os.environ.get("PATH", ""), cwd)  # and writes
         denied = self.denied()

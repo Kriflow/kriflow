@@ -26,6 +26,7 @@ from mcp.client.stdio import get_default_environment
 from kriflow_connectors import Connector, ConnectorError, Connectors
 from kriflow_connectors.sandbox import Confined, Grants, domain
 from kriflow_kernel import Event
+from kriflow_kernel.settings import both
 from kriflow_kernel.sqlite import connect
 from kriflow_memory import ArtifactFile
 from kriflow_runs import Gate, Notifier
@@ -252,8 +253,12 @@ class Listeners:
             full = {
                 **get_default_environment(),
                 **env,
-                "SWARMIFY_MCP_URL": self.url,
-                "SWARMIFY_API_TOKEN": self.tokens[connector.name],
+                **both(  # both names, forever: pinned packages read SWARMIFY_ (kriflow#595)
+                    {
+                        "SWARMIFY_MCP_URL": self.url,
+                        "SWARMIFY_API_TOKEN": self.tokens[connector.name],
+                    }
+                ),
             }
             core = Grants(domains=[h] if (h := domain(self.url)) else [])
             listen = connector.manifest["listen"]

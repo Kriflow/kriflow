@@ -1,11 +1,12 @@
 """Connector Packages (ADRs 0019, 0023, 0026): the Manifest and installing a package.
 
-A Connector Package is a folder holding a `swarmify-connector.toml` Manifest and the connector's
-code. `read_manifest` reads one and checks it against `SCHEMA` plus the rules a JSON Schema
-cannot say, raising ManifestError naming the field. Installing copies the package to
-`<data dir>/packages/<name>/<version>/` and runs its `install` step there, so its dependencies
-land beside it; the install is recorded once for the whole install by `.swarmify-install.json`,
-written last, so a version folder without it never counts and a failed step removes the folder.
+A Connector Package is a folder holding a `kriflow-connector.toml` or `swarmify-connector.toml`
+Manifest and the connector's code. `read_manifest` reads one and checks it against `SCHEMA` plus
+the rules a JSON Schema cannot say, raising ManifestError naming the field. Installing copies the
+package to `<data dir>/packages/<name>/<version>/` and runs its `install` step there, so its
+dependencies land beside it; the install is recorded once for the whole install by
+`.swarmify-install.json`, written last, so a version folder without it never counts and a failed
+step removes the folder.
 A package also installs from a git URL at a ref (issue 225): the clone runs nothing of the
 package, and the API installs only once the operator approved every permission it declares.
 A local package is one Swarmify wrote the Manifest of itself, from the Connectors page's "add an
@@ -40,6 +41,9 @@ from kriflow_kernel.settings import setting
 log = logging.getLogger(__name__)
 
 MANIFEST = "swarmify-connector.toml"
+"""The Manifest's file name every Kriflow reads: the one written."""
+NEW_MANIFEST = "kriflow-connector.toml"
+"""Its new name, read since package contract 3 (kriflow#595); never both in one folder."""
 RECORD = ".swarmify-install.json"
 LOCAL = "local"
 """The install source recorded for a local package."""
@@ -64,7 +68,7 @@ CAPABILITIES = (
 )
 OLDEST_CONTRACT = 1
 """The oldest Package Contract this core still runs; raising it drops packages (an ADR)."""
-NEWEST_CONTRACT = 2
+NEWEST_CONTRACT = 3
 """The newest Package Contract this core knows: raised, with a line in the README's Package
 contracts, by any change to what a package may declare or answer."""
 FIELD_TYPES = ("string", "text", "number", "integer", "boolean", "choice", "url", "path", "oauth")
@@ -526,15 +530,24 @@ def check_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     return manifest
 
 
+def manifest_file(folder: Path) -> Path:
+    """The Manifest of a package folder under either name. Raises ManifestError when it has
+    none, or both, which would leave which one counts to chance."""
+    found = [folder / n for n in (NEW_MANIFEST, MANIFEST) if (folder / n).is_file()]
+    if len(found) > 1:
+        raise ManifestError(f"manifest: {folder} has both {NEW_MANIFEST} and {MANIFEST}; keep one")
+    if not found:
+        raise ManifestError(f"manifest: {folder} has no {NEW_MANIFEST} or {MANIFEST}")
+    return found[0]
+
+
 def read_manifest(folder: Path) -> dict[str, Any]:
     """The checked Manifest at the root of a package folder. Raises ManifestError."""
-    file = folder / MANIFEST
-    if not file.is_file():
-        raise ManifestError(f"manifest: {folder} has no {MANIFEST}")
+    file = manifest_file(folder)
     try:
         manifest = tomllib.loads(file.read_text())
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
-        raise ManifestError(f"manifest: {MANIFEST} is not TOML: {exc}") from exc
+        raise ManifestError(f"manifest: {file.name} is not TOML: {exc}") from exc
     check_manifest(manifest)
     session = manifest.get("build_session", {})
     files = {k: session[k] for k in ("system", "brief", "starter") if k in session}

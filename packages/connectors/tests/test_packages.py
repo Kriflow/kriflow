@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from kriflow_connectors import InstallError, ManifestError, Packages, read_manifest
-from kriflow_connectors.packages import ICON_BYTES, MANIFEST, RECORD, check_manifest
+from kriflow_connectors.packages import ICON_BYTES, MANIFEST, NEW_MANIFEST, RECORD, check_manifest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INVALID = sorted((FIXTURES / "manifests").glob("*.toml"))
@@ -72,8 +72,26 @@ def test_an_icon_is_an_svg_or_png_file_inside_the_package_and_small(tmp_path: Pa
 
 
 def test_a_folder_without_a_manifest_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(ManifestError, match="has no swarmify-connector.toml"):
+    with pytest.raises(
+        ManifestError, match="has no kriflow-connector.toml or swarmify-connector.toml"
+    ):
         read_manifest(tmp_path)
+
+
+def test_a_manifest_named_kriflow_connector_toml_installs_and_runs_and_both_names_are_refused(
+    packages: Packages, tmp_path: Path
+) -> None:
+    folder = tmp_path / "src/echo"
+    shutil.copytree(FIXTURES / "packages/echo", folder)
+    (folder / MANIFEST).rename(folder / NEW_MANIFEST)
+    package = packages.install(str(folder))
+    installed = packages.root / "echo/1.0.0"
+    assert (installed / NEW_MANIFEST).is_file() and not (installed / MANIFEST).exists()
+    assert package.state == "installed" and packages.manifest("echo", "1.0.0")["name"] == "echo"
+    shutil.copy(folder / NEW_MANIFEST, folder / MANIFEST)
+    with pytest.raises(ManifestError) as both:
+        read_manifest(folder)
+    assert "kriflow-connector.toml" in str(both.value) and MANIFEST in str(both.value)
 
 
 @pytest.fixture

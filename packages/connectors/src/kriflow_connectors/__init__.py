@@ -256,17 +256,25 @@ def _preview_args(
 LOGIN = "login"
 """A connector stage's param naming the World Login it signs in as; the core takes it out before
 the package's params check and its tool call."""
-LOGIN_ENV = (
-    "SWARMIFY_LOGIN_NAME",
-    "SWARMIFY_LOGIN_DOMAINS",
-    "SWARMIFY_LOGIN_USERNAME",
-    "SWARMIFY_LOGIN_PASSWORD",
-    "SWARMIFY_LOGIN_TOTP",
-    "SWARMIFY_LOGIN_SESSION",
+LOGIN_ENV = tuple(
+    kernel_settings.both(
+        dict.fromkeys(
+            [
+                "SWARMIFY_LOGIN_NAME",
+                "SWARMIFY_LOGIN_DOMAINS",
+                "SWARMIFY_LOGIN_USERNAME",
+                "SWARMIFY_LOGIN_PASSWORD",
+                "SWARMIFY_LOGIN_TOTP",
+                "SWARMIFY_LOGIN_SESSION",
+            ],
+            "",
+        )
+    )
 )
-"""What the process of a stage that names a login gets, and only it: the login's name, its
-domains (comma-separated), username, password, authenticator secret (when it has one) and the
-path of its Saved Session file. A coding session never sees these names."""
+"""What the process of a stage that names a login gets, and only it, under both names
+(KRIFLOW_ and SWARMIFY_): the login's name, its domains (comma-separated), username, password,
+authenticator secret (when it has one) and the path of its Saved Session file. A coding session
+never sees these names."""
 SESSION_IN, SESSION_OUT = "login-session.json", "login-session.out.json"
 LOGIN_FILE = "login.json"
 """The login's values for the launcher to hand its process (`_place_session`); gone once read."""
@@ -989,16 +997,18 @@ class Connectors:
         home = confined.folder / "home"
         if handed.session is not None:
             safefile.write_in(home, SESSION_IN, handed.session.encode())
-        values = {
-            "SWARMIFY_LOGIN_NAME": handed.login.name,
-            "SWARMIFY_LOGIN_DOMAINS": ",".join(handed.login.domains),
-            "SWARMIFY_LOGIN_USERNAME": handed.login.username,
-            "SWARMIFY_LOGIN_PASSWORD": handed.password,
-            **({"SWARMIFY_LOGIN_TOTP": handed.totp} if handed.totp else {}),
-            "SWARMIFY_LOGIN_SESSION": str(home / SESSION_IN),
-        }
+        values = kernel_settings.both(
+            {
+                "SWARMIFY_LOGIN_NAME": handed.login.name,
+                "SWARMIFY_LOGIN_DOMAINS": ",".join(handed.login.domains),
+                "SWARMIFY_LOGIN_USERNAME": handed.login.username,
+                "SWARMIFY_LOGIN_PASSWORD": handed.password,
+                **({"SWARMIFY_LOGIN_TOTP": handed.totp} if handed.totp else {}),
+                "SWARMIFY_LOGIN_SESSION": str(home / SESSION_IN),
+            }
+        )
         safefile.write_in(home, LOGIN_FILE, json.dumps(values).encode())
-        env["SWARMIFY_LOGIN_FILE"] = str(home / LOGIN_FILE)
+        env.update(kernel_settings.both({"SWARMIFY_LOGIN_FILE": str(home / LOGIN_FILE)}))
         return _Handoff(connector.world_id, stage, connector.name, handed.login.name, home)
 
     def _settle_login(self, handoff: _Handoff) -> None:
@@ -1118,12 +1128,14 @@ class Connectors:
         where that stage's folder is (writable only by a process confined to the stage)."""
         run_id, stage_id = stage
         folder = self.data_dir / "worlds" / world_id / "runs" / run_id / stage_id
-        return {
-            "SWARMIFY_RUN_ID": run_id,
-            "SWARMIFY_RUN_ROOT": self.root_of(run_id),
-            "SWARMIFY_STAGE_ID": stage_id,
-            "SWARMIFY_STAGE_DIR": str(folder),
-        }
+        return kernel_settings.both(
+            {
+                "SWARMIFY_RUN_ID": run_id,
+                "SWARMIFY_RUN_ROOT": self.root_of(run_id),
+                "SWARMIFY_STAGE_ID": stage_id,
+                "SWARMIFY_STAGE_DIR": str(folder),
+            }
+        )
 
     def _grantable(self, value: str | None) -> Path | None:
         """A folder an operator named (a `path` Setting, a local package's command) when the
@@ -1358,7 +1370,9 @@ class Connectors:
         except PermissionError:
             saved = set()
         named = {n for c in self.list_all(world_id) for n in c.credentials}
-        return sorted(saved | named | set(LOGIN_ENV) | {"SWARMIFY_LOGIN_FILE"})
+        return sorted(
+            saved | named | set(LOGIN_ENV) | {"SWARMIFY_LOGIN_FILE", "KRIFLOW_LOGIN_FILE"}
+        )
 
     def agent_servers(
         self,
@@ -1390,7 +1404,8 @@ class Connectors:
             if connector.url:
                 servers[name] = {"type": "http", "url": connector.url, "headers": env}
                 continue
-            env["SWARMIFY_ASSETS"] = str(self.data_dir / "worlds" / world_id / "assets")
+            assets = str(self.data_dir / "worlds" / world_id / "assets")
+            env.update(kernel_settings.both({"SWARMIFY_ASSETS": assets}))
             where, handed = stage, None
             if login is not None and accepts_login(connector) and (where := stage or run):
                 known, handed = self._hand(connector, login, where)

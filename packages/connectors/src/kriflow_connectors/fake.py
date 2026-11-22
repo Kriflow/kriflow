@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from kriflow_connectors.model import Connector, ConnectorError, Tool
+from kriflow_connectors.packages import manifest_file
 
 FIXTURES = Path(__file__).parents[2] / "tests/fixtures/packages"
 """The fixture packages of the core's tests."""
@@ -32,7 +33,7 @@ def tag_package(repo: Path, folder: Path) -> str:
     """Release the package at `folder` in the packages repository `repo` (made when missing):
     copied to `<name>/`, committed and tagged `<name>-v<version>`, as Kriflow/packages does.
     The tag."""
-    manifest = tomllib.loads((folder / "swarmify-connector.toml").read_text())
+    manifest = tomllib.loads(manifest_file(folder).read_text())
     name, tag = manifest["name"], f"{manifest['name']}-v{manifest['version']}"
     if not (repo / ".git").is_dir():
         repo.mkdir(parents=True, exist_ok=True)

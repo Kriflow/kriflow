@@ -68,6 +68,12 @@ def test_a_declared_resource_and_the_run_identity_reach_the_process_and_nothing_
         folder = Path(env["SWARMIFY_STAGE_DIR"])
         assert folder == real.data_dir / "worlds/w1/runs/run_child" / stage
         assert (folder / "probe.txt").read_text() == "x"
+        # under both names, equal (kriflow#595): pinned package versions read SWARMIFY_ forever
+        old = {k.removeprefix("SWARMIFY_"): v for k, v in env.items() if k.startswith("SWARMIFY_")}
+        old.pop("OBSERVE_NONCE")  # the sandbox's own, kept as it is
+        new = {k.removeprefix("KRIFLOW_"): v for k, v in env.items() if k.startswith("KRIFLOW_")}
+        assert old == new and {"RUN_ID", "RUN_ROOT", "STAGE_ID", "STAGE_DIR"} <= set(new)
+    assert seated["KRIFLOW_RESOURCE_SEAT"] == seated["SWARMIFY_RESOURCE_SEAT"]
 
 
 TAKE = """
@@ -77,6 +83,7 @@ folder = os.environ["SWARMIFY_RESOURCE_{name}"]
 with open(os.path.join(folder, "0.lock"), "a") as slot:
     fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
 print(os.environ["SWARMIFY_RESOURCE_{name}_SLOTS"], os.environ.get("SWARMIFY_GPU_LOCK", "none"))
+print(os.environ["KRIFLOW_RESOURCE_{name}_SLOTS"], os.environ.get("KRIFLOW_GPU_LOCK", "none"))
 """
 
 
@@ -95,7 +102,7 @@ def test_a_process_writes_its_resource_folder_inside_the_sandbox(
     folder = sandbox.resources / name.lower()
     assert (folder / "mine.txt").read_text() == "x"
     gpu_lock = str(folder / "0.lock") if lock else "none"
-    assert done.stdout.split() == ["1", gpu_lock]
+    assert done.stdout.split() == ["1", gpu_lock] * 2  # under both names (kriflow#595)
 
 
 def _overlap(tmp_path: Path) -> list[tuple[str, float, float]]:

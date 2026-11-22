@@ -66,3 +66,14 @@ def data_dir(env: Mapping[str, str] = os.environ, home: Path | None = None) -> P
     home = home or Path.home()
     new, old = home / ".kriflow", home / ".swarmify"
     return old if not new.exists() and old.exists() else new
+
+
+def both(env: Mapping[str, str]) -> dict[str, str]:
+    """`env` with each `SWARMIFY_<X>` also as `KRIFLOW_<X>`: what the core hands a package
+    process (kriflow#595). Permanent: installed package versions stay pinned and read the old
+    names, so both are always written."""
+    out = dict(env)
+    for name, value in env.items():
+        if name.startswith(OLD):
+            out[NEW + name.removeprefix(OLD)] = value
+    return out

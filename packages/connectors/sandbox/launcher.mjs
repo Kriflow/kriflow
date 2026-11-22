@@ -106,7 +106,8 @@ function save() {
   if (plan.stderr && tail.length) writeFileSync(plan.stderr, tail.join("\n") + "\n");
 }
 // A World Login (spec: World Logins) reaches its process through a mode-600 file in its scratch
-// folder that the core names in SWARMIFY_LOGIN_FILE, never a command line or an MCP config (the
+// folder that the core names in KRIFLOW_LOGIN_FILE (and SWARMIFY_LOGIN_FILE, the same file; its
+// values come under both names too), never a command line or an MCP config (the
 // agent runtime passes those as arguments, which `ps` shows): read once, deleted at once, and
 // handed to the command as its environment. Its values never leave in a stderr line either.
 function loginValues(file) {
@@ -116,7 +117,7 @@ function loginValues(file) {
     try {
       if (!fstatSync(fd).isFile()) return {};
       const read = JSON.parse(readFileSync(fd, "utf8"));
-      return Object.fromEntries(Object.entries(read).filter(([k, v]) => k.startsWith("SWARMIFY_LOGIN_") && typeof v === "string"));
+      return Object.fromEntries(Object.entries(read).filter(([k, v]) => /^(KRIFLOW|SWARMIFY)_LOGIN_/.test(k) && typeof v === "string"));
     } finally {
       closeSync(fd);
     }
@@ -126,7 +127,7 @@ function loginValues(file) {
     rmSync(file, { force: true });
   }
 }
-const login = loginValues(process.env.SWARMIFY_LOGIN_FILE);
+const login = loginValues(process.env.KRIFLOW_LOGIN_FILE ?? process.env.SWARMIFY_LOGIN_FILE);
 const cookies = (x) =>
   !x || typeof x !== "object" ? [] : Object.entries(x).flatMap(([k, v]) => (k === "value" && typeof v === "string" && v.length >= 8 ? [v] : cookies(v)));
 let kept = [];

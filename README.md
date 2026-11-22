@@ -646,7 +646,7 @@ tools the core calls and the answers it reads, and what a package's process is g
 runs a range of contracts, oldest to newest (`OLDEST_CONTRACT` and `NEWEST_CONTRACT` in
 `kriflow_connectors/packages.py`). A Manifest's `contract` is checked before anything else of
 it, so a package outside the range is refused for that, not for a field this Kriflow does not
-know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contracts 1 to 2.
+know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contracts 1 to 3.
 Update Kriflow first, or install an older {name}." (or, below the oldest, "... was written for
 package contract {N} ... Install a newer {name}."). The refusal shows at review and install
 (422), for a default at startup (logged), on the installed list (`invalid` with that
@@ -662,6 +662,7 @@ breaking change that needs an ADR.
 | --- | --- | --- |
 | 1 | 2026-11-22 | The core as of the package contract: the Manifest, publish, outcomes and safe resume, check, Setup and sign-in, world types, long jobs, Build Sessions and Templates. |
 | 2 | 2026-11-22 | World Logins: the Manifest's `[login] accepts`, `SWARMIFY_LOGIN_FILE` and the `SWARMIFY_LOGIN_*` values, the saved session file, Person Checks through `asks/`, `login_result` in a tool answer; and `SWARMIFY_STAGE_DIR`, the stage's folder, for every process started for a stage. |
+| 3 | 2026-11-22 | The Manifest may be named `kriflow-connector.toml` (a folder with both names is refused), and every variable the core gives a package process also comes as `KRIFLOW_*` with the same value: `KRIFLOW_RUN_ID`, `_RUN_ROOT`, `_STAGE_ID`, `_STAGE_DIR`, `_ASSETS`, `_RESOURCE_<NAME>` and `_SLOTS`, `_GPU_LOCK`, `_MCP_URL`, `_API_TOKEN`, `_LOGIN_FILE` and the `KRIFLOW_LOGIN_*` values. The `SWARMIFY_*` names stay, forever. |
 
 Once a world enables a package, the Connectors page draws its Setup form from the `[[config]]`
 fields. Values live in `<data dir>/setup.json`, mode 600,

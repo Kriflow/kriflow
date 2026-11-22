@@ -211,11 +211,15 @@ def test_agent_servers_hand_a_swarm_stage_its_connectors_with_credentials(
     # the command starts in the connector sandbox, with only its own key and uvx's registry
     fal_server = servers["fal_video"]
     assets = connectors.data_dir / "worlds" / W / "assets"
-    assert fal_server["env"] == {"FAL_KEY": "s3cret", "SWARMIFY_ASSETS": str(assets)}
+    assert fal_server["env"] == {
+        "FAL_KEY": "s3cret",
+        "KRIFLOW_ASSETS": str(assets),
+        "SWARMIFY_ASSETS": str(assets),
+    }
     assert fal_server["args"][0] == str(LAUNCHER)
     assert fal_server["args"][2:] == ["--", "uvx", "fal-mcp", "--model", "kling 2"]
     plan = json.loads(Path(fal_server["args"][1]).read_text())
-    assert plan["pass"] == ["FAL_KEY", "SWARMIFY_ASSETS"] and plan["session"] is True
+    assert plan["pass"] == ["FAL_KEY", "KRIFLOW_ASSETS", "SWARMIFY_ASSETS"] and plan["session"]
     # where its last stderr lines land, for the session to show if it fails to start
     assert (
         fal_server["stderr"] == plan["stderr"] == str(Path(fal_server["args"][1]).parent / STDERR)

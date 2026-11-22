@@ -185,6 +185,10 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
         "pa55-word",
         SECRET,
     )
+    # both names, the same values and the same file (kriflow#595)
+    new = {k: v for k, v in values.items() if k.startswith("KRIFLOW_")}
+    assert len(new) == 6 and all(values["SWARMIFY_" + k[8:]] == v for k, v in new.items())
+    assert signer["env"]["KRIFLOW_LOGIN_FILE"] == str(login_file)
     home = login_file.parent
     plan = (home.parent / "plan.json").read_text()
     assert "pa55-word" not in plan and SECRET not in plan and "s3ss-old-777" not in plan

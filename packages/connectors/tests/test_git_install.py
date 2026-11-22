@@ -204,7 +204,9 @@ def test_a_package_in_a_subfolder_installs_from_it(packages: Packages, tmp_path:
     package = packages.install(str(bare), ref="v1.0.0", approved=ECHO, subfolder="connectors/echo")
     assert package.subfolder == "connectors/echo"
     assert (packages.root / "echo/1.0.0/installed.txt").read_text() == "ok"
-    with pytest.raises(ManifestError, match="has no swarmify-connector.toml"):
+    with pytest.raises(
+        ManifestError, match="has no kriflow-connector.toml or swarmify-connector.toml"
+    ):
         packages.review(str(bare), "v1.0.0")  # its root is not the package
     with pytest.raises(InstallError, match="has no folder connectors/nope"):
         packages.review(str(bare), "v1.0.0", "connectors/nope")
