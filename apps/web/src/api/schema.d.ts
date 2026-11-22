@@ -646,6 +646,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Message
+         * @description Send a Message to the running stage's agents, recorded as a Run Change of kind
+         *     `message`. Each agent's live session reads it as its next turn, or the session it starts
+         *     or resumes reads it first; the stage log says which (`message` lines, queued then
+         *     delivered). 409 when the stage is not running or no agent it names is working, 422 for
+         *     an empty text.
+         */
+        post: operations["send_message_api_runs__run_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/items/{key}/retry": {
         parameters: {
             query?: never;
@@ -3169,7 +3193,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "session" | "tool" | "denied" | "result" | "error" | "text" | "output";
+            kind: "session" | "tool" | "denied" | "result" | "error" | "text" | "output" | "message";
             /** Ts */
             ts: string;
             /** Tool */
@@ -3949,7 +3973,9 @@ export interface components {
          *     `stage_edit`'s `payload` is the stage's new config, an `artifact_edit`'s the `path` of a file
          *     in the stage's artifacts folder and its new `text`, a `rerun`'s its `note`, a `skip` has
          *     none and a `restructure`'s is `stages`, the new list from that stage on, each a workflow
-         *     stage's fields (`name`, `type` and its config).
+         *     stage's fields (`name`, `type` and its config). A `message`'s is the `text` a person sends
+         *     the running stage's agents, `to` (one agent, or None for everyone still working) and
+         *     `interrupt`.
          */
         RunChange: {
             /** Kind */
@@ -4397,6 +4423,25 @@ export interface components {
             room?: components["schemas"]["Room"];
             /** Problems */
             problems?: string[];
+        };
+        /**
+         * StageMessage
+         * @description A Message to the running stage's agents (a Run Change a person applies as they send
+         *     it): to everyone still working, or to the agent named `to`; with `interrupt` the agent
+         *     stops its turn and does this instead.
+         */
+        StageMessage: {
+            /** Stage */
+            stage: string;
+            /** Text */
+            text: string;
+            /** To */
+            to?: string | null;
+            /**
+             * Interrupt
+             * @default false
+             */
+            interrupt: boolean;
         };
         /**
          * StalledMemory
@@ -6217,6 +6262,53 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApplyChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppliedChange"];
+                };
+            };
+            /** @description No such run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The run is not in a state where this action applies */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    send_message_api_runs__run_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageMessage"];
             };
         };
         responses: {

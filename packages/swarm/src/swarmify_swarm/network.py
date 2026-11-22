@@ -207,6 +207,9 @@ class _Seen:
     def tool_result(self, ref: str, text: str, is_error: bool) -> None:
         self.hooks.tool_result(ref, text, is_error)
 
+    def inbox(self) -> list[tuple[str, bool]]:
+        return self.hooks.inbox()
+
     def cost(self, usd: float) -> str | None:
         return self.hooks.cost(usd)
 

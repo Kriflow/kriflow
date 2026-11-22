@@ -3,6 +3,8 @@ Transport seam. Hooks and in-process tools run for real; assertions read the liv
 whiteboard and the files, as the API would. A judge session that passes ends every stage."""
 
 import json
+import threading
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,6 +17,7 @@ from swarmify_swarm import (
     OPERATOR,
     WORKER,
     Agent,
+    Refused,
     SdkRuntime,
     SessionEnd,
     SessionHooks,
@@ -26,11 +29,11 @@ from swarmify_swarm import (
     Swarm,
     tool_id,
 )
-from swarmify_swarm.fake import LAST, Answer, Call, Die, Lost, Say, Script, Step
+from swarmify_swarm.fake import LAST, Answer, Call, Die, Hold, Lost, Say, Script, Step
 from swarmify_swarm.network import NetworkWait, Waiting
 from swarmify_swarm.projection import PLAN_SCHEMA
 from swarmify_swarm.sdk import HARNESS
-from swarmify_swarm.worker import STAGE_TOOLS
+from swarmify_swarm.worker import BETWEEN, FROM_PERSON, MID_TURN, STAGE_TOOLS
 
 W, R, S = "world_1", "run_1", "stage_1"
 STAGE = {"goal": "Find 5 ideas.", "done_when": "5 ideas ranked", "tools": []}
@@ -1062,3 +1065,126 @@ def test_a_tool_result_is_kept_as_a_capped_excerpt(board: SqliteStorage, tmp_pat
     hooks.tool_result("toolu_2", "an unknown call", False)
     (out,) = [e for e in board.list_log(S) if e.kind == "output"]
     assert out.detail == "y" * EXCERPT and out.input == {"chars": EXCERPT + 10, "error": False}
+
+
+def _live(swarm: Swarm, tmp_path: Path, board: SqliteStorage, said: str) -> threading.Thread:
+    """Run the stage in a thread until the worker has said `said`, so its session is live."""
+    failed: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            _run(swarm, tmp_path)
+        except BaseException as exc:
+            failed.append(exc)
+
+    thread = threading.Thread(target=run)
+    thread.failed = failed  # type: ignore[attr-defined]
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not any(e.kind == "text" and e.detail == said for e in board.list_log(S)):
+        assert time.monotonic() < deadline and not failed, failed
+        time.sleep(0.02)
+    return thread
+
+
+def _done(thread: threading.Thread) -> None:
+    thread.join(15)
+    assert not thread.is_alive() and not thread.failed  # type: ignore[attr-defined]
+
+
+def _messages(board: SqliteStorage) -> list[tuple[str, str, str | None]]:
+    return [
+        (e.agent, (e.input or {})["state"], (e.input or {}).get("why"))
+        for e in board.list_log(S)
+        if e.kind == "message"
+    ]
+
+
+def test_a_message_reaches_the_live_session_as_its_next_turn(
+    board: SqliteStorage, tmp_path: Path
+) -> None:
+    """Issue 534: a person's Message goes into the running session as its next user turn, and
+    the log keeps it queued, then delivered."""
+    _seed(board)
+    script = Script(
+        [Say("Starting."), Hold(), GRAPH, CLAIM, FINISH, Say("Done.")],
+        PASS,
+        replies=[Say("Got it: nothing older than 30 days.")],
+    )
+    swarm = _swarm(board, tmp_path, script)
+    thread = _live(swarm, tmp_path, board, "Starting.")
+
+    assert swarm.message(R, S, "change_1", "Skip anything older than 30 days.") == [WORKER]
+    _done(thread)
+
+    assert f"{FROM_PERSON}Skip anything older than 30 days." in script.prompts
+    assert _messages(board) == [(WORKER, "queued", MID_TURN), (WORKER, "delivered", None)]
+    said = [e.detail for e in board.list_log(S) if e.kind == "text"]
+    assert said[-1] == "Got it: nothing older than 30 days."
+    assert _tools(board)[:3] == [GRAPH.tool, CLAIM.tool, FINISH.tool]  # the turn went on
+    assert len(script.sessions) == 2  # the worker's one session, then the judge's
+    assert _worker(board).status == "done"
+
+
+def test_stop_and_do_this_instead_interrupts_the_turn(board: SqliteStorage, tmp_path: Path) -> None:
+    """With interrupt, the turn stops where it is: what it would have done next never runs,
+    and the message's turn does the work instead."""
+    _seed(board)
+    wrong = Call(tool_id("write_note"), {"title": "blog", "body": "From the blog post."})
+    script = Script(
+        [Say("Reading the blog post."), Hold(), wrong, GRAPH, CLAIM, FINISH],
+        PASS,
+        replies=[GRAPH, CLAIM, FINISH, Say("Used the filing instead.")],
+    )
+    swarm = _swarm(board, tmp_path, script)
+    thread = _live(swarm, tmp_path, board, "Reading the blog post.")
+
+    swarm.message(R, S, "change_1", "Use the filing, not the blog post.", WORKER, True)
+    _done(thread)
+
+    assert wrong.tool not in _tools(board)
+    assert not (tmp_path / W / "runs" / R / S / "notes" / "blog.md").exists()
+    assert [e.detail for e in board.list_log(S) if e.kind == "text"][-1] == (
+        "Used the filing instead."
+    )
+    (task,) = board.list_tasks(S)
+    assert task.status == "done"
+    assert [(e.input or {})["interrupt"] for e in board.list_log(S) if e.kind == "message"] == [
+        True,
+        True,
+    ]
+
+
+def test_a_queued_message_comes_first_when_the_session_resumes(
+    board: SqliteStorage, tmp_path: Path
+) -> None:
+    """A message for an agent with no live session (between sessions, or after Swarmify
+    restarted) waits in its inbox, and the session it resumes reads it first."""
+    _seed(board)
+    board.agent(W, R, S, WORKER, "worker")
+    board.update_agent(S, WORKER, status="working", session_id="session-before-restart")
+    script = Script([GRAPH, CLAIM, FINISH, Say("Done.")], PASS)
+    swarm = _swarm(board, tmp_path, script)
+
+    swarm.message(R, S, "change_1", "Use the filing.")
+    assert _messages(board) == [(WORKER, "queued", BETWEEN)]
+    _run(swarm, tmp_path)
+
+    assert script.sessions[0].resume == "session-before-restart"
+    first = script.prompts[0]
+    assert first.startswith(f"{FROM_PERSON}Use the filing.\n\n") and "Work the whiteboard" in first
+    assert _messages(board) == [(WORKER, "queued", BETWEEN), (WORKER, "delivered", None)]
+    assert board.take(S, WORKER) == []  # delivered once
+
+
+def test_a_message_goes_only_to_agents_still_working(board: SqliteStorage) -> None:
+    swarm = Swarm(board, SdkRuntime(), DiskFiles(Path("/nowhere")))
+    board.agent(W, R, S, "planner", "planner")
+    board.update_agent(S, "planner", status="done")
+    with pytest.raises(Refused, match="No agent is working"):
+        swarm.message(R, S, "change_1", "Hello.")
+    board.agent(W, R, S, WORKER, "worker")
+    board.update_agent(S, WORKER, status="working")
+    with pytest.raises(Refused, match="planner is not working"):
+        swarm.message(R, S, "change_1", "Hello.", "planner")
+    assert swarm.message(R, S, "change_1", "Hello.") == [WORKER]

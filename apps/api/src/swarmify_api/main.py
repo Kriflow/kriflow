@@ -98,14 +98,17 @@ from swarmify_notifications import SqliteStorage as ChannelStorage
 from swarmify_runs import (
     DEFAULT_CAP,
     UNSPOILED,
+    AppliedChange,
     Connector,
     Gate,
+    Illegal,
     Notifier,
     OverBudget,
     Previews,
     PublishField,
     PublishPreview,
     Run,
+    RunChange,
     RunControl,
     Runner,
     StageDef,
@@ -113,7 +116,7 @@ from swarmify_runs import (
 from swarmify_runs import MIGRATIONS as RUNS_MIGRATIONS
 from swarmify_runs import SqliteStorage as RunStorage
 from swarmify_swarm import MIGRATIONS as SWARM_MIGRATIONS
-from swarmify_swarm import AgentRuntime, CastEntry, SdkRuntime, Stopped, Swarm, build
+from swarmify_swarm import AgentRuntime, CastEntry, Refused, SdkRuntime, Stopped, Swarm, build
 from swarmify_swarm import SqliteStorage as TaskStorage
 from swarmify_swarm.network import ASKED, NetworkWait, Patient
 from swarmify_swarm.sdk import PRICES, default_model
@@ -1121,6 +1124,20 @@ def create_app(
     app.include_router(worlds.events_router(world_svc))
     app.include_router(worlds.packs_router(SpritePacks(BUNDLED, root / "sprite-packs")))
     app.include_router(workflows.router(workflow_svc, world_svc))
+
+    def send_message(run_id: str, change: RunChange, by: str) -> AppliedChange:
+        """A Message: who gets it is checked first, then it is recorded as a Run Change, then
+        it lands in each agent's inbox (the swarm's)."""
+        to = change.payload.get("to") or None
+        try:
+            swarm.recipients(run_id, change.stage, to)
+        except Refused as exc:
+            raise Illegal(str(exc)) from exc
+        applied = runner.message(run_id, change, by)
+        p = applied.payload
+        swarm.message(run_id, change.stage, applied.id, p["text"], p["to"], p["interrupt"])
+        return applied
+
     app.include_router(
         runs.router(
             runner,
@@ -1131,6 +1148,7 @@ def create_app(
             whiteboard.list_tasks,
             swarm.waiting,
             lambda: resources.waits(registry.packages.sandbox.resources),
+            send_message,
         )  # fmt: skip
     )
 

@@ -12,7 +12,9 @@ plugin; the opt-in real-CLI smoke test is where it gets pinned) (plus `host-skil
 settings are on, standing in for `~/.claude/skills` leaking in), the session runs on the model the
 options name, `resume` keeps the session id,
 each tool call's step carries `usage` (one message id per step), and the result carries `cost`
-as the session's estimated total.
+as the session's estimated total. A user turn after the prompt (a person's message) plays the
+script's `replies` once the turn in play ends; an interrupt ends that turn first, with an error
+result, as the CLI's does.
 """
 
 import contextlib
@@ -20,6 +22,7 @@ import itertools
 import json
 import re
 import uuid
+from collections import deque
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -70,7 +73,15 @@ class Answer:
     data: Any
 
 
-Step = Call | Say | Die | Lost | Answer
+@dataclass(frozen=True)
+class Hold:
+    """The model is mid-turn here until something reaches the session (a person's message or an
+    interrupt), at most `seconds`, so a test can message a live session."""
+
+    seconds: float = 10.0
+
+
+Step = Call | Say | Die | Lost | Answer | Hold
 
 
 @dataclass(frozen=True)
@@ -94,7 +105,10 @@ class Script:
         cycle: bool = False,
         usage: dict[str, int] | None = None,
         failed: Sequence[str] = (),
+        replies: Sequence[Step] = (Say("Got it."),),
     ) -> None:
+        self.replies = replies
+        """What every session plays for each user turn after its prompt (a person's message)."""
         self.scripts: Sequence[Sequence[Step]] = list(sessions) or [[]]
         self.cost = cost
         self.cycle = cycle
@@ -158,6 +172,9 @@ class ScriptedTransport(Transport):
         self._mcp_ready: set[str] = set()
         self._ids = itertools.count(1)
         self._ready = False
+        self._pending: deque[dict[str, Any]] = deque()
+        """What the SDK wrote while a turn played, for after it: user turns, an interrupt."""
+        self._turns = 0
 
     async def connect(self) -> None:
         self._ready = True
@@ -177,33 +194,58 @@ class ScriptedTransport(Transport):
         self._ready = False
         self._send.close()
 
+    async def _next(self) -> dict[str, Any] | None:
+        if self._pending:
+            return self._pending.popleft()
+        try:
+            return await self._inbox.receive()
+        except (anyio.EndOfStream, anyio.ClosedResourceError):
+            return None
+
     async def read_messages(self) -> AsyncIterator[dict[str, Any]]:
-        async for msg in self._inbox:
+        while (msg := await self._next()) is not None:
             if msg["type"] == "control_request":
                 if msg["request"]["subtype"] == "initialize":
                     self._hooks = msg["request"].get("hooks") or {}
-                yield _answer(msg["request_id"], {})
+                yield _answer(msg["request_id"], {})  # an interrupt between turns too
             elif msg["type"] == "user":
                 content = msg["message"]["content"]
                 self.script.prompts.append(content if isinstance(content, str) else str(content))
-                async for out in self._play():
+                self._turns += 1
+                steps = self.steps if self._turns == 1 else self.script.replies
+                async for out in self._play(steps):
                     yield out
 
     async def _reply(self, request_id: str) -> dict[str, Any]:
-        """Wait for the SDK's answer to one of our control requests."""
+        """Wait for the SDK's answer to one of our control requests, keeping anything else it
+        writes meanwhile for later."""
         async for msg in self._inbox:
             response = msg.get("response") or {}
             if msg["type"] == "control_response" and response.get("request_id") == request_id:
                 if response.get("subtype") == "error":
                     raise RuntimeError(response.get("error"))
                 return response.get("response") or {}
+            self._pending.append(msg)
         raise RuntimeError("the SDK closed the session mid-call")
+
+    def _interrupt(self) -> str | None:
+        """The request id of an interrupt the SDK sent, taken from what waits, else None."""
+        while True:
+            try:
+                self._pending.append(self._inbox.receive_nowait())
+            except (anyio.WouldBlock, anyio.EndOfStream, anyio.ClosedResourceError):
+                break
+        for msg in self._pending:
+            if msg["type"] == "control_request" and msg["request"]["subtype"] == "interrupt":
+                self._pending.remove(msg)
+                return str(msg["request_id"])
+        return None
 
     def _request(self, request: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         request_id = f"cli_{next(self._ids)}"
         return request_id, {"type": "control_request", "request_id": request_id, "request": request}
 
-    async def _play(self) -> AsyncIterator[dict[str, Any]]:
+    async def _play(self, steps: Sequence[Step]) -> AsyncIterator[dict[str, Any]]:
         sid = self.session_id
         if any(isinstance(s, Lost) for s in self.steps):
             raise RuntimeError(
@@ -229,9 +271,21 @@ class ScriptedTransport(Transport):
         }
         if errors:
             init["plugin_errors"] = errors
-        yield init
+        if self._turns == 1:
+            yield init
         last, answer = "", None
-        for step in self.steps:
+        for step in steps:
+            if request_id := self._interrupt():
+                yield _answer(request_id, {})
+                yield _result(sid, "error_during_execution", True, len(steps), 0.0, "", None)
+                return
+            if isinstance(step, Hold):
+                if self._pending:
+                    continue
+                with anyio.move_on_after(step.seconds):
+                    with contextlib.suppress(anyio.EndOfStream, anyio.ClosedResourceError):
+                        self._pending.append(await self._inbox.receive())
+                continue
             if isinstance(step, Die):
                 raise RuntimeError(step.error)
             if isinstance(step, Lost):
@@ -312,18 +366,7 @@ class ScriptedTransport(Transport):
                 "parent_tool_use_id": None,
                 "session_id": sid,
             }
-        yield {
-            "type": "result",
-            "subtype": "success",
-            "duration_ms": 1,
-            "duration_api_ms": 1,
-            "is_error": False,
-            "num_turns": len(self.steps),
-            "session_id": sid,
-            "total_cost_usd": self.script.cost,
-            "result": last,
-            "structured_output": answer,
-        }
+        yield _result(sid, "success", False, len(steps), self.script.cost, last, answer)
 
     async def _run_tool(self, step: Call) -> AsyncIterator[dict[str, Any] | tuple[str, bool]]:
         """Yields control requests to the SDK, then one (text, is_error) answer."""
@@ -371,6 +414,23 @@ class ScriptedTransport(Transport):
         result = answer.get("result") or {}
         text = "".join(c.get("text", "") for c in result.get("content") or [])
         yield (text, bool(result.get("isError")))
+
+
+def _result(
+    sid: str, subtype: str, is_error: bool, turns: int, cost: float, last: str, answer: Any
+) -> dict[str, Any]:
+    return {
+        "type": "result",
+        "subtype": subtype,
+        "duration_ms": 1,
+        "duration_api_ms": 1,
+        "is_error": is_error,
+        "num_turns": turns,
+        "session_id": sid,
+        "total_cost_usd": cost,
+        "result": last,
+        "structured_output": answer,
+    }
 
 
 def _answer(request_id: str, response: dict[str, Any]) -> dict[str, Any]:

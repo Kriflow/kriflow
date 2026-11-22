@@ -449,6 +449,8 @@ class Swarm:
         self.budget = budget
         self.network = network or NetworkWait()
         self._waiting: dict[tuple[str, str, str], Waiting] = {}
+        self._live: set[tuple[str, str]] = set()
+        """The (stage id, agent) of every session running in this process now."""
         self.board = board
         self.runtime = runtime
         self.files = files
@@ -913,7 +915,12 @@ class Swarm:
             session = spec(resume)
             if lost:
                 session = replace(session, prompt=f"{session.prompt}\n\n{self._progress(at, name)}")
+            if queued := hooks.inbox():  # a message sent while no session ran comes first
+                session = replace(
+                    session, prompt="\n\n".join([*(t for t, _ in queued), session.prompt])
+                )
             left = None if deadline is None else max(deadline - time.monotonic(), 0)
+            self._live.add((at.stage_id, name))
             try:
                 end = asyncio.run(asyncio.wait_for(self.runtime.run(session, hooks), left))
             except SessionLost:
@@ -941,6 +948,8 @@ class Swarm:
                 board.log(at.stage_id, name, "error", f"The session died: {exc}")
                 failed += 1
                 continue
+            finally:
+                self._live.discard((at.stage_id, name))
             if end.stopped:
                 board.log(at.stage_id, name, "session", f"Stopped: {end.stopped}")
                 raise Stopped(end.stopped)
@@ -969,6 +978,39 @@ class Swarm:
             return answer
         board.update_agent(at.stage_id, name, status="failed")
         raise StageError(f"{name} failed {SESSIONS} sessions in a row; see the stage log")
+
+    def recipients(self, run_id: str, stage_id: str, to: str | None = None) -> list[str]:
+        """Who a message to the stage gets to: its agents still working, or the one named `to`.
+        Refused when none is working, or `to` is not one of them."""
+        working = [
+            a.name
+            for a in self.board.list_agents(run_id)
+            if a.stage_id == stage_id and a.status == "working"
+        ]
+        names = [n for n in working if n == to] if to else working
+        if not names:
+            raise Refused(f"{to} is not working in this stage now" if to else NONE_WORKING)
+        return names
+
+    def message(
+        self,
+        run_id: str,
+        stage_id: str,
+        change: str,
+        text: str,
+        to: str | None = None,
+        interrupt: bool = False,
+    ) -> list[str]:
+        """A person's Message, the Run Change `change`, to the stage's agents still working, or
+        to the one named `to`: each gets a queued `message` line, which its live session takes
+        as its next user turn (stopping the turn first with `interrupt`), else the session it
+        starts or resumes takes first. The agents it went to; refused as `recipients` is."""
+        names = self.recipients(run_id, stage_id, to)
+        for name in names:
+            why = MID_TURN if (stage_id, name) in self._live else BETWEEN
+            state = {"state": "queued", "to": to, "interrupt": interrupt, "why": why}
+            self.board.log(stage_id, name, "message", text, input=state, ref=change)
+        return names
 
     def waiting(self) -> list[Waiting]:
         """The agents waiting for the network right now, the longest waiting first."""
@@ -1202,6 +1244,11 @@ class Swarm:
         ]
 
 
+FROM_PERSON = "A message from the person running this stage: "
+"""How a Message reads to the agent it reaches."""
+NONE_WORKING = "No agent is working in this stage now"
+MID_TURN = "It is mid-turn and reads this at its next turn."
+BETWEEN = "It is between sessions and reads this first when its session resumes."
 EXCERPT = 2000
 """The most of a tool result the log keeps, in characters."""
 
@@ -1289,6 +1336,13 @@ class _Hooks:
             input={"chars": len(text), "error": is_error},
             ref=ref,
         )
+
+    def inbox(self) -> list[tuple[str, bool]]:
+        """The agent's queued messages, now delivered, each worded as from a person."""
+        return [
+            (f"{FROM_PERSON}{e.detail}", bool((e.input or {}).get("interrupt")))
+            for e in self.board.take(self.stage_id, self.agent)
+        ]
 
     def cost(self, usd: float) -> str | None:
         """Add the estimate to the agent, then ask the Budget whether the session goes on."""

@@ -122,7 +122,7 @@ def test_migration_9_keeps_agents_and_their_log(tmp_path: Path) -> None:
         )
         conn.commit()
     with closing(connect(db)) as conn:
-        assert migrate(conn, KERNEL, MIGRATIONS) == [9, 26, 58]
+        assert migrate(conn, KERNEL, MIGRATIONS) == [9, 26, 58, 59]
     assert [a.name for a in board.list_agents("run_1")] == ["worker-1"]
     assert [e.tool for e in board.list_log("stage_1")] == ["Read"]
     board.agent("world_1", "run_1", "stage_1", "judge", "judge")

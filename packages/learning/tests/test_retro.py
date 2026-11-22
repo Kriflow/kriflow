@@ -333,3 +333,27 @@ def test_the_prompt_carries_how_earlier_runs_of_the_workflow_did_once_published(
     assert "# How earlier runs of this workflow did once published" in text
     assert "First (run_0): views 1200" in text
     assert "(none published yet)" in prompt(evidence(events, "run_1"), [], [], [], None)
+
+
+def test_the_retro_sees_the_messages_people_sent_a_running_stage() -> None:
+    """Issue 534: a Message is a Run Change; the retro reads it as an intervention, and the
+    same message in three runs recurs."""
+    message = {
+        "kind": "message",
+        "stage_name": "research",
+        "payload": {"text": "Skip anything older than 30 days.", "to": None, "interrupt": False},
+    }
+    rerun = {"kind": "rerun", "stage_name": "research", "payload": {"note": "Again."}}
+    events = [run_event(f"run_{i}", [], changes=[message, rerun]) for i in (1, 2, 3)]
+
+    e = evidence(events, "run_1")
+    assert [(i.kind, i.stage, i.what) for i in e.interventions] == [
+        ("message", "research", "Skip anything older than 30 days.")
+    ]
+    text = prompt(e, [], [], [], None)
+    assert (
+        "# Messages people sent the agents while a stage ran\n"
+        "- research: Skip anything older than 30 days."
+    ) in text
+    (r,) = recurrences(events, "wf_1")
+    assert (r.kind, r.stage, r.runs) == ("message", "research", ["run_1", "run_2", "run_3"])

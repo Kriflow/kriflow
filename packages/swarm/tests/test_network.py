@@ -95,6 +95,9 @@ class _Hooks:
 
     def tool_result(self, ref: str, text: str, is_error: bool) -> None: ...
 
+    def inbox(self) -> list[tuple[str, bool]]:
+        return []
+
     def before_tool(self, tool: str, input: dict, ref: str | None = None) -> str | None:
         return None
 

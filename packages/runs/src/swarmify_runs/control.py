@@ -687,6 +687,37 @@ class RunControl:
             raise Illegal(moved(self._run(run_id), revision))  # it moved while being checked
         return applied
 
+    def message(self, run_id: str, change: RunChange, by: str) -> AppliedChange:
+        """Record a Message (ADR 0027: a person sends it, so it applies at once, unproposed) to
+        the stage that is running: its `payload` is the `text`, `to` (None for everyone still
+        working) and `interrupt`. Delivering it is the swarm's. Raises KeyError for an unknown
+        run, ValueError for a stage not in it or an empty text, Illegal when the stage is not
+        running or is no agent stage."""
+        revision = -1
+        for _ in range(3):  # a stage status change may move the revision between read and write
+            run = self._run(run_id)
+            revision = run.revision
+            stage = target(run, change)
+            text = str(change.payload.get("text") or "").strip()
+            if not text:
+                raise ValueError("a message needs text")
+            if stage.type in ("gate", "connector"):
+                raise Illegal(f"{stage.name} has no agents to message")
+            if stage.status != "running":
+                raise Illegal(f"{stage.name} is not running")
+            payload = {
+                "text": text,
+                "to": change.payload.get("to") or None,
+                "interrupt": bool(change.payload.get("interrupt")),
+            }
+            applied = AppliedChange(
+                new_id("change"), run.id, "message", stage.id, stage.index, stage.name,
+                payload, {}, by, _now(), run.revision + 1,
+            )  # fmt: skip
+            if self.storage.add_change(applied, run.revision):
+                return applied
+        raise Illegal(moved(self._run(run_id), revision))
+
     def _artifact_edit(self, run: Run, change: RunChange) -> tuple[Path, ChangeProposal]:
         """The file an Artifact Edit rewrites and its proposal: the text before and after, the
         violations (a stage that has not finished, a later stage running that reads the file or
@@ -1418,7 +1449,9 @@ def moved(run: Run, revision: int) -> str:
     since = [c for c in run.changes if c.revision > revision]
     live = next((s for s in run.stages if s.status in ("running", "waiting")), None)
     if since:
-        done = {"rerun": "re-run", "skip": "skipped"}.get(since[-1].kind, "edited")
+        done = {"rerun": "re-run", "skip": "skipped", "message": "messaged"}.get(
+            since[-1].kind, "edited"
+        )
         what = f"{since[-1].stage_name} was {done} by {since[-1].by}"
     else:
         what = f"it is now at {live.name}" if live else f"it is now {run.status}"

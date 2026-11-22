@@ -191,7 +191,9 @@ class RunChange:
     `stage_edit`'s `payload` is the stage's new config, an `artifact_edit`'s the `path` of a file
     in the stage's artifacts folder and its new `text`, a `rerun`'s its `note`, a `skip` has
     none and a `restructure`'s is `stages`, the new list from that stage on, each a workflow
-    stage's fields (`name`, `type` and its config)."""
+    stage's fields (`name`, `type` and its config). A `message`'s is the `text` a person sends
+    the running stage's agents, `to` (one agent, or None for everyone still working) and
+    `interrupt`."""
 
     kind: str
     stage: str

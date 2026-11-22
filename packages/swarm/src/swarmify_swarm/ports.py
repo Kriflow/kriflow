@@ -136,6 +136,11 @@ class Storage(Protocol):
         """Oldest first."""
         ...
 
+    def take(self, stage_id: str, agent: str) -> list[LogEntry]:
+        """The agent's inbox: its queued `message` lines no `delivered` line answers yet, oldest
+        first, each now answered by one, in one transaction, so a message is delivered once."""
+        ...
+
 
 TOOL_SERVER = "swarmify"
 """The in-process tool server. Hooks and the allowlist see its tools as `mcp__swarmify__<name>`,
@@ -230,6 +235,11 @@ class SessionHooks(Protocol):
 
     def tool_result(self, ref: str, text: str, is_error: bool) -> None:
         """What a call answered: the text of its result, images left out."""
+        ...
+
+    def inbox(self) -> list[tuple[str, bool]]:
+        """What people sent the session since it last asked, each (text, interrupt), now
+        delivered. Asked while the session runs; a message with interrupt stops the turn first."""
         ...
 
     def cost(self, usd: float) -> str | None:

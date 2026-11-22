@@ -303,59 +303,34 @@ class SqliteStorage:
         ref: str | None = None,
     ) -> LogEntry:
         with self._write() as conn:
-            row = conn.execute(
-                "SELECT id, world_id, run_id FROM agents WHERE stage_id = ? AND name = ?",
-                (stage_id, agent),
-            ).fetchone()
-            if row is None:
-                raise KeyError(agent)
-            ts = _iso(None)
-            seq = conn.execute(
-                "INSERT INTO agent_log"
-                " (agent_id, stage_id, agent, kind, tool, input, detail, ts, ref)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    row["id"],
+            return _log(conn, stage_id, agent, kind, detail, tool, input, ref)
+
+    def take(self, stage_id: str, agent: str) -> list[LogEntry]:
+        # A read first: a live session asks every half second, and an empty inbox needs no lock.
+        with closing(connect(self.path)) as conn:
+            if not _queued(conn, stage_id, agent):
+                return []
+        with self._write() as conn:
+            return [
+                _log(
+                    conn,
                     stage_id,
                     agent,
-                    kind,
-                    tool,
-                    None if input is None else json.dumps(input),
-                    detail,
-                    ts,
-                    ref,
-                ),
-            ).lastrowid
-            assert seq is not None
-            entry = LogEntry(seq, agent, stage_id, kind, ts, tool, input, detail, ref)
-            event = Event.new(
-                "agent.logged",
-                world_id=row["world_id"],
-                run_id=row["run_id"],
-                payload=asdict(entry),
-            )
-            append(conn, event)
-            return entry
+                    "message",
+                    q.detail,
+                    None,
+                    {**(q.input or {}), "state": "delivered", "why": None},
+                    q.ref,
+                )  # fmt: skip
+                for q in _queued(conn, stage_id, agent)
+            ]
 
     def list_log(self, stage_id: str) -> list[LogEntry]:
         with closing(connect(self.path)) as conn:
             rows = conn.execute(
                 "SELECT * FROM agent_log WHERE stage_id = ? ORDER BY seq", (stage_id,)
             ).fetchall()
-        return [
-            LogEntry(
-                r["seq"],
-                r["agent"],
-                r["stage_id"],
-                r["kind"],
-                r["ts"],
-                r["tool"],
-                None if r["input"] is None else json.loads(r["input"]),
-                r["detail"],
-                r["ref"],
-            )
-            for r in rows
-        ]
+        return [_entry(r) for r in rows]
 
     @staticmethod
     def _agent_changed(conn: sqlite3.Connection, stage_id: str, name: str) -> Agent:
@@ -484,4 +459,76 @@ def _read(conn: sqlite3.Connection, task_id: str) -> Task | None:
         row["updated_at"],
         [d[0] for d in deps],
         [Note(n["author"], n["body"], n["ts"]) for n in notes],
+    )
+
+
+def _log(
+    conn: sqlite3.Connection,
+    stage_id: str,
+    agent: str,
+    kind: LogKind,
+    detail: str,
+    tool: str | None,
+    input: dict[str, Any] | None,
+    ref: str | None,
+) -> LogEntry:
+    row = conn.execute(
+        "SELECT id, world_id, run_id FROM agents WHERE stage_id = ? AND name = ?",
+        (stage_id, agent),
+    ).fetchone()
+    if row is None:
+        raise KeyError(agent)
+    ts = _iso(None)
+    seq = conn.execute(
+        "INSERT INTO agent_log"
+        " (agent_id, stage_id, agent, kind, tool, input, detail, ts, ref)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            row["id"],
+            stage_id,
+            agent,
+            kind,
+            tool,
+            None if input is None else json.dumps(input),
+            detail,
+            ts,
+            ref,
+        ),
+    ).lastrowid
+    assert seq is not None
+    entry = LogEntry(seq, agent, stage_id, kind, ts, tool, input, detail, ref)
+    event = Event.new(
+        "agent.logged",
+        world_id=row["world_id"],
+        run_id=row["run_id"],
+        payload=asdict(entry),
+    )
+    append(conn, event)
+    return entry
+
+
+def _queued(conn: sqlite3.Connection, stage_id: str, agent: str) -> list[LogEntry]:
+    """The agent's queued messages no delivered line answers yet, oldest first."""
+    rows = conn.execute(
+        "SELECT * FROM agent_log q WHERE q.stage_id = ? AND q.agent = ?"
+        " AND q.kind = 'message' AND json_extract(q.input, '$.state') = 'queued'"
+        " AND NOT EXISTS (SELECT 1 FROM agent_log d WHERE d.stage_id = q.stage_id"
+        " AND d.agent = q.agent AND d.kind = 'message' AND d.ref = q.ref"
+        " AND json_extract(d.input, '$.state') = 'delivered') ORDER BY q.seq",
+        (stage_id, agent),
+    ).fetchall()
+    return [_entry(r) for r in rows]
+
+
+def _entry(r: sqlite3.Row) -> LogEntry:
+    return LogEntry(
+        r["seq"],
+        r["agent"],
+        r["stage_id"],
+        r["kind"],
+        r["ts"],
+        r["tool"],
+        None if r["input"] is None else json.loads(r["input"]),
+        r["detail"],
+        r["ref"],
     )

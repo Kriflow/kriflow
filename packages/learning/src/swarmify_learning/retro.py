@@ -70,14 +70,15 @@ SYSTEM = (
 
 @dataclass(frozen=True)
 class Intervention:
-    """A manual act on a run: a send-back, a gate note, or a task a person added."""
+    """A manual act on a run: a send-back, a gate note, a task a person added, or a Message a
+    person sent a running stage."""
 
     run_id: str
     kind: str
-    """send_back, note or task."""
+    """send_back, note, task or message."""
     stage: str
     what: str
-    """The target stage of a send-back, the note, or the task title."""
+    """The target stage of a send-back, the note, the task title, or the message's text."""
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,9 @@ def _interventions(run: dict[str, Any], tasks: list[dict[str, Any]]) -> list[Int
     names = {s["id"]: s["name"] for s in run.get("stages") or []}
     for t in tasks:
         out.append(Intervention(run["id"], "task", names.get(t["stage_id"], ""), t["title"]))
+    for c in run.get("changes") or []:
+        if c.get("kind") == "message":
+            out.append(Intervention(run["id"], "message", c["stage_name"], c["payload"]["text"]))
     return out
 
 
@@ -262,6 +266,8 @@ def prompt(
         *(f"- {d}" for d in run.decisions or ["(no gate was answered)"]),
         "# Tasks people added by hand",
         *(f"- {i.stage}: {i.what}" for i in run.interventions if i.kind == "task"),
+        "# Messages people sent the agents while a stage ran",
+        *(f"- {i.stage}: {i.what}" for i in run.interventions if i.kind == "message"),
     ]
     if run.failure:
         lines += ["# The failure: the failed stage, then the last lines of its log", *run.failure]

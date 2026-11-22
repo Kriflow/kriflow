@@ -43,7 +43,7 @@ class Refused(ValueError):
 
 AgentRole = Literal["planner", "worker", "judge"]
 AgentStatus = Literal["working", "done", "failed"]
-LogKind = Literal["session", "tool", "denied", "result", "error", "text", "output"]
+LogKind = Literal["session", "tool", "denied", "result", "error", "text", "output", "message"]
 
 
 @dataclass(frozen=True)
