@@ -201,8 +201,8 @@ class _Seen:
     def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
         return self.hooks.before_tool(tool, input)
 
-    def cost(self, usd: float) -> str | None:
-        return self.hooks.cost(usd)
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
+        return self.hooks.cost(usd, tokens)
 
 
 class Patient:

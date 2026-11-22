@@ -23,6 +23,7 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import McpServerConfig
 
+from swarmify_swarm.model import TOKENS
 from swarmify_swarm.ports import (
     TOOL_SERVER,
     AgentTool,
@@ -44,9 +45,10 @@ def default_model() -> str:
 
 
 # Dollars per million tokens of each model the operator can choose. The SDK prices only the whole
-# session, at its result, and that total trues the per-step estimates up. A resumed session's
-# total includes the session it resumed, so a replacement counts that one twice: the Budget errs
-# high, never low.
+# session, at its result, and that total trues the per-step estimates up (it also holds what no
+# step reports, such as a web search's own model calls). A resumed session's total includes what
+# the session it resumed reported, so that part, when the spec knows it, is taken off; when it does
+# not, it counts twice: the Budget errs high, never low.
 PRICES: dict[str, dict[str, float]] = {
     "claude-opus-5-5": {
         "input_tokens": 4.0,
@@ -80,6 +82,10 @@ def step_cost(usage: dict[str, Any] | None, model: str | None) -> float:
     """The estimated cost of one model step on `model` from its usage."""
     rates = price(model)
     return sum(float((usage or {}).get(k) or 0) * p for k, p in rates.items()) / 1e6
+
+
+def step_tokens(usage: dict[str, Any] | None) -> dict[str, int]:
+    return {k: int((usage or {}).get(k) or 0) for k in TOKENS}
 
 
 HARNESS = ("StructuredOutput", "ToolSearch")
@@ -116,6 +122,12 @@ def _sdk_tool(spec: AgentTool) -> Any:
     return tool(spec.name, spec.description, spec.schema)(handler)
 
 
+def offered_tools(allowed: list[str]) -> list[str]:
+    """The built-in tool names in an allowlist (not MCP tools or patterns), plus the harness."""
+    named = [t for t in allowed if t.isalnum()]
+    return list(dict.fromkeys([*named, *HARNESS]))
+
+
 def options(
     spec: SessionSpec,
     hooks: SessionHooks,
@@ -146,6 +158,9 @@ def options(
         cwd=spec.cwd,
         mcp_servers=servers,
         allowed_tools=[*spec.allowed, *HARNESS],
+        # Offer only the built-in tools the allowlist grants: any other is always refused, and an
+        # agent that sees one spends turns trying it. MCP tools are not built-ins, so stay offered.
+        tools=offered_tools(spec.allowed),
         permission_mode="dontAsk",
         setting_sources=[],
         plugins=[{"type": "local", "path": str(spec.plugin)}] if spec.plugin else [],
@@ -203,7 +218,7 @@ class SdkRuntime:
                     steps.add(step)
                     usd = step_cost(msg.usage, msg.model or opts.model)
                     spent += usd
-                    if stop := hooks.cost(usd):
+                    if stop := hooks.cost(usd, step_tokens(msg.usage)):
                         # Leaving the client ends the CLI; the session id stays resumable.
                         return SessionEnd(
                             msg.session_id or session, spent, True, stop, stopped=stop
@@ -226,9 +241,20 @@ class SdkRuntime:
                         )
                     )
                 elif isinstance(msg, ResultMessage):
-                    cost = spent if msg.total_cost_usd is None else msg.total_cost_usd
+                    total, before = msg.total_cost_usd, spec.resumed_total
+                    if total is None:
+                        cost = spent
+                    elif before is None:
+                        cost = total
+                    else:  # never below its own steps, should the remembered total be off
+                        cost = max(total - before, spent)
                     hooks.cost(cost - spent)
                     return SessionEnd(
-                        msg.session_id, cost, msg.is_error, msg.result or "", msg.structured_output
+                        msg.session_id,
+                        cost,
+                        msg.is_error,
+                        msg.result or "",
+                        msg.structured_output,
+                        total_usd=total,
                     )
         raise RuntimeError("the agent session ended without a result")

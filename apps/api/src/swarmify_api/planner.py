@@ -164,7 +164,7 @@ class _Hooks:
     def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
         return None if tool in self.allowed else f"{tool} is not allowed in the planner chat."
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         return None
 
 

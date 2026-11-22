@@ -110,9 +110,12 @@ class Storage(Protocol):
         cost_usd: float | None = None,
         skills: list[str] | None = None,
         model: str | None = None,
+        tokens: dict[str, int] | None = None,
+        session_total_usd: float | None = None,
     ) -> Agent:
-        """Change only the fields given. `cost_usd` is added to the agent's cost, so every
-        session's estimate counts, a failed one's too."""
+        """Change only the fields given. `cost_usd` and `tokens` are added to the agent's, so
+        every session's estimate counts, a failed one's too. A new `session_id` forgets the
+        `session_total_usd` of the one before."""
         ...
 
     def list_agents(self, run_id: str) -> list[Agent]:
@@ -175,6 +178,9 @@ class SessionSpec:
     """External MCP servers by name, in the standard MCP config shape (the stage's connectors).
     A command's config may also name, as `stderr`, the file its last stderr lines land in."""
     resume: str | None = None
+    resumed_total: float | None = None
+    """The total the resumed session last reported at a result, which its new total includes;
+    None when unknown, and then the whole total counts again."""
     max_turns: int | None = None
     output_schema: dict[str, Any] | None = None
     """A JSON schema the session's final answer must follow (structured output)."""
@@ -211,6 +217,8 @@ class SessionEnd:
     """The structured answer when the spec asked for one."""
     stopped: str | None = None
     """Why the hooks stopped the session before its result (the run's Budget is spent)."""
+    total_usd: float | None = None
+    """The total the runtime reported at the result, the sessions it continues included."""
 
 
 class SessionHooks(Protocol):
@@ -222,10 +230,11 @@ class SessionHooks(Protocol):
         """Every tool call, before it runs. A returned reason denies the call."""
         ...
 
-    def cost(self, usd: float) -> str | None:
-        """An increment of the session's estimated cost: one per model step, and at the result
-        the rest, so the increments add up to the runtime's whole-session estimate. A returned
-        reason stops the session (ignored at the result, when it has ended anyway)."""
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
+        """An increment of the session's estimated cost: one per model step, with that step's
+        token counts, and at the result the rest, so the increments add up to the runtime's
+        whole-session estimate. A returned reason stops the session (ignored at the result,
+        when it has ended anyway)."""
         ...
 
 

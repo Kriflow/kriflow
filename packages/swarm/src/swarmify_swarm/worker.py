@@ -905,12 +905,15 @@ class Swarm:
         deadline = None if timeout is None else time.monotonic() + timeout
         failed, lost, offline = 0, False, 0.0
         while failed < SESSIONS:
-            stored = board.agent(at.world_id, at.run_id, at.stage_id, name, role).session_id
+            agent = board.agent(at.world_id, at.run_id, at.stage_id, name, role)
+            stored = agent.session_id
             resume = None if lost or (fresh and stored == before) else stored
             if resume:
                 said = "A replacement resumes" if failed else "Continuing"
                 board.log(at.stage_id, name, "session", f"{said} session {resume}.")
             session = spec(resume)
+            if resume:
+                session = replace(session, resumed_total=agent.session_total_usd)
             if lost:
                 session = replace(session, prompt=f"{session.prompt}\n\n{self._progress(at, name)}")
             left = None if deadline is None else max(deadline - time.monotonic(), 0)
@@ -941,6 +944,8 @@ class Swarm:
                 board.log(at.stage_id, name, "error", f"The session died: {exc}")
                 failed += 1
                 continue
+            if end.total_usd is not None:
+                board.update_agent(at.stage_id, name, session_total_usd=end.total_usd)
             if end.stopped:
                 board.log(at.stage_id, name, "session", f"Stopped: {end.stopped}")
                 raise Stopped(end.stopped)
@@ -1261,9 +1266,9 @@ class _Hooks:
         self.board.log(self.stage_id, self.agent, kind, reason or "", tool=tool, input=input)
         return reason
 
-    def cost(self, usd: float) -> str | None:
+    def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         """Add the estimate to the agent, then ask the Budget whether the session goes on."""
-        self.board.update_agent(self.stage_id, self.agent, cost_usd=usd)
+        self.board.update_agent(self.stage_id, self.agent, cost_usd=usd, tokens=tokens)
         self.renew()
         self.stopped = self.budget()
         return self.stopped
