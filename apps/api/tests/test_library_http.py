@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from api_fakes import until
+from api_fakes import install, until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -254,20 +254,24 @@ def test_assets_are_uploaded_listed_and_served_by_the_operator(running: TestClie
 def test_a_package_s_owned_folder_is_a_group_of_assets_with_nothing_voice_specific(
     client: TestClient,
 ) -> None:
-    """Issue 220: speech's `voices/` is an Owned Folder of each world that enables it, uploaded
-    to (only what it accepts), renamed and deleted like any asset; disabled, it is gone."""
+    """Issue 220: a package's Owned Folder (the echo fixture's `echoes/`) is a folder of each
+    world that enables it, uploaded to (only what it accepts), renamed and deleted like any
+    asset; disabled, it is gone."""
+    assert install(client, "packages/connectors/tests/fixtures/packages/echo").status_code == 201
     world = client.post("/api/worlds", json={"name": "Video"}).json()["id"]
+    enabled = client.put(f"/api/worlds/{world}/packages/echo", json={"version": "1.0.0"})
+    assert enabled.status_code == 200, enabled.text
     url = f"/api/worlds/{world}/assets"
     folders = client.get(f"/api/worlds/{world}/owned_folders").json()
-    voices = next(f for f in folders if f["folder"] == "voices")
-    assert voices["path"] == "assets/voices/" and voices["package"] == "Speech"
-    assert (voices["folder"], voices["label"]) == ("voices", "Voices")
-    assert voices["accept"] == ["audio/wav"]
-    assert voices["confirm"] == "This is my voice, or I have the speaker's permission"
-    me = client.put(f"{url}/me.wav?folder=voices", content=b"RIFF")
-    assert me.status_code == 201 and me.json()["path"] == "assets/voices/me.wav"
-    mp3 = client.put(f"{url}/me.mp3?folder=voices", content=b"ID3")
-    assert mp3.status_code == 422 and mp3.json()["detail"] == "Voices takes audio/wav only"
+    echoes = next(f for f in folders if f["folder"] == "echoes")
+    assert echoes["path"] == "assets/echoes/" and echoes["package"] == "Echo"
+    assert (echoes["folder"], echoes["label"]) == ("echoes", "Echoes")
+    assert echoes["accept"] == ["audio/wav"]
+    assert echoes["confirm"] == "I may share these lines"
+    me = client.put(f"{url}/me.wav?folder=echoes", content=b"RIFF")
+    assert me.status_code == 201 and me.json()["path"] == "assets/echoes/me.wav"
+    mp3 = client.put(f"{url}/me.mp3?folder=echoes", content=b"ID3")
+    assert mp3.status_code == 422 and mp3.json()["detail"] == "Echoes takes audio/wav only"
     assert client.put(f"{url}/x.wav?folder=runs", content=b"x").status_code == 422
     client.put(f"{url}/bed.mp3", content=b"ID3")
     client.put(f"{url}/logo.png", content=b"PNG")
@@ -276,43 +280,42 @@ def test_a_package_s_owned_folder_is_a_group_of_assets_with_nothing_voice_specif
     taken = client.patch(f"{url}/assets/logo.png", json={"name": "bed-calm.mp3"})
     assert taken.status_code == 422 and "already there" in taken.json()["detail"]
     assert client.patch(f"{url}/assets/logo.png", json={"name": "../x"}).status_code == 422
-    moved = client.patch(f"{url}/assets%2Fvoices%2Fme.wav", json={"name": "narrator.wav"})
-    assert moved.json()["path"] == "assets/voices/narrator.wav"  # the voice's own folder
+    moved = client.patch(f"{url}/assets%2Fechoes%2Fme.wav", json={"name": "narrator.wav"})
+    assert moved.json()["path"] == "assets/echoes/narrator.wav"  # the voice's own folder
     for path in ("assets/nope.png", "assets/../worlds.db", "runs/x.md"):
         assert client.delete(f"{url}/{path}").status_code == 404
     assert client.delete(f"{url}/assets%2Flogo.png").status_code == 204  # as the web sends it
     assert [a["path"] for a in client.get(url).json()] == [
         "assets/bed-calm.mp3",
-        "assets/voices/narrator.wav",
+        "assets/echoes/narrator.wav",
     ]
-    assert client.delete(f"{url}/assets/voices/narrator.wav").status_code == 204
-    assert client.delete(f"/api/worlds/{world}/packages/speech").status_code == 204
-    assert "voices" not in [
+    assert client.delete(f"{url}/assets/echoes/narrator.wav").status_code == 204
+    assert client.delete(f"/api/worlds/{world}/packages/echo").status_code == 204
+    assert "echoes" not in [
         f["folder"] for f in client.get(f"/api/worlds/{world}/owned_folders").json()
     ]
-    assert client.put(f"{url}/me.wav?folder=voices", content=b"RIFF").status_code == 422
+    assert client.put(f"{url}/me.wav?folder=echoes", content=b"RIFF").status_code == 422
     assert client.get("/api/worlds/world_nope/owned_folders").status_code == 404
 
 
 def test_a_world_lists_the_templates_in_its_packages_templates_folders(
     client: TestClient, tmp_path: Path
 ) -> None:
-    """Issue 346: remotion_build declares the templates Capability; each subfolder of its
+    """Issue 346: kit declares the templates Capability; each subfolder of its
     Owned Folder in a world is a Template, one placed by hand included, and no other world's."""
     world = client.post("/api/worlds", json={"name": "Video"}).json()["id"]
     other = client.post("/api/worlds", json={"name": "Other"}).json()["id"]
     folders = client.get(f"/api/worlds/{world}/owned_folders").json()
-    remotion = next(f for f in folders if f["folder"] == "remotion_templates")
-    assert remotion["templates"] and remotion["package"] == "Remotion build"
-    assert not next(f for f in folders if f["folder"] == "voices")["templates"]
+    kit = next(f for f in folders if f["folder"] == "kit_templates")
+    assert kit["templates"] and kit["package"] == "Kit"
     assert client.get(f"/api/worlds/{world}/templates").json() == []
-    root = tmp_path / "worlds" / world / "assets/remotion_templates"
+    root = tmp_path / "worlds" / world / "assets/kit_templates"
     (root / "kids/src").mkdir(parents=True)
     (root / "kids/package.json").write_text("{}")
     (root / "kids/src/index.ts").write_text("export {};")
     saved = root / "office"
     saved.mkdir()
-    (saved / "package.json").write_text("{}")
+    (saved / "prepare.py").write_text("{}")
     record = {
         "origin": "run",
         "run_id": "run_1",
@@ -322,8 +325,8 @@ def test_a_world_lists_the_templates_in_its_packages_templates_folders(
     (saved / ".template.json").write_text(json.dumps(record))
     (root / "notes.txt").write_text("a loose file is no Template")
     kids, office = client.get(f"/api/worlds/{world}/templates").json()
-    assert kids["name"] == "kids" and kids["folder"] == "remotion_templates"
-    assert kids["path"] == "assets/remotion_templates/kids/" and kids["bytes"] == 12
+    assert kids["name"] == "kids" and kids["folder"] == "kit_templates"
+    assert kids["path"] == "assets/kit_templates/kids/" and kids["bytes"] == 12
     assert (kids["origin"], kids["run_id"], kids["stage"]) == ("folder", "", "")
     assert kids["added"].startswith("20")
     assert (office["name"], office["origin"], office["run_id"], office["stage"]) == (
@@ -347,7 +350,7 @@ def zipped(files: dict[str, bytes], links: tuple[str, ...] = ()) -> bytes:
     return out.getvalue()
 
 
-PROJECT = {"package.json": b"{}", "src/index.ts": b"export {};", "public/cat.png": b"PNG"}
+PROJECT = {"prepare.py": b"{}", "src/index.ts": b"export {};", "public/cat.png": b"PNG"}
 
 
 def test_a_zip_uploaded_as_a_template_is_listed_with_its_size_and_fingerprint(
@@ -356,20 +359,19 @@ def test_a_zip_uploaded_as_a_template_is_listed_with_its_size_and_fingerprint(
     """Issue 347: the zip is unpacked into the package's Templates folder, a single top folder
     unwrapped, and the record says where it came from and what it holds."""
     world = client.post("/api/worlds", json={"name": "Video"}).json()["id"]
-    url = f"/api/worlds/{world}/templates/remotion_templates"
+    url = f"/api/worlds/{world}/templates/kit_templates"
     put = client.put(f"{url}/cats", content=zipped({f"cats/{k}": v for k, v in PROJECT.items()}))
     assert put.status_code == 201, put.json()
     cats = put.json()
     assert (cats["name"], cats["path"], cats["origin"]) == (
-        "cats", "assets/remotion_templates/cats/", "upload",
+        "cats", "assets/kit_templates/cats/", "upload",
     )  # fmt: skip
     assert cats["bytes"] == 15 and len(cats["fingerprint"]) == 64
-    folder = tmp_path / "worlds" / world / "assets/remotion_templates"
+    folder = tmp_path / "worlds" / world / "assets/kit_templates"
     assert (folder / "cats/src/index.ts").read_text() == "export {};"
     record = json.loads((folder / "cats/.template.json").read_text())
     assert record["origin"] == "upload" and record["fingerprint"] == cats["fingerprint"]
-    # added by the folder's first claimant, whose rules it follows in a folder two packages share
-    assert record["package"] == "remotion_build"
+    assert record["package"] == "kit"
     # the same hash a build records for this Template, so a run's record compares with it
     assert cats["fingerprint"] == fingerprint(folder / "cats")
     assert record["bytes"] == 15 and record["added"].startswith("20")
@@ -379,13 +381,13 @@ def test_a_zip_uploaded_as_a_template_is_listed_with_its_size_and_fingerprint(
         "again",
         "cats",
     ]
-    assert cats["prepare"] == "preparing"  # remotion_build's npm ci, which succeeds at once here
+    assert cats["prepare"] == "preparing"  # kit's prepare command, which succeeds at once here
     until(lambda: client.get(f"/api/worlds/{world}/templates").json()[1]["prepare"] == "ready")
     listed = client.get(f"/api/worlds/{world}/templates").json()[1]
     assert listed == cats | {"prepare": "ready"}
     assert sorted(p.name for p in folder.iterdir()) == ["again", "cats"]  # no leftovers
     assert client.put(f"{url}/x", content=b"not a zip").status_code == 422
-    assert client.put(f"/api/worlds/{world}/templates/voices/x", content=b"").status_code == 422
+    assert client.put(f"/api/worlds/{world}/templates/nope/x", content=b"").status_code == 422
     assert client.put(f"{url}/..%2Fx", content=zipped(PROJECT)).status_code in (404, 422)
     assert client.put(f"{url}/a%20b", content=zipped(PROJECT)).status_code == 422
     assert client.put("/api/worlds/world_nope/templates/x/y", content=b"").status_code == 404
@@ -395,12 +397,12 @@ def test_an_unsafe_an_over_cap_or_an_incomplete_zip_is_refused_and_leaves_nothin
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     world = client.post("/api/worlds", json={"name": "Video"}).json()["id"]
-    url = f"/api/worlds/{world}/templates/remotion_templates/cats"
+    url = f"/api/worlds/{world}/templates/kit_templates/cats"
     for bad, problem in [
         (zipped({**PROJECT, "/etc/cron.d/x": b"x"}), "/etc/cron.d/x"),
         (zipped({**PROJECT, "../escape.txt": b"x"}), "../escape.txt"),
         (zipped(PROJECT, links=("src/link",)), "src/link"),
-        (zipped({"package.json": b"{}"}), "src/index.ts"),
+        (zipped({"src/index.ts": b"export {};"}), "prepare.py"),
     ]:
         refused = client.put(url, content=bad)
         assert refused.status_code == 422 and problem in refused.json()["detail"], refused.json()
@@ -410,7 +412,7 @@ def test_an_unsafe_an_over_cap_or_an_incomplete_zip_is_refused_and_leaves_nothin
     over = client.put(url, content=big)
     assert over.status_code == 422 and "1 MB" in over.json()["detail"]
     assert client.get(f"/api/worlds/{world}/templates").json() == []
-    folder = tmp_path / "worlds" / world / "assets/remotion_templates"
+    folder = tmp_path / "worlds" / world / "assets/kit_templates"
     assert not folder.exists() or list(folder.iterdir()) == []
     assert not (tmp_path / "worlds" / world / "escape.txt").exists()
 
@@ -419,14 +421,14 @@ def test_a_template_name_already_there_is_refused_unless_replace_is_asked(
     client: TestClient, tmp_path: Path
 ) -> None:
     world = client.post("/api/worlds", json={"name": "Video"}).json()["id"]
-    url = f"/api/worlds/{world}/templates/remotion_templates/cats"
+    url = f"/api/worlds/{world}/templates/kit_templates/cats"
     first = client.put(url, content=zipped(PROJECT)).json()
-    changed = zipped({"package.json": b"{}", "src/index.ts": b"export const cat = 1;"})
+    changed = zipped({"prepare.py": b"{}", "src/index.ts": b"export const cat = 1;"})
     taken = client.put(url, content=changed)
     assert taken.status_code == 409 and "cats is already" in taken.json()["detail"]
     replaced = client.put(f"{url}?replace=true", content=changed)
     assert replaced.status_code == 201 and replaced.json()["fingerprint"] != first["fingerprint"]
-    folder = tmp_path / "worlds" / world / "assets/remotion_templates"
+    folder = tmp_path / "worlds" / world / "assets/kit_templates"
     assert (folder / "cats/src/index.ts").read_text() == "export const cat = 1;"
     assert not (folder / "cats/public").exists()  # replaced, not merged
     assert sorted(p.name for p in folder.iterdir()) == ["cats"]
@@ -438,7 +440,7 @@ stages:
     calls: draft
     output: script.md
   - connector: build
-    calls: remotion_build
+    calls: sketch
     input: script.md
     params: {base: kids}
 """
@@ -454,14 +456,14 @@ def test_a_template_downloads_as_a_zip_and_deletes_only_once_confirmed(
     world = client.post("/api/worlds", json={"name": "Video"}).json()["id"]
     other = client.post("/api/worlds", json={"name": "Other"}).json()["id"]
     assert client.post(f"/api/worlds/{world}/connectors", json=DRAFT).status_code == 201
-    kids = tmp_path / "worlds" / world / "assets/remotion_templates/kids"
-    files = {"package.json": b"{}", "src/index.ts": b"export {};", "public/cat.glb": b"\x00\x01"}
+    kids = tmp_path / "worlds" / world / "assets/sketches/kids"
+    files = {"index.html": b"{}", "src/index.ts": b"export {};", "public/cat.glb": b"\x00\x01"}
     for name, body in files.items():
         (kids / name).parent.mkdir(parents=True, exist_ok=True)
         (kids / name).write_bytes(body)
     (kids / ".template.json").write_text(json.dumps({"origin": "upload"}))
-    (kids / "node_modules/remotion").mkdir(parents=True)
-    (kids / "node_modules/remotion/index.js").write_text("installed")
+    (kids / "node_modules/lib").mkdir(parents=True)
+    (kids / "node_modules/lib/index.js").write_text("installed")
     named = client.post(f"/api/worlds/{world}/workflows", json={"yaml": NAMES_KIDS})
     assert named.status_code == 201, named.json()
     office = NAMES_KIDS.replace("Kids short", "Office").replace("kids", "office")
@@ -469,7 +471,7 @@ def test_a_template_downloads_as_a_zip_and_deletes_only_once_confirmed(
     assert client.post(f"/api/worlds/{world}/workflows", json={"yaml": office}).status_code == 201
     build = tmp_path / "worlds" / world / "runs/run_old/stage_2/build"
     shutil.copytree(kids, build, ignore=shutil.ignore_patterns("node_modules"))
-    url = f"/api/worlds/{world}/templates/remotion_templates/kids"
+    url = f"/api/worlds/{world}/templates/sketches/kids"
 
     got = client.get(f"{url}/download")
     assert got.status_code == 200, got.text
@@ -478,9 +480,9 @@ def test_a_template_downloads_as_a_zip_and_deletes_only_once_confirmed(
     with zipfile.ZipFile(io.BytesIO(got.content)) as z:
         assert {n: z.read(n) for n in z.namelist()} == files
     for nope in (
-        f"/api/worlds/{other}/templates/remotion_templates/kids",
-        f"/api/worlds/{world}/templates/remotion_templates/nope",
-        f"/api/worlds/{world}/templates/voices/kids",
+        f"/api/worlds/{other}/templates/sketches/kids",
+        f"/api/worlds/{world}/templates/sketches/nope",
+        f"/api/worlds/{world}/templates/nope/kids",
     ):
         assert client.get(f"{nope}/download").status_code == 404
 

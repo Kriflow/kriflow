@@ -103,7 +103,7 @@ async def test_workflow_tools_save_check_list_get(tmp_path: Path) -> None:
 
         refused = await client.call_tool(
             "save_workflow",
-            {"world_id": world.id, "yaml": "name: x\nstages:\n  - connector: remotion_build\n"},
+            {"world_id": world.id, "yaml": "name: x\nstages:\n  - connector: sketch\n"},
         )
         assert not refused.is_error and refused.structured_content
         assert [v["rule"] for v in refused.structured_content["violations"]] == [
@@ -195,7 +195,7 @@ REVIEW = (
     "name: Review loop\nstages:\n  - connector: render\n    calls: studio\n"
     "    output: short.mp4\n"
     "  - gate: review\n    ask: Watch it.\n    kind: approve\n  - gate: publish_ok\n"
-    "    ask: Publish?\n    kind: confirm\n  - connector: youtube\n    calls: youtube\n"
+    "    ask: Publish?\n    kind: confirm\n  - connector: fake_publish\n    calls: fake_publish\n"
     "    input: short.mp4\n    params: {title: Hooks}\n"
 )
 

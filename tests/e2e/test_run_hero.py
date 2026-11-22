@@ -33,7 +33,7 @@ stages:
     output_type: list[idea]
     produces: [ideas.md]
   - connector: render
-    calls: remotion_render
+    calls: kit
     input: ideas.md
     output: short.mp4
     params: {project: shorts, composition: Short}

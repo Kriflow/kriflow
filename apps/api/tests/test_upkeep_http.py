@@ -1,7 +1,7 @@
 """Scheduled upkeep through the API: Outcomes from every publish connector offering them recorded
 beside publish artifacts (never in them: the graph reads those) and onto the scorecard, and old
 run binaries pruned past the world's retention, markdown kept. The fake ConnectorTransport
-answers for the connectors, YouTube's `outcomes` claiming posts as its package does; DBOS runs
+answers for the connectors, fake_publish's `outcomes` claiming posts as its fixture does; DBOS runs
 for real on SQLite; the upkeep interval is shortened."""
 
 import json
@@ -12,7 +12,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from api_fakes import YOUTUBE_ENV, install, sign_in_youtube, youtube, youtube_outcomes
+from api_fakes import (
+    FAKE_PUBLISH_ENV,
+    fake_outcomes,
+    fake_publish,
+    install,
+    sign_in_fake_publish,
+)
 from fastapi.testclient import TestClient
 from test_publish_http import MAKER, at_gate, setup, until, weekly
 
@@ -49,17 +55,15 @@ def _types(root: Path, world: str) -> list[str]:
         return [e.type for e in read_after(conn, world, 0)]
 
 
-def test_youtube_counts_the_views_of_a_video_upload_post_put_on_youtube(
+def test_a_publish_package_counts_the_views_of_its_post(
     running: TestClient, transport: FakeTransport, tmp_path: Path
 ) -> None:
-    sign_in_youtube(tmp_path)
-    world, workflow = setup(running, weekly("upload_post", "\n      user: me"))
-    keys = {"shared": {"api_key": "k"}}
-    assert running.put(f"/api/worlds/{world}/packages/upload_post/setup", json=keys).is_success
+    sign_in_fake_publish(tmp_path)
+    world, workflow = setup(running, weekly())
     run = at_gate(running, tmp_path, world, workflow)
-    links = {"youtube": "https://youtu.be/vid123"}
-    transport.outputs["publish"] = [{"id": "job_1", "links": links}]
-    transport.outputs["youtube.outcomes"] = [youtube_outcomes(9000)]
+    links = {"fake_publish": "https://youtu.be/vid123"}
+    transport.outputs["publish"] = [{"id": "vid123", "links": links}]
+    transport.outputs["fake_publish.outcomes"] = [fake_outcomes(9000)]
     assert running.post(f"/api/runs/{run['id']}/decision", json={}).status_code == 200
     until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] == "done")
     (publish,) = (tmp_path / "worlds" / world / "runs" / run["id"]).glob("*/artifacts/publish.md")
@@ -70,8 +74,8 @@ def test_youtube_counts_the_views_of_a_video_upload_post_put_on_youtube(
     until(lambda: "outcome.recorded" in _types(tmp_path, world))
     assert json.loads(outcomes.read_text())["outcomes"] == {"views": 9000}
     assert json.loads(outcomes.read_text())["primary_metric"] == "views"
-    posts = [{"connector": "upload_post", "id": "job_1", "links": links}]
-    assert ("youtube", "outcomes", {"posts": posts}, YOUTUBE_ENV) in transport.calls
+    posts = [{"connector": "fake_publish", "id": "vid123", "links": links}]
+    assert ("fake_publish", "outcomes", {"posts": posts}, FAKE_PUBLISH_ENV) in transport.calls
     stage = next(
         s for s in running.get(f"/api/runs/{run['id']}").json()["stages"] if s["name"] == "publish"
     )
@@ -81,7 +85,7 @@ def test_youtube_counts_the_views_of_a_video_upload_post_put_on_youtube(
     seen, written = len(transport.calls), outcomes.stat().st_mtime_ns
     until(lambda: len(transport.calls) > seen + 2)  # later ticks read the count again
     assert outcomes.stat().st_mtime_ns == written  # an unchanged count is not written again
-    transport.outputs["youtube.outcomes"] = [youtube_outcomes(41000)]
+    transport.outputs["fake_publish.outcomes"] = [fake_outcomes(41000)]
     until(lambda: '"views": 41000' in outcomes.read_text())
     assert publish.read_text() == text  # the record the graph reads never changes for a count
 
@@ -119,9 +123,9 @@ def test_a_connector_reporting_clicks_shows_in_the_record_and_the_scorecard(
     assert found["curves"] == curve  # stored as answered, never added up
     posts = [{"connector": "clicks", "id": "p1", "links": {"clicks": "https://sho.rt/p1"}}]
     assert ("clicks", "outcomes", {"posts": posts}, {"CLICKS_TOKEN": "t"}) in transport.calls
-    # youtube offers outcomes too, but is not signed in here: skipped, the others still asked
-    assert f"outcomes from youtube for world {world} skipped" in caplog.text
-    assert not any(c[:2] == ("youtube", "outcomes") for c in transport.calls)
+    # fake_publish offers outcomes too, but is not signed in here: skipped, the others asked
+    assert f"outcomes from fake_publish for world {world} skipped" in caplog.text
+    assert not any(c[:2] == ("fake_publish", "outcomes") for c in transport.calls)
 
     (score,) = running.get(f"/api/workflows/{workflow}/scorecard").json()["runs"]
     assert score["outcomes"] == {"clicks": 12}  # ranked by its Primary Metric
@@ -188,7 +192,7 @@ stages:
     ask: Post it?
     kind: confirm
   - connector: publish
-    calls: youtube
+    calls: fake_publish
     input: short.mp4
     params:
       title: Five hooks that work
@@ -220,20 +224,20 @@ def test_a_post_still_private_and_unread_retention_and_a_refused_sign_in_reach_n
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     running = two_days_on
-    sign_in_youtube(tmp_path)
+    sign_in_fake_publish(tmp_path)
     world, workflow = setup(running, UNSAID)
     run = at_gate(running, tmp_path, world, workflow)
     transport.outputs["publish"] = [{"id": "vid1", "url": "https://youtu.be/vid1"}]
-    retention = {"youtube_avg_viewed_percent": 55.5, "youtube_avg_view_seconds": 9.25}
+    retention = {"avg_viewed_percent": 55.5, "avg_view_seconds": 9.25}
 
     def outcomes(args: dict) -> dict:
         found = {
             p: {"views": 3, "visible": False, "visibility_label": "private", **retention}
-            for p in youtube.claimed(args["posts"])
+            for p in fake_publish.claimed(args["posts"])
         }
-        return {**found, youtube.NOTICE: youtube.SCOPE_NOTICE}
+        return {**found, fake_publish.NOTICE: fake_publish.SCOPE_NOTICE}
 
-    transport.outputs["youtube.outcomes"] = [outcomes]
+    transport.outputs["fake_publish.outcomes"] = [outcomes]
     assert running.post(f"/api/runs/{run['id']}/decision", json={}).status_code == 200
     until(lambda: running.get(f"/api/runs/{run['id']}").json()["status"] == "done")
     (publish,) = (tmp_path / "worlds" / world / "runs" / run["id"]).glob("*/artifacts/publish.md")
@@ -252,22 +256,22 @@ def test_a_post_still_private_and_unread_retention_and_a_refused_sign_in_reach_n
     assert (hidden["world_id"], hidden["run_id"]) == (world, run["id"])
     # in the connector's own label and word, never core's
     assert hidden["text"] == (
-        "Five hooks that work is still private on YouTube a day on, and its stage never said"
-        " who sees it, so YouTube's default chose."
+        "Five hooks that work is still private on Fake Publish a day on, and its stage never"
+        " said who sees it, so Fake Publish's default chose."
     )
-    assert by_kind["outcomes"]["text"] == youtube.SCOPE_NOTICE
+    assert by_kind["outcomes"]["text"] == fake_publish.SCOPE_NOTICE
     assert "sign_in" not in by_kind
     # said once in the log, not on every pass
-    assert caplog.text.count("Sign in to YouTube again") == 1
+    assert caplog.text.count("Sign in to Fake Publish again") == 1
 
-    # Google refuses the refresh token (invalid_grant): the account is marked for sign-in
+    # the platform refuses the refresh token (invalid_grant): the account is marked for sign-in
     store = SetupStore(tmp_path / "setup.json")
     tokens = {"access_token": "at", "refresh_token": "rt", "expires_at": 0, "needs_sign_in": True}
-    store.put_value("youtube", None, "youtube", tokens)
+    store.put_value("fake_publish", None, "account", tokens)
     running.post("/api/worlds", json={"name": "Another"})  # a shared account: one notice
     signed_out = [n for n in running.get("/api/notices").json() if n["kind"] == "sign_in"]
     assert len(signed_out) == 1
-    assert signed_out[0]["text"].startswith("YouTube needs sign-in")
+    assert signed_out[0]["text"].startswith("Fake Publish needs sign-in")
 
 
 def test_a_post_its_stage_kept_private_or_scheduled_for_later_is_no_notice() -> None:

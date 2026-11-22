@@ -32,7 +32,7 @@ stages:
     ask: Post it?
     kind: confirm
   - connector: publish
-    calls: youtube
+    calls: fake_publish
     input: short.mp4
     params:
       title: Five hooks that work
@@ -103,7 +103,7 @@ def test_a_skip_passes_over_a_stage_unless_a_later_one_needs_it_or_it_gates_a_pu
     run = at_check(running)
     for name, refused in [
         ("cut", "input 'cut.mp4' is not produced by an earlier stage"),
-        ("confirm", "publish connector 'youtube' must come right after a gate"),
+        ("confirm", "publish connector 'fake_publish' must come right after a gate"),
     ]:
         skipped = apply(running, run, step(run, "skip", name))
         assert skipped.status_code == 422 and refused in skipped.json()["detail"]

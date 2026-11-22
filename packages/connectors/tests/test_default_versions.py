@@ -1,7 +1,9 @@
-"""A default package whose files change must bump its version: the box installs a default
-package only when its version is new (Connectors.install_defaults), so a change shipped under an
-old version never reaches it. `connectors/versions.lock.json` records each package's version and
-a hash of its shipped files (not its tests or docs). After bumping, rewrite it with
+"""A core default package (the folders of `connectors/`, now only python_script) whose files
+change must bump its version: the box installs a default package only when its version is new
+(Connectors.install_defaults), so a change shipped under an old version never reaches it.
+`connectors/versions.lock.json` records each package's version and a hash of its shipped files
+(not its tests or docs). The packages of the Default List are held to the same rule by their
+release tags in Kriflow/packages (its tools/check.py). After bumping, rewrite it with
 `uv run python packages/connectors/tests/test_default_versions.py`."""
 
 import hashlib

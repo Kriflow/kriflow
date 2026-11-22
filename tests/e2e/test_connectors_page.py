@@ -47,7 +47,7 @@ def test_add_a_connector_see_its_tools_and_open_its_call_on_the_timeline(
     try:
         page.goto(f"{base_url}/worlds/{world['id']}")
         page.get_by_role("navigation", name="Main").get_by_role("link", name="Connectors").click()
-        expect(page.get_by_test_id("connector-list")).to_contain_text("YouTube")
+        expect(page.get_by_test_id("connector-list")).to_contain_text("Fake Publish")
         expect(page.get_by_test_id("connector-list")).not_to_contain_text("Web search")
         page.get_by_role("button", name="Add a connector").click()
 
@@ -120,7 +120,7 @@ def test_a_world_enables_an_installed_package_and_disables_it(page: Page, base_u
         row = page.locator("[data-package=echo]").filter(has_text="echo 1.0.0")
         expect(row).to_contain_text("echo 1.0.0")
         expect(row).to_contain_text("Installed")
-        expect(page.get_by_test_id("connector-list")).to_contain_text("YouTube")
+        expect(page.get_by_test_id("connector-list")).to_contain_text("Fake Publish")
         assert httpx.post(workflows, json={"yaml": SAY}).status_code == 422
 
         row.get_by_role("button", name="Enable echo 1.0.0").click()

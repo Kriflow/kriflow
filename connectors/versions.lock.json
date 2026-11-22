@@ -1,50 +1,6 @@
 {
-  "blender_build": {
-    "version": "1.1.2",
-    "files": "bc2f057c9894f93439abdb556ea900cf018ea7d82dface3a4f0f5b029a596c86"
-  },
-  "blender_render": {
-    "version": "1.0.7",
-    "files": "b104dc93b953fedb40ed283445a92a6b295f9ab36941e2643fc5bb6a8547654b"
-  },
-  "hyperframes_build": {
-    "version": "1.0.2",
-    "files": "7e19a45de9ac612c6470be4960af8b546040b34738c4a948975d8c30dd29e64b"
-  },
-  "hyperframes_render": {
-    "version": "1.0.2",
-    "files": "bd3a3a5cd4ee81de25a34ff7cb1bebde224bc8e0c64a4f0bbdcdd69c6b90e28c"
-  },
-  "meta": {
-    "version": "1.3.0",
-    "files": "6bd42f98b5e554f6bc49ff539e5db01dd142151942baa94895c872448a7f1db9"
-  },
   "python_script": {
     "version": "1.0.0",
     "files": "197bee56e8e04c3f489cddbcbca5037b9ae6b1acc93007c1b631203c7f1d9180"
-  },
-  "remotion_build": {
-    "version": "1.0.4",
-    "files": "3e17537c14b17f0c5c2cbbb4b4c6c7b10965920d2651695f22f0673f21df8021"
-  },
-  "remotion_render": {
-    "version": "1.0.9",
-    "files": "9afe72d7b26003db6b862779127264ebb95f5c4eb890ee4b2449e943960e2f21"
-  },
-  "slack": {
-    "version": "1.1.2",
-    "files": "d8995bea7a7fa26cbbc8c8e09fe149ee21824756cf7b869f07d356032266cf00"
-  },
-  "speech": {
-    "version": "1.3.1",
-    "files": "b2d5c1a5f3635f613ce2d23297d32dca891cfbe9faca9a25ab239a0d8968e75b"
-  },
-  "upload_post": {
-    "version": "1.0.1",
-    "files": "eaf577b5c8ab2ac0a961fa02517fe573c14cc84dcecd83e9cdf968e266934201"
-  },
-  "youtube": {
-    "version": "1.6.0",
-    "files": "b401542c38a6d5d1b53c587607e1f4df48615e8712add761639532b4cdc5a831"
   }
 }

@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from api_fakes import sign_in_youtube
+from api_fakes import sign_in_fake_publish
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_gates_http import GRAPH, waiting_at
@@ -330,22 +330,23 @@ def test_a_turn_that_loses_the_network_waits_and_resumes_its_session(
 def test_at_a_publish_gate_the_assistant_reads_the_form_and_fills_its_fields(
     running: TestClient, script: Script, tmp_path: Path
 ) -> None:
-    sign_in_youtube(tmp_path)
+    sign_in_fake_publish(tmp_path)
     world, workflow = setup(running, weekly(extra="\n      metadata: script.md"))
     run = publish_gate(running, tmp_path, world, workflow)
     folder = tmp_path / "worlds" / world / "runs" / run["id"] / "01-render"
     (folder / "script.md").write_text(SCRIPT)
-    fill = {"hashtags": "#Owls", "visibility": "private", "nope": "x"}
+    fill = {"description": "Owls.", "visibility": "private", "nope": "x"}
     script.scripts = [[Answer({"reply": "Cut to one.", "sources": [], "fields": fill})]]
     asked = running.post(f"/api/runs/{run['id']}/assistant", json={"message": "Cut them."})
     assert asked.status_code == 200, asked.text
     # Only the fields the gate's form edits: the rest is a Run Change or not the gate's.
-    assert asked.json()["fields"] == {"hashtags": "#Owls"}
+    assert asked.json()["fields"] == {"description": "Owls."}
     # Never kept: the form is the operator's to confirm.
     kept = running.get(f"/api/runs/{run['id']}/assistant").json()["messages"][-1]
     assert kept["fields"] == {}
     told = str(script.sessions[0].system_prompt)
-    assert "hashtags" in told and "#Owls #AnimalFacts" in told and "artifact_edit" in told
+    assert "description" in told and "Owls cannot move their eyes" in told
+    assert "artifact_edit" in told
 
 
 def test_away_from_a_publish_gate_the_assistant_fills_no_fields(

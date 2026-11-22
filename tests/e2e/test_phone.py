@@ -8,7 +8,7 @@ import io
 import re
 import time
 import wave
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import httpx
 import pytest
@@ -35,7 +35,7 @@ stages:
     output_type: list[idea]
     produces: [ideas.md]
   - connector: render
-    calls: remotion_render
+    calls: kit
     input: ideas.md
     output: short.mp4
     params: {project: shorts, composition: Short}
@@ -342,14 +342,15 @@ def _clip(seconds: float, rate: int = 8000) -> bytes:
     return buf.getvalue()
 
 
-def test_assets_plays_a_voice_first_with_add_to_voices_in_its_section_header(
-    phone: Page, ids: dict, locked_url: str
+def test_assets_plays_a_voice_first_with_add_to_echoes_in_its_section_header(
+    phone: Page, ids: dict, locked_url: str, voice: Callable[[httpx.Client, str], None]
 ) -> None:
-    """Issues 194 and 220: a clip in the speech package's Owned Folder is a playable card; Add to
-    Voices sits in the section's header (#456, nothing pinned) and opens its sheet, with the
-    package's confirm."""
+    """Issues 194 and 220: a clip in a package's Owned Folder (voice's `echoes`) is a playable
+    card; Add to Echoes sits in the section's header (#456, nothing pinned) and opens its sheet,
+    with the package's confirm."""
     api = signed_in(locked_url)
-    added = api.put(f"/worlds/{ids['world']}/assets/narrator.wav?folder=voices", content=_clip(6))
+    voice(api, ids["world"])
+    added = api.put(f"/worlds/{ids['world']}/assets/narrator.wav?folder=echoes", content=_clip(6))
     assert added.status_code == 201, added.text
     api.put(f"/worlds/{ids['world']}/assets/logo.png", content=b"PNG")
     phone.goto(f"/worlds/{ids['world']}/assets")
@@ -357,18 +358,16 @@ def test_assets_plays_a_voice_first_with_add_to_voices_in_its_section_header(
     expect(card.get_by_role("button", name="Play narrator")).to_be_visible()
     expect(card).to_contain_text("6.0 s")
     expect(phone.get_by_role("listitem", name="logo.png")).to_contain_text("KB")
-    add = phone.get_by_role("button", name="Add to Voices")
+    add = phone.get_by_role("button", name="Add to Echoes")
     expect(add).to_be_in_viewport(ratio=1)
     box, bar = add.bounding_box(), phone.locator(".tabbar").bounding_box()
     assert box and bar and box["y"] + box["height"] <= bar["y"], (box, bar)
     expect(phone.locator("main .action-bar")).to_have_count(0)
     _fits(phone)
     add.click()
-    sheet = phone.get_by_role("dialog", name="Add to Voices")
+    sheet = phone.get_by_role("dialog", name="Add to Echoes")
     expect(sheet.get_by_role("button", name="Record")).to_be_visible()
-    expect(
-        sheet.get_by_text("This is my voice, or I have the speaker's permission")
-    ).to_be_visible()
+    expect(sheet.get_by_text("I may share these lines")).to_be_visible()
     _fits(phone)
 
 
