@@ -9,6 +9,7 @@ API, MCP and the `lists` Agent Tool alike.
 
 import builtins
 import json
+import math
 import re
 import sqlite3
 from contextlib import closing
@@ -78,7 +79,15 @@ def _names(kind: str, values: list[str]) -> list[str]:
     return values
 
 
+def _field(name: str) -> str:
+    if not FIELD.match(name):
+        raise ValueError(f"field {name!r}: use letters, digits and _")
+    return name
+
+
 def _fields(fields: dict[str, Any]) -> str:
+    for name in fields:
+        _field(name)
     text = json.dumps(fields, sort_keys=True)
     if len(text) > MAX_FIELDS:
         raise ValueError(
@@ -86,6 +95,22 @@ def _fields(fields: dict[str, Any]) -> str:
             " and put the rest in the Entry's file"
         )
     return text
+
+
+def _score(score: Any) -> float | None:
+    """A score as a finite number, or None. Refuses text and bools, which SQLite would store
+    as they are and rank above every number."""
+    if score is None:
+        return None
+    if isinstance(score, bool):
+        raise ValueError("a score is a number")
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        raise ValueError(f"a score is a number, not {score!r}") from None
+    if not math.isfinite(value):
+        raise ValueError("a score is a finite number")
+    return value
 
 
 def _file(file: str | None) -> str | None:
@@ -127,7 +152,8 @@ def _list(row: sqlite3.Row) -> WorldList:
 
 def order_by(order: str) -> tuple[str, tuple[Any, ...]]:
     """The SQL ORDER BY of `order`: score, time (when added) or a numeric field, descending with
-    a leading `-`. Entries without the value come last; ties go oldest first."""
+    a leading `-`. Entries without the value, or whose field is not a number, come last; ties go
+    oldest first."""
     desc = order.startswith("-")
     name = order.removeprefix("-")
     if name == "score":
@@ -135,7 +161,10 @@ def order_by(order: str) -> tuple[str, tuple[Any, ...]]:
     elif name == "time":
         column, args = "created_at", ()
     elif FIELD.match(name):
-        column, args = "json_extract(fields, ?)", (f"$.{name}",)
+        column = (
+            "CASE WHEN json_type(fields, ?) IN ('integer', 'real') THEN json_extract(fields, ?) END"
+        )
+        args = (f"$.{name}",) * 2
     else:
         raise ValueError(f"order {order!r}: name score, time or a field, with - for descending")
     way = "DESC" if desc else "ASC"
@@ -246,7 +275,7 @@ class WorldLists:
             raise ValueError(f"a key is 1 to {MAX_KEY} characters")
         if not title or len(title) > MAX_TITLE:
             raise ValueError(f"a title is 1 to {MAX_TITLE} characters")
-        text, file = _fields(fields or {}), _file(file)
+        text, file, score = _fields(fields or {}), _file(file), _score(score)
         now = _now()
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -310,8 +339,9 @@ class WorldLists:
                 sql += f" AND status IN ({', '.join('?' * len(status))})"
                 args += status
             for field, value in (where or {}).items():
-                if not FIELD.match(field):
-                    raise ValueError(f"field {field!r}: use letters, digits and _")
+                _field(field)
+                if value is not None and not isinstance(value, str | int | float):
+                    raise ValueError(f"field {field!r}: filter on a text, number or true/false")
                 sql += " AND json_extract(fields, ?) = ?"
                 args += [f"$.{field}", value]
             ordering, more = order_by(order)
@@ -375,6 +405,7 @@ class WorldLists:
     ) -> Entry:
         """Merge `fields` into the Entry's (a None value removes that field) and set `score`
         when given."""
+        score = _score(score)
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:

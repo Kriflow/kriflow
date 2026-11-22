@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from mcp import Client
 
 from swarmify_api.auth import CALLER, Token
+from swarmify_api.lists import AgentLists
 from swarmify_api.main import (
     run_control,
     task_board,
@@ -18,7 +19,7 @@ from swarmify_api.main import (
     world_service,
 )
 from swarmify_api.mcp import server
-from swarmify_swarm import tool_id
+from swarmify_swarm import ToolError, tool_id
 from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
 
 IDEAS = {"statuses": ["pitched", "new", "making", "rejected"], "done": [], "rejected": ["rejected"]}
@@ -116,6 +117,26 @@ def test_read_filters_by_status_and_fields_and_orders(client: TestClient) -> Non
     assert _keys(client, url, where="rank=2") == ["a"]
     assert client.get(f"{url}/entries", params={"order": "rank;drop"}).status_code == 422
     assert client.get(f"{url}/entries", params={"status": "gone"}).status_code == 422
+    assert client.get(f"{url}/entries", params={"where": "tags=[1]"}).status_code == 422
+    _add(client, url, "e", fields={"rank": "0"})  # text, so not ranked
+    assert _keys(client, url, order="rank") == ["b", "a", "c", "d", "e"]
+    assert client.patch(f"{url}/entries/e", json={"fields": {"a-b": 1}}).status_code == 422
+
+
+def test_the_lists_agent_tool_refuses_a_text_score_and_a_list_filter(tmp_path: Path) -> None:
+    lists = world_lists(tmp_path)
+    lists.declare("w", "things", ["new"])
+    agent = AgentLists(lists)
+    bad = [
+        ("add_entry", {"key": "a", "title": "A", "score": "high"}),
+        ("set_entry_fields", {"key": "a", "fields": {}, "score": "oops"}),
+        ("read_list", {"fields": {"tags": [1]}}),
+    ]
+    agent.call("w", "r", "worker-1", "add_entry", {"list": "things", "key": "a", "title": "A"})
+    for tool, args in bad:
+        with pytest.raises(ToolError):
+            agent.call("w", "r", "worker-1", tool, {"list": "things", **args})
+    assert lists.get("w", "things", "a").score is None
 
 
 def test_status_and_fields_change_with_who_and_note_in_the_history(

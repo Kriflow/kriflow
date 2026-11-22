@@ -394,7 +394,7 @@ def test_the_lists_tools_come_only_with_the_lists_agent_tool(
     board: SqliteStorage, tmp_path: Path
 ) -> None:
     _seed(board)
-    read = Call(tool_id("read_list"), {"list": "ideas"})
+    read = Call(tool_id("read_list"), {"list": "things"})
     script = Script([GRAPH, read, CLAIM, FINISH], PASS)
     _run(_swarm(board, tmp_path, script), tmp_path)  # a stage without `lists`
     assert _tools(board, "denied") == [tool_id("read_list")]
