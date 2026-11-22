@@ -33,7 +33,8 @@ export function stageSeconds(s: Stage, now = Date.now()): number | null {
 }
 
 /** A running stage with `not_before` whose time has not come: it holds no slot and does nothing yet. */
-export const holding = (s: Stage) => !!s.runs_at && Date.parse(s.runs_at) > Date.now();
+export const holding = (s: Stage, now = Date.now()) =>
+  !!s.runs_at && Date.parse(s.runs_at) > now;
 
 /** A time as the run page says when a held stage runs: weekday, hour and minute, in the viewer's zone. */
 const shortTime = (iso: string) =>
@@ -959,7 +960,7 @@ export function StagePanel(p: PanelProps) {
       {holding(stage) && (
         <p className="notice" role="status" data-testid="stage-holding">
           Waits until {new Date(stage.runs_at!).toLocaleString()}, its not before time ({String(stage.config?.not_before ?? "")}).
-          It holds no slot until then.
+          It holds no slot until then. Paused and resumed after that time, it waits for the next day.
         </p>
       )}
       {stage.waiting && (

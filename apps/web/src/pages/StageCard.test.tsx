@@ -118,7 +118,7 @@ test("a stage held for its not_before time says when it runs, in its card, its r
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(held), "GET /api/runs/run_1/artifacts": () => Response.json([]) });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
   const when = new Date(at).toLocaleString();
-  await expect.element(screen.getByTestId("stage-holding")).toHaveTextContent(`Waits until ${when}, its not before time (17:00 America/Toronto). It holds no slot until then.`);
+  await expect.element(screen.getByTestId("stage-holding")).toHaveTextContent(`Waits until ${when}, its not before time (17:00 America/Toronto). It holds no slot until then. Paused and resumed after that time, it waits for the next day.`);
   await expect.element(screen.getByTestId("stage-meta")).toMatchTextContent(/waits until/);
   await expect.element(screen.getByTestId("hero-sub")).toHaveTextContent(`post, step 2 of 2. Waits until ${when}. Nothing needs you yet.`);
 });

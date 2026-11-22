@@ -41,7 +41,7 @@ export function heroSub(run: Run, seconds: number | null, now = Date.now()): str
     const waited = stageSeconds(at, now);
     return `${of}${waited === null ? "" : ` Waiting ${took(waited)}.`}`;
   }
-  if (run.status === "running" && at && holding(at)) {
+  if (run.status === "running" && at && holding(at, now)) {
     return `${of} Waits until ${new Date(at.runs_at!).toLocaleString()}. Nothing needs you yet.`;
   }
   if (run.status === "running" && at) {

@@ -485,7 +485,8 @@ def execute_run(run_id: str) -> str:
             start = False  # `_wake` saved it, so the run reads as waiting on this stage
             if held := _hold(run_id, wake):
                 # A message came first: the stage goes back to pending while it is handled,
-                # then waits again for the same time unless a pause or abort stopped the run.
+                # then waits again unless a pause or abort stopped the run. A pause clears the
+                # stage, so resumed after the time, it waits for the next day's.
                 events = [*held, StageStopped(index)]
                 continue
         if kinds[index] == "workflow":
@@ -602,13 +603,16 @@ def _hold(run_id: str, wake: str) -> list[RunEvent | _ChildEnded]:
     with _waiting_lock:
         _waiting.add(run_id)
     try:
-        while (left := _left(wake)) > 0:
+        while True:
+            # Checked before `_left`, so a shutdown never records a stale remainder that a
+            # replay would then wait out again from the restart.
             if _stopping.is_set():
                 raise _Shutdown(run_id)
+            if (left := _left(wake)) <= 0:
+                return []
             message = DBOS.recv(CONTROL_TOPIC, timeout_seconds=min(left, 3600))
             if message is not None and message != WAKE and (event := _as_event(message)):
                 return [event, *_drain(run_id)]
-        return []
     finally:
         with _waiting_lock:
             _waiting.discard(run_id)

@@ -1,6 +1,7 @@
 """A stage's `not_before` on real DBOS: the run waits for a local time, holding no slot, and
 the wait survives a restart. The clock is shifted so the time is seconds away."""
 
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -107,19 +108,28 @@ def test_a_paused_wait_waits_again_once_resumed(
 def test_a_wait_survives_a_restart(
     tmp_path: Path, storage: SqliteStorage, connector: FakeConnector
 ) -> None:
-    rule, wake, clock = soon(4)
+    rule, wake, clock = soon(6)
     first = make(storage, tmp_path, connector, clock)
     first.launch()
     run = first.start("world_1", "wf_1", 1, "Restart", [post(rule)])
     wait_for(lambda: (r := first.get(run.id)) is not None and r.stages[0].runs_at is not None)
     first.shutdown()
     assert connector.calls == []
+    time.sleep(3)  # down a while: the wait must not restart its count from the relaunch
 
     second = make(storage, tmp_path, connector, clock)
     second.launch()
+    done_at: list[datetime] = []
+
+    def done() -> bool:
+        if getattr(storage.get_run(run.id), "status", None) != "done":
+            return False
+        done_at.append(clock())
+        return True
+
     try:
-        wait_for(lambda: getattr(storage.get_run(run.id), "status", None) == "done")
-        assert clock() >= wake
+        wait_for(done)
+        assert wake <= done_at[0] < wake + timedelta(seconds=2)
         assert [name for _, name in connector.calls] == ["post"]
     finally:
         second.shutdown()
