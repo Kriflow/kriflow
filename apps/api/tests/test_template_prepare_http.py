@@ -9,14 +9,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from api_fakes import install, until
+from api_fakes import until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # These tests run the fixture's prepare command for real, in the sandbox.
 real_prepare = True
 
-KIT = "packages/connectors/tests/fixtures/packages/kit"
 PREPARE = """import pathlib, sys, time, urllib.request
 here = pathlib.Path.cwd()
 for outside in (here.parent / "escaped.txt", here.parents[1] / "escaped.txt"):
@@ -53,10 +52,8 @@ def running(app: FastAPI) -> Iterator[TestClient]:
 
 
 def world_with_kit(client: TestClient) -> str:
-    assert install(client, KIT).status_code == 201
+    """A world, which kit, a default package of the core's tests, is given."""
     world = client.post("/api/worlds", json={"name": "Kits"}).json()["id"]
-    enabled = client.put(f"/api/worlds/{world}/packages/kit", json={"version": "1.0.0"})
-    assert enabled.status_code == 200, enabled.text
     return world
 
 

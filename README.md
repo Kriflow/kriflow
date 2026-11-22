@@ -488,19 +488,35 @@ always install; unset, any existing folder does, as before.
 
 The curated index (ADR 0019, issue 226): one TOML file listing known packages, one
 `[[packages]]` table each with `name`, `description`, `git`, an optional `subfolder`, the
-recommended `ref` and its `permissions` as the review lists them. The format, and how authors
-add a package by pull request, is in `docs/index-repo/README.md`, which with `index.toml` and
-`LICENSE` beside it is the content of the `wagleanuj/swarmify-connectors` repository.
+recommended `ref`, its `permissions` as the review lists them and an optional `contract` (1
+when absent). `GET /api/packages/index` answers each entry's `contract`, `runnable` and, when
+this Kriflow cannot run it, the `problem`, beside `oldest_contract` and `newest_contract`. The format, and how authors
+add a package by pull request, is in the README of
+[Kriflow/packages](https://github.com/Kriflow/packages), which holds the index beside the
+first-party packages.
 `SWARMIFY_CONNECTOR_INDEX` says where it is read from: an https URL (no redirects, at most
 1 MB, 10 s) or a local file, by default
-`https://raw.githubusercontent.com/wagleanuj/swarmify-connectors/main/index.toml`.
+`https://raw.githubusercontent.com/Kriflow/packages/main/index.toml`.
 `GET /api/packages/index` answers its entries, or a 502 saying why it could not be read (not
 reachable, too large, too slow, not TOML, or the first bad field). The connectors page's Browse
 the index lists them with a search, and installing one opens the usual review: the index's
 permissions are only a summary, and the operator approves what the clone declares.
 
-Default packages (ADR 0023, issue 213): every package in this repository's `connectors/` folder.
-On startup Kriflow installs each whose version is not installed yet, and gives it to every
+Default packages (ADR 0023, issues 213 and 585): `python_script`, the core's own, installed from
+`connectors/python_script`, and the packages the Default List names. The Default List
+(`packages/connectors/src/swarmify_connectors/defaults.toml`) is the packages repository's git
+URL, Kriflow/packages, and one release tag per package (`youtube-v1.6.0`, as
+`<name>-v<version>`). On startup each listed version not installed yet is installed from git at
+its tag, from its folder, trusted as the core's own (no permission review) and sharing uv's and
+npm's caches; a version already installed is never fetched, so a start with every listed version
+installed makes no network call. Moving a default to a new release is a one-line change of its
+`ref` in a core pull request; the box never upgrades a package by itself.
+`SWARMIFY_DEFAULT_PACKAGES` names another list of the same shape: an offline box or a
+development checkout points it at a local clone (its git URL then a path, held to
+`SWARMIFY_PACKAGE_SOURCES` when that is set), and the core's tests at a local repository of
+tagged fixture packages. A Setup form of a version installed before the move, whose help link
+points into the core's old `connectors/<name>`, answers the same page of Kriflow/packages.
+On startup Kriflow installs each default whose version is not installed yet, and gives it to every
 world once, enabled at that version: the worlds there on upgrade, and each new world as it is
 made. A world's choice after that stands (disabling one keeps it disabled through restarts), and
 a newer default version installs beside the old one without moving a world's pin. The first
@@ -527,6 +543,7 @@ before versions were recorded are stamped with their world's pins.
 The Manifest, every section checked at install even where Kriflow does not act on it yet:
 
 ```toml
+contract = 1                      # the Package Contract it was written for; absent is 1
 name = "echo"                     # lower_snake_case; workflows call the connector by it
 version = "1.0.0"                 # semver; installs side by side by version
 label = "Echo"                    # what the UI shows
@@ -621,6 +638,29 @@ hold = ["seat"]                   # Resources the core holds a Slot of around ea
 
 The full fixture is `packages/connectors/tests/fixtures/packages/echo`, and every rule has an
 invalid fixture beside it in `fixtures/manifests`.
+
+#### Package contracts
+
+A Package Contract is everything a package relies on from the core: the Manifest schema, the
+tools the core calls and the answers it reads, and what a package's process is given. Kriflow
+runs a range of contracts, oldest to newest (`OLDEST_CONTRACT` and `NEWEST_CONTRACT` in
+`swarmify_connectors/packages.py`). A Manifest's `contract` is checked before anything else of
+it, so a package outside the range is refused for that, not for a field this Kriflow does not
+know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contract 1.
+Update Kriflow first, or install an older {name}." (or, below the oldest, "... was written for
+package contract {N} ... Install a newer {name}."). The refusal shows at review and install
+(422), for a default at startup (logged), on the installed list (`invalid` with that
+`problem`), at enable and on a stage of a world that pins it. The index's optional `contract`
+per entry marks one this Kriflow cannot run on Browse the index, Install turned off. A local
+package the Connectors page writes carries the newest contract.
+
+A core change that adds anything a package may declare or answer raises `NEWEST_CONTRACT` and
+adds a line here; one that removes or renames something also raises `OLDEST_CONTRACT`, a
+breaking change that needs an ADR.
+
+| Contract | Since | What it added |
+| --- | --- | --- |
+| 1 | 2026-11-22 | The core as of the package contract: the Manifest, publish, outcomes and safe resume, check, Setup and sign-in, world types, long jobs, Build Sessions and Templates. |
 
 Once a world enables a package, the Connectors page draws its Setup form from the `[[config]]`
 fields. Values live in `<data dir>/setup.json`, mode 600,
@@ -906,8 +946,10 @@ the fixture package, `test_build_http.py` with a default package).
 
 ## Default packages
 
-This repository's `connectors/` folder holds the first-party Connector Packages, each a separate
-work with its Manifest, code, tests and README. Kriflow installs them on startup and enables
+The first-party Connector Packages live in [Kriflow/packages](https://github.com/Kriflow/packages),
+each a separate work with its Manifest, code, tests and README (this repository's `connectors/`
+still holds their pre-move copies, and `python_script`). Kriflow installs the Default List's
+versions on startup and enables
 them for every world (but for one whose Manifest says `enable_by_default = false`), so workflows
 call them by name with no setup beyond each one's Setup form. Each README covers its Setup, the
 stage and its params, what it answers, the Services it calls and how its V1 settings carry over:

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from sse import sse_events
 from swarmify_api.main import create_app
+from swarmify_connectors import FakeTransport
 from swarmify_swarm import tool_id
 from swarmify_swarm.fake import LAST, Answer, Call, Script
 
@@ -38,7 +39,7 @@ stages:
     ask: Publish Tuesday 9am?
     kind: confirm
   - connector: publish
-    calls: youtube
+    calls: fake_publish
     input: short.mp4
     params:
       title: Five hooks that work
@@ -57,9 +58,13 @@ def calls() -> list[str]:
 
 
 @pytest.fixture
-def running(tmp_path: Path, calls: list[str], notifier: FakeNotifier) -> Iterator[TestClient]:
+def running(
+    tmp_path: Path, calls: list[str], notifier: FakeNotifier, transport: FakeTransport
+) -> Iterator[TestClient]:
     connector = lambda _run, _id, stage: calls.append(stage.name)  # noqa: E731
-    app = create_app(tmp_path, connector=connector, notifier=notifier, retro=False)
+    app = create_app(
+        tmp_path, connector=connector, notifier=notifier, retro=False, transport=transport
+    )
     with TestClient(app) as client:
         yield client
 

@@ -3,7 +3,7 @@ import re
 import httpx
 from playwright.sync_api import Page, expect
 
-PUBLISH = "  - connector: youtube\n    input: short.mp4\n    params: {title: Hooks}\n"
+PUBLISH = "  - connector: fake_publish\n    input: short.mp4\n    params: {title: Hooks}\n"
 GATE = "  - gate: pick\n"
 
 
@@ -47,7 +47,7 @@ def _run(page: Page, base_url: str) -> None:
     problems = page.get_by_test_id("problems")
     expect(problems).to_contain_text("2 problems to fix before saving")
     expect(problems).to_contain_text(
-        "youtube: publish connector 'youtube' must come right after a gate"
+        "fake_publish: publish connector 'fake_publish' must come right after a gate"
     )
     expect(problems).to_contain_text("input 'short.mp4' is not produced by an earlier stage")
     expect(page.get_by_role("button", name="Save as version 1")).to_be_disabled()

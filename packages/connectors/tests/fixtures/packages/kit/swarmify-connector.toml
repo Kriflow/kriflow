@@ -5,6 +5,7 @@ version = "1.0.0"
 label = "Kit"
 about = "Renders from a world's Templates, each prepared once. A fixture."
 kind = "stage"
+icon = "icon.svg"
 stage_types = ["connector"]
 runtime = "uv"
 command = ["python3", "server.py"]

@@ -5,10 +5,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from test_build_session_http import SKETCH
 
 from swarmify_connectors import FakeTransport
 from swarmify_swarm import tool_id
@@ -129,7 +127,6 @@ def test_the_planner_sees_the_worlds_typed_inputs(running: TestClient, script: S
     assert running.post(f"/api/worlds/{world}/planner", json={"message": "Hi"}).is_success
     system = script.sessions[0].system_prompt or ""
     assert "must declare that type as its output_type" in system
-    assert "- speech: input 1 is type script" in system
     assert "- cook: input 1 is type recipe" in system
 
 
@@ -159,25 +156,13 @@ def test_the_planner_describes_each_connector_from_its_manifest(
     script.scripts = [[Answer({"reply": "Hi.", "yaml": None})]]
     assert running.post(f"/api/worlds/{world}/planner", json={"message": "Hi"}).is_success
     system = str(script.sessions[0].system_prompt)
-    speech = system.split("\n- speech (")[1].split("\n- ")[0]  # a default package
-    assert all(f"params.{p}" in speech for p in ("voice", "engines", "seed"))
-    posts = system.split("\n- upload_post (")[1].split("\n- ")[0]
-    assert all(f"params.{p}" in posts for p in ("title", "schedule", "user", "platforms"))
-    youtube = system.split("\n- youtube (")[1].split("\n- ")[0]
-    published = ("title", "metadata", "description", "visibility", "schedule", "made_for_kids")
-    assert all(f"params.{p}" in youtube for p in published)
-    render = system.split("\n- remotion_render (")[1].split("\n- ")[0]
-    assert "only when the operator has a finished template" in render
-    for param in ("project", "composition", "entry", "codec", "frames", "props"):
-        assert f"params.{param}" in render, param
-    built = system.split("\n- remotion_build (")[1].split("\n- ")[0]
-    for param in ("base", "composition", "brief", "model", "max_turns", "minutes"):
-        assert f"params.{param}" in built, param
-    # what the hand-written prompt said moved into each connector's own notes
-    assert "This is how a workflow makes a video" in system
-    assert "(pause 1.5s) is silence" in system and "params.user: required;" in system
+    posts = system.split("\n- fake_publish (")[1].split("\n- ")[0]  # a default package
+    published = ("title", "metadata", "description", "visibility", "schedule")
+    assert all(f"params.{p}" in posts for p in published)
+    built = system.split("\n- sketch (")[1].split("\n- ")[0]
+    assert all(f"params.{p}" in built for p in ("base", "tone"))
     assert "- cook (tool, in swarm stages)" in system  # a world's own, without a Manifest
-    assert "youtube, upload_post" not in system and "agents write text only" in system
+    assert "agents write text only" in system
     agent_tools = system.split("The Agent Tools")[1].split("How you work")[0]
     assert all(f"- {name}: " in agent_tools for name in AGENT_TOOLS)
 
@@ -187,18 +172,14 @@ def test_the_planner_sees_each_packages_templates_in_this_world(
 ) -> None:
     """Issue 354: the planner's world context names each Template-capable package's Templates,
     so a drafted stage can name one as its base; another world's stay out."""
-    assert install(running, SKETCH).status_code == 201
-    world, other = _world(running), _world(running)
-    for w in (world, other):
-        enabled = running.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"})
-        assert enabled.status_code == 200, enabled.text
+    world, other = _world(running), _world(running)  # sketch is a default of each
     for w, name in ((world, "bold"), (world, "calm"), (other, "secret")):
         (tmp_path / "worlds" / w / "assets/sketches" / name).mkdir(parents=True)
     script.scripts = [[Answer({"reply": "Hi.", "yaml": None})]]
     assert running.post(f"/api/worlds/{world}/planner", json={"message": "Hi"}).is_success
     system = str(script.sessions[0].system_prompt)
     assert "- sketch: base is one of bold, calm" in system
-    assert "secret" not in system and "- remotion_build: base" not in system
+    assert "secret" not in system and "- kit: " not in system  # no Templates of its
 
 
 def test_a_package_s_planner_notes_and_params_reach_the_planner() -> None:

@@ -7,7 +7,7 @@ declares. It is a list, not a marketplace: nothing is hosted here but the list, 
 an entry is the same as installing its git URL by hand.
 
 Kriflow reads this file from `SWARMIFY_CONNECTOR_INDEX`, by default
-`https://raw.githubusercontent.com/wagleanuj/swarmify-connectors/main/index.toml`. Point that
+`https://raw.githubusercontent.com/Kriflow/packages/main/index.toml`. Point that
 setting at your own fork, over https, or at a local file to run a private index.
 
 ## The format
@@ -25,6 +25,7 @@ permissions = [                      # every permission its Manifest declares, a
   "network: api.example.org",
   "credentials: EXAMPLE_API_KEY",
 ]
+contract = 1                         # optional: the Package Contract its Manifest declares, absent is 1
 ```
 
 - `name`: lowercase letters, digits and `_`, starting with a letter, matching the Manifest.
@@ -33,6 +34,8 @@ permissions = [                      # every permission its Manifest declares, a
   `capabilities`. The simplest way to get them right is Kriflow's own review: on the
   Connectors page choose Install a package, enter your git URL and ref, and copy the list it
   shows (or `POST /api/packages/review` and copy `permissions`).
+- `contract`: the `contract` of the package's Manifest at `ref`. Kriflow marks an entry it
+  cannot run as needing a newer Kriflow and turns its Install off.
 - Fields the format does not name are ignored, so a newer index still reads in an older
   Kriflow. A file that is not valid TOML, or an entry missing a field, makes Kriflow show the
   operator the first bad field instead of the list, so keep the file valid.

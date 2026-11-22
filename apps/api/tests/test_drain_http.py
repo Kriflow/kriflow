@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
-from api_fakes import sign_in_youtube
+from api_fakes import sign_in_fake_publish
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_publish_http import setup, until, weekly
@@ -85,7 +85,7 @@ def test_a_sandbox_stopped_mid_publish_fails_the_stage_while_the_api_lives(
     leaves the call running in the ledger, which the next launch replays (and a publish then
     refuses, packages/connectors/tests/test_publish.py). So the deploy command stops the api
     before the sandbox."""
-    sign_in_youtube(tmp_path)
+    sign_in_fake_publish(tmp_path)
     yaml = weekly().replace("  - gate: confirm\n    ask: Post it?\n    kind: confirm\n", "")
     yaml = yaml.replace("visibility: public", "visibility: private").replace(
         '      schedule: "2099-01-01T10:00:00+01:00"\n', ""

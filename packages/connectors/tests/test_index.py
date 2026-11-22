@@ -34,6 +34,7 @@ def test_a_local_index_lists_its_entries(tmp_path: Path) -> None:
             "subfolder": None,
             "ref": "v1.0.0",
             "permissions": ["network: api.example.org"],
+            "contract": 1,
         }
     ]
 
@@ -97,7 +98,9 @@ def test_https_reads_it_within_the_cap_and_the_timeout() -> None:
 
 def test_the_prepared_index_lists_every_first_party_package_as_reviewed() -> None:
     entries = read_index(str(REPO / "docs/index-repo/index.toml"))
-    first_party = sorted(p.name for p in (REPO / "connectors").iterdir() if p.is_dir())
+    first_party = sorted(
+        p.parent.name for p in (REPO / "connectors").glob("*/swarmify-connector.toml")
+    )
     assert [e["name"] for e in entries] == first_party
     for e in entries:
         manifest = read_manifest(REPO / e["subfolder"])

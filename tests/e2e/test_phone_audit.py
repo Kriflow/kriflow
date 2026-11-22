@@ -22,7 +22,7 @@ stages:
     done_when: 5 ideas ranked
     produces: [missing.md]
   - connector: render
-    calls: remotion_render
+    calls: kit
     input: missing.md
     output: short.mp4
     params: {project: shorts, composition: Short}
