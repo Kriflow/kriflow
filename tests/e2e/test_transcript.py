@@ -26,9 +26,10 @@ SHOTS = os.environ.get("SWARMIFY_SHOTS")
 
 
 @pytest.fixture(scope="module")
-def ids(base_url: str) -> dict[str, str]:
+def ids(request: pytest.FixtureRequest, base_url: str) -> dict[str, str]:
     api = httpx.Client(base_url=f"{base_url}/api", timeout=30)
     world = api.post("/worlds", json={"name": "Transcript"}).json()["id"]
+    request.addfinalizer(lambda: api.delete(f"/worlds/{world}"))
     wf = api.post(f"/worlds/{world}/workflows", json={"yaml": RESEARCH}).json()["workflow_id"]
     run = api.post(f"/workflows/{wf}/runs", json={}).json()["id"]
     for _ in range(300):

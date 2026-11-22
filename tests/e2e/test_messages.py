@@ -28,10 +28,11 @@ WAITING = "I'll start once you say which sources to trust."
 
 
 @pytest.fixture
-def live(base_url: str) -> dict[str, str]:
+def live(request: pytest.FixtureRequest, base_url: str) -> dict[str, str]:
     """A run whose `steer` stage has a worker mid-turn, waiting for a message."""
     api = httpx.Client(base_url=f"{base_url}/api", timeout=30)
     world = api.post("/worlds", json={"name": "Messages"}).json()["id"]
+    request.addfinalizer(lambda: api.delete(f"/worlds/{world}"))
     wf = api.post(f"/worlds/{world}/workflows", json={"yaml": STEER}).json()["workflow_id"]
     run = api.post(f"/workflows/{wf}/runs", json={}).json()
     stage = run["stages"][0]["id"]

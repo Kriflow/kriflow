@@ -57,11 +57,12 @@ SHOTS = os.environ.get("SWARMIFY_SHOTS")
 
 
 @pytest.fixture(scope="module")
-def ids(base_url: str) -> dict[str, str]:
+def ids(request: pytest.FixtureRequest, base_url: str) -> dict[str, str]:
     """Runs waiting at a gate, done twice over (so the second has a last run), and a fan-out
     running over two picked items."""
     api = httpx.Client(base_url=f"{base_url}/api", timeout=30)
     world = api.post("/worlds", json={"name": "Hero"}).json()["id"]
+    request.addfinalizer(lambda: api.delete(f"/worlds/{world}"))
     api.patch(f"/worlds/{world}", json={"run_cap": 8}).raise_for_status()
 
     def make(yaml: str) -> str:

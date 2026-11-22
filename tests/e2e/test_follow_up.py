@@ -32,10 +32,11 @@ WORDS = "Drop the second idea and add sources to the first."
 
 
 @pytest.fixture
-def waiting(base_url: str) -> dict[str, str]:
+def waiting(request: pytest.FixtureRequest, base_url: str) -> dict[str, str]:
     """A run whose `draft` stage is done and whose gate waits."""
     api = httpx.Client(base_url=f"{base_url}/api", timeout=30)
     world = api.post("/worlds", json={"name": "Follow-ups"}).json()["id"]
+    request.addfinalizer(lambda: api.delete(f"/worlds/{world}"))
     wf = api.post(f"/worlds/{world}/workflows", json={"yaml": DRAFT}).json()["workflow_id"]
     run = api.post(f"/workflows/{wf}/runs", json={}).json()
     for _ in range(300):

@@ -41,10 +41,11 @@ SHOTS = os.environ.get("SWARMIFY_SHOTS")
 
 
 @pytest.fixture(scope="module")
-def ids(base_url: str) -> dict[str, str]:
+def ids(request: pytest.FixtureRequest, base_url: str) -> dict[str, str]:
     """A pick workflow to start runs of, and a done run."""
     api = httpx.Client(base_url=f"{base_url}/api", timeout=30)
     world = api.post("/worlds", json={"name": "Card"}).json()["id"]
+    request.addfinalizer(lambda: api.delete(f"/worlds/{world}"))
     api.patch(f"/worlds/{world}", json={"run_cap": 8}).raise_for_status()
 
     def start(yaml: str, status: str) -> str:
