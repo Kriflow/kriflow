@@ -177,11 +177,13 @@ class Runner(RunControl):
         retro: Retro | None = None,
         worlds: Callable[[], list[str]] | None = None,
         items: Items | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         """`pin` and `take` serve workflow stages; without `pin` they fail the run. `spend` sums
         the agents' estimated cost of runs, for the Budget. `monthly` is each world's Monthly
         Budget and `cap_for` its run cap (`cap` for every world when left out). `worlds` lists
-        the ids of the worlds that exist; given it, launch drops the queues of any others."""
+        the ids of the worlds that exist; given it, launch drops the queues of any others.
+        `clock` is the time a stage's `not_before` is waited against."""
         super().__init__(
             storage, system_db, data_dir, notifier or LogNotifier(), previews, spend, monthly
         )
@@ -191,6 +193,7 @@ class Runner(RunControl):
         self.pin = pin
         self.take = take
         self.items = items
+        self.clock = clock
         self.cap_for = cap_for or (lambda _world_id: cap)
         self.poll_seconds = poll_seconds
         self.worlds = worlds
@@ -360,8 +363,18 @@ def scheduled_run(scheduled_at: datetime, context: Any) -> str | None:
     return run_id
 
 
+_ticks = threading.Lock()
+"""One tick at a time looks for a live run and adds its own, so two overlapping ticks of a
+`skip_when_live` workflow never both start one."""
+
+
 @DBOS.step(name="swarmify.start_scheduled")
 def _start_scheduled(workflow_id: str, fired_at: str) -> tuple[str, str] | None:
+    with _ticks:
+        return _start_tick(workflow_id, fired_at)
+
+
+def _start_tick(workflow_id: str, fired_at: str) -> tuple[str, str] | None:
     runner = _current()
     if runner.pin is None:
         raise NotImplementedError("scheduled runs need a pin to find their workflow")
@@ -377,6 +390,12 @@ def _start_scheduled(workflow_id: str, fired_at: str) -> tuple[str, str] | None:
             fired_at,
             exc,
         )
+        return None
+    if pinned.skip_when_live and any(
+        (live := runner.storage.get_run(run_id)) is not None and live.workflow_id == workflow_id
+        for run_id in runner.storage.active_run_ids(pinned.world_id)
+    ):
+        log.info("schedule fired for %s at %s, skipped: a run of it is live", workflow_id, fired_at)
         return None
     if pinned.schedule is None:
         # DBOS learns of a dropped schedule only at its next poll; a tick in that gap would
@@ -409,6 +428,7 @@ def execute_run(run_id: str) -> str:
     state = RunState(status, tuple(stages), send_backs, over_budget)  # type: ignore[arg-type]
     # A run that waited at a gate before stage slots existed replays without them (#486).
     world = _world_of(run_id) if DBOS.patch("stage-slots") else None
+    timed = DBOS.patch("not-before")  # a run in flight before `not_before` replays without it
     events: list[RunEvent | _ChildEnded] = [*_drain(run_id), Started()]
     error: str | None = None
     while True:
@@ -461,6 +481,13 @@ def execute_run(run_id: str) -> str:
         if events or not commands or isinstance(commands[0], OpenGate):
             continue
         index, error = commands[0].index, None
+        if timed and (wake := _wake(run_id, index, state if start else None)) is not None:
+            start = False  # `_wake` saved it, so the run reads as waiting on this stage
+            if held := _hold(run_id, wake):
+                # A message came first: the stage goes back to pending while it is handled,
+                # then waits again for the same time unless a pause or abort stopped the run.
+                events = [*held, StageStopped(index)]
+                continue
         if kinds[index] == "workflow":
             fan, settled, error = _fan_out(run_id, index, entering=True)
             if fan:  # its children run on; their ends arrive on the control topic
@@ -544,6 +571,47 @@ def _ready(run_id: str, start: RunState | None) -> bool:
             return False
         runner.storage.save_state(run_id, start)
     return True
+
+
+@DBOS.step(name="swarmify.wake")
+def _wake(run_id: str, index: int, start: RunState | None) -> str | None:
+    """When the stage at `index` may run (ISO), for a stage with `not_before`; None for one
+    without. A queued run starting at such a stage is saved running first: it holds no slot
+    while it waits, and its stage's visit starts now, which `runs_at` counts from."""
+    runner = _current()
+    if not runner.storage.stage_def(run_id, index)[1].config.get("not_before"):
+        return None
+    if start is not None:
+        run = runner.storage.get_run(run_id)
+        if run is None or run.status != "queued":  # aborted while queued: `_ready` says so
+            return None
+        runner.storage.save_state(run_id, start)
+    run = runner.storage.get_run(run_id)
+    return run.stages[index].runs_at if run else None
+
+
+@DBOS.step(name="swarmify.left")
+def _left(wake: str) -> float:
+    """Seconds until `wake`, read once per wait so a replay waits the way the run did."""
+    return (datetime.fromisoformat(wake) - _current().clock()).total_seconds()
+
+
+def _hold(run_id: str, wake: str) -> list[RunEvent | _ChildEnded]:
+    """Wait durably until `wake`, holding no slot. Returns the control messages that came
+    first, or nothing once the time came. A restart waits on from where it was."""
+    with _waiting_lock:
+        _waiting.add(run_id)
+    try:
+        while (left := _left(wake)) > 0:
+            if _stopping.is_set():
+                raise _Shutdown(run_id)
+            message = DBOS.recv(CONTROL_TOPIC, timeout_seconds=min(left, 3600))
+            if message is not None and message != WAKE and (event := _as_event(message)):
+                return [event, *_drain(run_id)]
+        return []
+    finally:
+        with _waiting_lock:
+            _waiting.discard(run_id)
 
 
 def _await_stage(run_id: str) -> tuple[str, str | None, list[RunEvent | _ChildEnded]]:
