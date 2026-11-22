@@ -12,6 +12,7 @@ import subprocess
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Thread
 from typing import Any
 
@@ -435,6 +436,60 @@ def test_node_reaches_a_declared_host_through_the_proxy_and_no_other(tmp_path: P
     refused = [line for line in said if line.startswith(("fetch undeclared", "http undeclared"))]
     assert len(refused) == 2 and not any("hello" in line for line in refused), said
     assert f"connect {undeclared} " in " ".join(confined.blocked()) + " "
+
+
+NODE_TUNNELS_SLOWLY = """
+const net = require("node:net");
+const [target] = process.argv.slice(1);
+const proxy = new URL(process.env.HTTPS_PROXY);
+const user = decodeURIComponent(`${proxy.username}:${proxy.password}`);
+const auth = Buffer.from(user).toString("base64");
+const socket = net.connect(Number(proxy.port), proxy.hostname, () =>
+  socket.write(
+    `CONNECT ${target} HTTP/1.1\\r\\nHost: ${target}\\r\\n` +
+      `Proxy-Authorization: Basic ${auth}\\r\\n\\r\\n`,
+  ),
+);
+let head = Buffer.alloc(0);
+let status = "";
+let body = 0;
+socket.on("data", (chunk) => {
+  if (!status) {
+    head = Buffer.concat([head, chunk]);
+    const at = head.indexOf("\\r\\n\\r\\n");
+    if (at < 0) return;
+    status = head.subarray(0, head.indexOf("\\r\\n")).toString();
+    chunk = head.subarray(at + 4);
+  }
+  body += chunk.length;
+  // a reader slower than the server: what the proxy holds for it when the server is done
+  socket.pause();
+  setTimeout(() => socket.resume(), 2);
+});
+socket.on("close", () => console.log(`${status}: got ${body}`));
+"""
+
+
+def test_a_tunnel_through_the_proxy_hands_a_slow_reader_every_byte(tmp_path: Path) -> None:
+    """A download through a CONNECT tunnel (Playwright's browser, over HTTPS) reaches a client
+    that reads slower than the server sends whole: the proxy once dropped what it still held for
+    the client when the server closed (sandbox-runtime, patches/)."""
+    size = 4 * 1024 * 1024
+
+    class Sends(StreamRequestHandler):
+        def handle(self) -> None:
+            self.wfile.write(os.urandom(size))
+
+    server = ThreadingTCPServer(("127.0.0.1", 0), Sends)
+    Thread(target=server.serve_forever, daemon=True).start()
+    target = f"localhost:{server.server_address[1]}"
+    try:
+        argv = ["node", "-e", NODE_TUNNELS_SLOWLY, target]
+        confined = Sandbox(tmp_path).wrap(argv, None, Grants(domains=[target]))
+        done = subprocess.run(confined.argv, capture_output=True, text=True, timeout=120)
+    finally:
+        server.shutdown()
+    assert done.stdout.splitlines() == [f"HTTP/1.1 200 Connection Established: got {size}"], done
 
 
 def test_a_node_that_ignores_the_proxy_is_refused(tmp_path: Path) -> None:

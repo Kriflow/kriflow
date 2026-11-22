@@ -189,7 +189,10 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
     plan = (home.parent / "plan.json").read_text()
     assert "pa55-word" not in plan and SECRET not in plan and "s3ss-old-777" not in plan
     assert json.loads(plan)["sandbox"]["network"]["allowedDomains"] == ["shop.example.com"]
-    assert "/runs/run_1/stg_1" in plan  # it writes the stage's folder, confined to it
+    # it writes the stage's folder, confined to it, and knows where that is
+    folder = json.loads(plan)["env"]["SWARMIFY_STAGE_DIR"]
+    assert folder == str(tmp_path / "worlds/w1/runs/run_1/stg_1")
+    assert folder in json.loads(plan)["sandbox"]["filesystem"]["allowWrite"]
     session = home / "login-session.json"
     assert stat.S_IMODE(session.stat().st_mode) == 0o600
     (home / "login-session.out.json").write_text(NEW_SESSION)

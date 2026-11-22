@@ -41,7 +41,7 @@ MIN_FREE = 10 * 2**30
 # Paths under the volume's root that can be made again; node_modules anywhere.
 EXCLUDE = (
     "npm-cache",
-    "sandbox/cache",
+    "sandbox",  # per-process plans and scratch, made again for every process
     "worlds/*/runs/*/*/build",
     "worlds/*/runs/*/*/frames",
 )
@@ -176,7 +176,10 @@ def inside(label: str, root: Path, dest: Path, keep: int, dry: bool, owner: str)
                         dst.close()
                     tar.add(copy, arcname=rel)
                 for rel in files:
-                    tar.add(root / rel, arcname=rel, recursive=False)
+                    try:
+                        tar.add(root / rel, arcname=rel, recursive=False)
+                    except FileNotFoundError:
+                        continue  # removed while the backup ran, e.g. a finished process's scratch
     if zp.returncode:
         part.unlink()
         sys.exit(f"{pack[0]} failed with {zp.returncode}")

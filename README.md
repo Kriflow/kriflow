@@ -646,7 +646,7 @@ tools the core calls and the answers it reads, and what a package's process is g
 runs a range of contracts, oldest to newest (`OLDEST_CONTRACT` and `NEWEST_CONTRACT` in
 `swarmify_connectors/packages.py`). A Manifest's `contract` is checked before anything else of
 it, so a package outside the range is refused for that, not for a field this Kriflow does not
-know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contract 1.
+know yet: "{name} {version} needs package contract {N}, and this Kriflow runs contracts 1 to 2.
 Update Kriflow first, or install an older {name}." (or, below the oldest, "... was written for
 package contract {N} ... Install a newer {name}."). The refusal shows at review and install
 (422), for a default at startup (logged), on the installed list (`invalid` with that
@@ -661,6 +661,7 @@ breaking change that needs an ADR.
 | Contract | Since | What it added |
 | --- | --- | --- |
 | 1 | 2026-11-22 | The core as of the package contract: the Manifest, publish, outcomes and safe resume, check, Setup and sign-in, world types, long jobs, Build Sessions and Templates. |
+| 2 | 2026-11-22 | World Logins: the Manifest's `[login] accepts`, `SWARMIFY_LOGIN_FILE` and the `SWARMIFY_LOGIN_*` values, the saved session file, Person Checks through `asks/`, `login_result` in a tool answer; and `SWARMIFY_STAGE_DIR`, the stage's folder, for every process started for a stage. |
 
 Once a world enables a package, the Connectors page draws its Setup form from the `[[config]]`
 fields. Values live in `<data dir>/setup.json`, mode 600,
@@ -798,7 +799,11 @@ sandboxed command any user namespace of its own.
 - Run identity: every package process started for a stage (a connector stage's, a tool server
   lent to a swarm stage or a Build Session) gets `SWARMIFY_RUN_ID`, `SWARMIFY_RUN_ROOT` (the top
   run of its family, the run itself when it has no parent) and `SWARMIFY_STAGE_ID`, to scope what
-  it makes to one run family.
+  it makes to one run family, and `SWARMIFY_STAGE_DIR` (contract 2), the full path of the stage's
+  folder (`<data dir>/worlds/<world>/runs/<run>/<stage>`). It grants nothing: a process confined
+  to the stage (a connector stage's, a Build Session's tool servers, a swarm stage's tool server
+  holding its World Login) reads the run's folder and writes the stage's, as before; a swarm
+  stage's other tool servers are not confined to it and may neither read nor write it.
 - Environment: its own Setup values and the few variables every process needs, never another
   package's nor the API's own (the sign-in password, the Claude token), whatever starts it. A
   tool's MCP server (a swarm stage's, a Build Session's) also gets `SWARMIFY_ASSETS`, the full

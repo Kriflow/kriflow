@@ -4,6 +4,8 @@ FROM node:22.23.4-bookworm-slim AS web-build
 RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# sandbox-runtime's proxy, patched until upstream flushes a tunnel before closing it
+COPY patches patches/
 COPY apps/web/package.json apps/web/
 COPY packages/connectors/sandbox/package.json packages/connectors/sandbox/
 RUN pnpm install --frozen-lockfile --filter web
@@ -15,6 +17,8 @@ FROM node:22.23.4-bookworm-slim AS sandbox-build
 RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# sandbox-runtime's proxy, patched until upstream flushes a tunnel before closing it
+COPY patches patches/
 COPY apps/web/package.json apps/web/
 COPY packages/connectors/sandbox/package.json packages/connectors/sandbox/
 RUN pnpm install --frozen-lockfile --prod --filter swarmify-sandbox

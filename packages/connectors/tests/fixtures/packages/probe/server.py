@@ -16,9 +16,19 @@ def check_setup() -> dict[str, Any]:
     return {"ok": False, "message": "The probe service refused that key."}
 
 
-@mcp.tool(description="Answer with this process's environment.")
+@mcp.tool(
+    description="Answer with this process's environment and whether it wrote a file in its stage's"
+    " folder."
+)
 def environ(idempotency_key: str = "") -> dict[str, Any]:
-    return {"env": dict(os.environ)}
+    wrote = False
+    if folder := os.environ.get("SWARMIFY_STAGE_DIR"):
+        try:
+            with open(os.path.join(folder, "probe.txt"), "w") as file:
+                wrote = file.write("x") == 1
+        except OSError:
+            pass
+    return {"env": dict(os.environ), "wrote": wrote}
 
 
 @mcp.tool(description="Fail as a tool does when the provider refuses its access token.")
