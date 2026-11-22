@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from swarmify_kernel import new_id
@@ -157,5 +157,22 @@ def router(worlds: Worlds, memory: Memory, runtime: AgentRuntime) -> APIRouter:
         library = memory.library(world.id)
         reports = [a.fields["report"] for a in library if a.type == "eval" and "report" in a.fields]
         return sorted(reports, key=lambda r: r["created_at"], reverse=True)
+
+    @api.delete("/evals/{eval_id}", status_code=204, responses={404: {}})
+    def delete_eval(eval_id: str) -> Response:
+        """Delete the stored report. The trial worlds and runs it names stay."""
+        world = eval_world()
+        found = next(
+            (
+                a
+                for a in (memory.library(world.id) if world else [])
+                if a.type == "eval" and a.fields.get("report", {}).get("id") == eval_id
+            ),
+            None,
+        )
+        if world is None or found is None:
+            raise HTTPException(404, "eval report not found")
+        memory.remove_artifact(world.id, found.path)
+        return Response(status_code=204)
 
     return api

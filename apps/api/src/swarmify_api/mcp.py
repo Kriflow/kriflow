@@ -164,10 +164,13 @@ def server(
             "model": asdict(draft.model) if draft.model else None,
         }
 
-    @mcp.tool(description="List a world's workflows with their current version numbers.")
-    def list_workflows(world_id: str) -> list[dict[str, Any]]:
+    @mcp.tool(
+        description="List a world's workflows with their current version numbers. Archived"
+        " workflows are left out; with `archived`, they are listed too."
+    )
+    def list_workflows(world_id: str, archived: bool = False) -> list[dict[str, Any]]:
         reach(world_id)
-        return [asdict(w) for w in workflows.list_all(world_id)]
+        return [asdict(w) for w in workflows.list_all(world_id, None if archived else False)]
 
     @mcp.tool(description="Get a workflow version: its YAML and parsed stages. Latest by default.")
     def get_workflow(workflow_id: str, version: int | None = None) -> dict[str, Any]:
@@ -486,6 +489,14 @@ def server(
                 )
             ),
         )
+
+    @mcp.tool(
+        description="Delete an Entry of a World List. Refused while a run that has not ended"
+        " holds it."
+    )
+    def delete_entry(world_id: str, list: str, key: str) -> dict[str, Any]:
+        listed(world_id, lambda: world_lists.delete_entry(world_id, list, key, by=who()))
+        return {"deleted": key}
 
     @mcp.tool(description="List every open gate across all worlds and runs, newest first.")
     def list_gates() -> list[dict[str, Any]]:

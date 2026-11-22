@@ -18,7 +18,12 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 
 def _workflow(row: sqlite3.Row) -> Workflow:
     return Workflow(
-        row["id"], row["world_id"], row["name"], row["current_version"], row["created_at"]
+        row["id"],
+        row["world_id"],
+        row["name"],
+        row["current_version"],
+        row["created_at"],
+        row["archived_at"],
     )
 
 
@@ -102,12 +107,30 @@ class SqliteStorage:
         row = conn.execute("SELECT * FROM workflow_versions WHERE id = ?", (version_id,)).fetchone()
         return _version(row)
 
-    def list_workflows(self, world_id: str) -> list[Workflow]:
+    def list_workflows(self, world_id: str, archived: bool | None = None) -> list[Workflow]:
+        where = {None: "", False: " AND archived_at IS NULL", True: " AND archived_at IS NOT NULL"}
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM workflows WHERE world_id = ? ORDER BY created_at, id", (world_id,)
+                f"SELECT * FROM workflows WHERE world_id = ?{where[archived]}"
+                " ORDER BY created_at, id",
+                (world_id,),
             ).fetchall()
             return [_workflow(r) for r in rows]
+
+    def set_archived(
+        self, workflow_id: str, archived_at: str | None, event: Event
+    ) -> Workflow | None:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            changed = conn.execute(
+                "UPDATE workflows SET archived_at = ? WHERE id = ? AND archived_at IS NOT ?",
+                (archived_at, workflow_id, archived_at),
+            ).rowcount
+            if changed:
+                append(conn, event)
+            row = conn.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
+            conn.execute("COMMIT")
+            return _workflow(row) if row else None
 
     def get_workflow(self, workflow_id: str) -> Workflow | None:
         with self._conn() as conn:
@@ -134,11 +157,12 @@ class SqliteStorage:
         with self._conn() as conn:
             conn.execute("DELETE FROM workflows WHERE world_id = ?", (world_id,))
 
-    def current_yaml(self) -> dict[str, str]:
+    def current_yaml(self, archived: bool = True) -> dict[str, str]:
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT w.id, v.yaml FROM workflows w JOIN workflow_versions v"
                 " ON v.workflow_id = w.id AND v.number = w.current_version"
+                + ("" if archived else " WHERE w.archived_at IS NULL")
             ).fetchall()
             return {r["id"]: r["yaml"] for r in rows}
 

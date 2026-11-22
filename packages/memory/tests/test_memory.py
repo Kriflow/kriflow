@@ -319,3 +319,10 @@ def test_assets_are_renamed_in_their_folder_and_deleted_never_outside(memory: Me
         with pytest.raises(ValueError):
             memory.remove_asset("w1", path)
     assert memory.assets("w1") == ["assets/bed-calm.mp3"]
+    # A run artifact is deleted with its sidecar; nothing outside the runs is.
+    memory.write_artifact("w1", "run_1", "s1", "a", "cut.mp4", "MP4")
+    memory.write_artifact("w1", "run_1", "s1", "a", "keep.md", "x")
+    with pytest.raises(ValueError):
+        memory.remove_artifact("w1", "notes.md")
+    memory.remove_artifact("w1", "runs/run_1/s1/artifacts/cut.mp4")
+    assert [a.name for a in memory.library("w1")] == ["keep.md"]

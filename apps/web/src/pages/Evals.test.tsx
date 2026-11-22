@@ -5,7 +5,7 @@ import "../index.css";
 
 import type { components } from "../api/schema";
 import { FakeEventSource, fakeFetch } from "../test/fakes";
-import { mountAt } from "../test/mount";
+import { answerConfirm, mountAt } from "../test/mount";
 
 type Report = components["schemas"]["EvalReport"];
 type Trial = components["schemas"]["Trial"];
@@ -129,4 +129,38 @@ test("on a phone, while the evals load, the title is real and the reports wait a
   release();
   await expect.element(screen.getByTestId("eval")).toBeVisible();
   expect(document.querySelector("main [aria-busy='true']")).toBeNull();
+});
+
+test("on a phone an eval is deleted after a confirm, and Cancel keeps it", async () => {
+  await page.viewport(390, 844);
+  const deleted: string[] = [];
+  fakeFetch({
+    "GET /api/evals": () =>
+      Response.json([
+        report("eval_2", "2026-10-27T10:00:00+00:00", "The swarm wins: newer."),
+        report("eval_1", "2026-10-20T10:00:00+00:00", "The swarm does not win: older."),
+      ]),
+    "DELETE /api/evals/eval_1": () => {
+      deleted.push("eval_1");
+      return new Response(null, { status: 204 });
+    },
+  });
+  const { screen } = await mountAt("/evals");
+  const older = screen.getByTestId("eval").nth(1);
+  const remove = older.getByRole("button", { name: /^Delete the eval of/ });
+  await expect.element(remove).toBeVisible();
+  expect(remove.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+
+  await remove.click();
+  await answerConfirm(screen, "Cancel");
+  expect(deleted).toEqual([]);
+  expect(screen.getByTestId("eval").elements()).toHaveLength(2);
+
+  await remove.click();
+  expect(await answerConfirm(screen, "Delete")).toMatch(/Delete the eval of .*go for good.*trial runs stay/);
+  await vi.waitFor(() => expect(deleted).toEqual(["eval_1"]));
+  await expect.element(screen.getByText("Eval deleted.")).toBeVisible();
+  expect(screen.getByTestId("eval").elements()).toHaveLength(1);
+  await expect.element(screen.getByTestId("eval")).toMatchTextContent(/newer/);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });

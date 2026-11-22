@@ -155,3 +155,44 @@ test("on a phone, while the workflows load, four rows wait as skeletons, then th
   expect(document.querySelector("main [aria-busy='true']")).toBeNull();
   expect(screen.getByTestId("workflow-row").first().element().parentElement?.classList).toContain("stagger");
 });
+
+test("a workflow archives from its menu after a confirm, then shows under Show archived with Restore", async () => {
+  await page.viewport(390, 844);
+  const listed = [...workflows, { id: "wf_3", world_id: "world_1", name: "Old idea", current_version: 1, created_at: ts, archived_at: ts }];
+  const asked: string[] = [];
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([{ id: "world_1", name: "Video", purpose: "", created_at: ts }]),
+    "GET /api/gates": () => Response.json([]),
+    "GET /api/worlds/world_1/workflows": (req) => {
+      asked.push(new URL(req.url).search);
+      return Response.json(listed);
+    },
+    "GET /api/worlds/world_1/runs": () => Response.json(runs),
+    "POST /api/workflows/wf_1/archive": () => Response.json({ ...workflows[0], archived_at: ts }),
+    "POST /api/workflows/wf_3/restore": () => Response.json({ ...listed[2], archived_at: null }),
+  });
+  const { screen } = await mountAt("/worlds/world_1/workflows");
+  const rows = screen.getByTestId("workflow-row");
+  await expect.element(rows.first()).toMatchTextContent(/Weekly short/);
+  await expect.poll(() => rows.elements().length).toBe(2); // the archived one is hidden
+  expect(asked.every((q) => q.includes("archived=true"))).toBe(true);
+  const toggle = screen.getByRole("button", { name: "Show archived (1)" });
+  await expect.element(toggle).toBeVisible();
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+
+  await screen.getByRole("button", { name: "More for Weekly short" }).click();
+  await screen.getByRole("menuitem", { name: /Archive/ }).click();
+  const dialog = screen.getByRole("dialog");
+  await expect.element(dialog).toMatchTextContent(/Archive Weekly short\?.*Runs already going keep going/);
+  await dialog.getByRole("button", { name: "Archive" }).click();
+  await expect.element(screen.getByRole("button", { name: "Show archived (2)" })).toBeVisible();
+  await expect.poll(() => rows.elements().length).toBe(1);
+
+  await screen.getByRole("button", { name: "Show archived (2)" }).click();
+  await expect.poll(() => rows.elements().length).toBe(3);
+  const restore = screen.getByRole("button", { name: "Restore Old idea" });
+  expect(restore.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await restore.click();
+  await expect.element(screen.getByRole("button", { name: "Show archived (1)" })).toBeVisible();
+  await expect.element(rows.nth(2)).not.toMatchTextContent(/archived/);
+});

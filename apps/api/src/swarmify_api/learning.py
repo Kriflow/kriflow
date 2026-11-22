@@ -64,11 +64,34 @@ def router(
             raise HTTPException(404, "world not found")
 
     @api.get("/worlds/{world_id}/skills")
-    def list_skills(world_id: str) -> list[Skill]:
+    def list_skills(world_id: str, archived: bool = False) -> list[Skill]:
         """Every skill the world's agents load: its own (with version and the run that produced
-        it) and the shared ones it has not overridden."""
+        it) and the shared ones it has not overridden. `archived` adds the archived ones, each
+        with its `archived_at`."""
         world_or_404(world_id)
-        return learning.skills(world_id)
+        return learning.skills(world_id, archived)
+
+    @api.post("/worlds/{world_id}/skills/{name}/archive", responses={404: {}, 409: {}})
+    def archive_skill(world_id: str, name: str) -> Skill:
+        """Archive the skill, the world's own or a shared one: no stage that starts from now on
+        loads it, and the list hides it. Its versions stay. 409 when it is archived already."""
+        world_or_404(world_id)
+        try:
+            return learning.archive_skill(world_id, name)
+        except KeyError as exc:
+            raise HTTPException(404, "skill not found") from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @api.post("/worlds/{world_id}/skills/{name}/restore", responses={404: {}, 409: {}})
+    def restore_skill(world_id: str, name: str) -> Skill:
+        """Restore an archived skill: every stage that starts from now on loads it again. 409
+        when it is not archived."""
+        world_or_404(world_id)
+        try:
+            return learning.restore_skill(world_id, name)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @api.post("/worlds/{world_id}/skills", status_code=201, responses={422: {}})
     def write_skill(world_id: str, body: NewSkill) -> Skill:

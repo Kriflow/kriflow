@@ -49,8 +49,12 @@ export function Cast() {
   const [error, setError] = useState<string | null>(null);
   const [skills, setSkills] = useState<Skill[] | null | undefined>(undefined);
   const [skillHistory, setSkillHistory] = useState<{ name: string; versions: SkillVersion[] } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const models = useModels();
   const phone = usePhone();
+  const live = (skills ?? []).filter((sk) => !sk.archived_at);
+  const archived = (skills ?? []).filter((sk) => sk.archived_at);
+  const shown = showArchived ? (skills ?? []) : live;
 
   useEffect(() => {
     api
@@ -58,7 +62,7 @@ export function Cast() {
       .then(({ data }) => setWorld(data ?? null))
       .catch(() => undefined);
     api
-      .GET("/api/worlds/{world_id}/skills", path)
+      .GET("/api/worlds/{world_id}/skills", { params: { path: { world_id: worldId }, query: { archived: true } } })
       .then(({ data }) => setSkills(data ?? null))
       .catch(() => setSkills(null));
     api
@@ -157,6 +161,33 @@ export function Cast() {
     setSkills((prev) => (prev ?? []).map((sk) => (sk.name === data.name ? data : sk)));
     notify(`Restored v${v.number} of ${v.name} as v${data.version ?? next}.`, { tone: "ok" });
     void showSkillHistory(v.name);
+  }
+
+  /** Archive keeps a skill out of every stage from now on; Restore loads it again. */
+  async function archiveSkill(sk: Skill, archive: boolean) {
+    if (
+      archive &&
+      !(await confirm({
+        title: `Archive ${sk.name}?`,
+        lines: ["No stage that starts from now on loads it.", "Its versions stay; Restore brings it back."],
+        action: "Archive",
+      }))
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    const params = { params: { path: { world_id: worldId, name: sk.name } } };
+    const { data } = archive
+      ? await api.POST("/api/worlds/{world_id}/skills/{name}/archive", params)
+      : await api.POST("/api/worlds/{world_id}/skills/{name}/restore", params);
+    setBusy(false);
+    if (!data) {
+      setError(`Could not ${archive ? "archive" : "restore"} ${sk.name}. Try again.`);
+      return;
+    }
+    setSkills((prev) => (prev ?? []).map((x) => (x.name === data.name ? data : x)));
+    if (archive && skillHistory?.name === sk.name) setSkillHistory(null);
+    notify(archive ? `Archived ${sk.name}.` : `Restored ${sk.name}. Every stage that starts from now on loads it.`, { tone: "ok" });
   }
 
   async function showHistory(name: string) {
@@ -355,7 +386,7 @@ export function Cast() {
       <section aria-labelledby="skills" className="panel skills">
         <div className="panel-head">
           <h2 id="skills">Skills</h2>
-          {skills && <span className="faint">{skills.length} in this world</span>}
+          {skills && <span className="faint">{live.length} in this world</span>}
         </div>
         <Intro lead="Procedures the cast loads when they match a stage." label="About skills">
           <p>
@@ -371,19 +402,19 @@ export function Cast() {
           </Loading>
         )}
         {skills === null && <p className="faint">Could not load the skills.</p>}
-        {skills?.length === 0 && (
+        {skills && live.length === 0 && (
           <p className="faint" data-testid="no-skills">
             No skills yet. The first arrives when you approve a retro proposal or promote a
             library artifact.
           </p>
         )}
-        {skills && skills.length > 0 && (
+        {shown.length > 0 && (
           <ul className="skill-list" data-testid="skills">
-            {skills.map((sk) => (
+            {shown.map((sk) => (
               <li key={sk.name} data-testid={`skill-${sk.name}`}>
                 <span className="row">
                   <b>{sk.name}</b>
-                  <span className="chip">{sk.source === "shared" ? "shared" : "this world"}</span>
+                  <span className="chip">{sk.archived_at ? "archived" : sk.source === "shared" ? "shared" : "this world"}</span>
                 </span>
                 <span>{sk.description || "No description."}</span>
                 <span className="faint">
@@ -406,8 +437,8 @@ export function Cast() {
                     </>
                   )}
                 </span>
-                {sk.source === "world" && sk.version !== null && (
-                  <span className="row">
+                <span className="skill-actions">
+                  {sk.source === "world" && sk.version !== null && !sk.archived_at && (
                     <button
                       type="button"
                       onClick={() => (skillHistory?.name === sk.name ? setSkillHistory(null) : void showSkillHistory(sk.name))}
@@ -415,8 +446,11 @@ export function Cast() {
                     >
                       {skillHistory?.name === sk.name ? "Hide history" : "History"}
                     </button>
-                  </span>
-                )}
+                  )}
+                  <button type="button" disabled={busy} onClick={() => void archiveSkill(sk, !sk.archived_at)} aria-label={`${sk.archived_at ? "Restore" : "Archive"} skill ${sk.name}`}>
+                    {sk.archived_at ? "Restore" : "Archive"}
+                  </button>
+                </span>
                 {skillHistory?.name === sk.name && sk.version !== null && (
                   <ol className="versions" data-testid="skill-history">
                     {skillHistory.versions.map((v) => (
@@ -444,6 +478,11 @@ export function Cast() {
               </li>
             ))}
           </ul>
+        )}
+        {archived.length > 0 && (
+          <button type="button" className="skill-archived-toggle" onClick={() => setShowArchived(!showArchived)} aria-pressed={showArchived}>
+            {showArchived ? "Hide archived" : `Show archived (${archived.length})`}
+          </button>
         )}
       </section>
       <p className="faint">

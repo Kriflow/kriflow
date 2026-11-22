@@ -193,3 +193,41 @@ def test_a_recurring_send_back_puts_the_yaml_in_front_of_the_retro_and_keeps_its
     ask = FakeAsk({"skill": None, "workflow": None})
     assert learning.retro(WORLD, "run_1", "s", "wf_2", yaml, other, ask) is None
     assert "repeated in" not in ask.prompts[0]
+
+
+def test_an_archived_skill_leaves_the_folder_agents_load_and_restore_brings_it_back(
+    learning: Learning, tmp_path: Path
+) -> None:
+    write_shared(tmp_path, "cite", SHARED)
+    learning.write_skill(WORLD, "hooks", SKILL, run_id="run_1")
+    world_skills = tmp_path / "worlds" / WORLD / "skills"
+
+    own = learning.archive_skill(WORLD, "hooks")
+    shared = learning.archive_skill(WORLD, "cite")
+    assert own.archived_at and shared.archived_at
+    learning.sync(WORLD)  # what every stage start does
+    assert not (world_skills / "hooks").exists() and not (world_skills / "cite").exists()
+    assert learning.skills(WORLD) == []
+    assert [(s.name, s.source, s.version, s.archived_at is not None) for s in
+            learning.skills(WORLD, archived=True)] == [
+        ("cite", "shared", None, True),
+        ("hooks", "world", 1, True),
+    ]  # fmt: skip
+    with pytest.raises(ValueError, match="already archived"):
+        learning.archive_skill(WORLD, "hooks")
+    with pytest.raises(KeyError):
+        learning.archive_skill(WORLD, "nope")
+
+    restored = learning.restore_skill(WORLD, "hooks")
+    assert (restored.source, restored.version, restored.archived_at) == ("world", 1, None)
+    assert (world_skills / "hooks" / "SKILL.md").read_text() == SKILL
+    with pytest.raises(ValueError, match="not archived"):
+        learning.restore_skill(WORLD, "hooks")
+
+    # A new version of an archived skill brings it back.
+    learning.archive_skill(WORLD, "hooks")
+    again = learning.write_skill(WORLD, "hooks", SKILL.replace("first", "early"))
+    assert (again.version, again.archived_at) == (2, None)
+    learning.restore_skill(WORLD, "cite")
+    assert [s.name for s in learning.skills(WORLD)] == ["cite", "hooks"]
+    assert (world_skills / "cite").is_symlink()

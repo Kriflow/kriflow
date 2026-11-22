@@ -284,3 +284,50 @@ test("at 360 wide the cast is a compact list, each row opening the agent's sheet
   await expect.element(sheet).not.toBeInTheDocument();
   await page.viewport(1280, 800);
 });
+
+test("on a phone a skill is archived after a confirm, hidden, and restored from the archived view", async () => {
+  await page.viewport(390, 844);
+  const skill = (name: string, archived_at: string | null = null) => ({
+    name,
+    description: `About ${name}.`,
+    source: "world",
+    path: `worlds/world_1/skills/${name}/SKILL.md`,
+    content: "",
+    version: 1,
+    run_id: null,
+    created_at: video.created_at,
+    archived_at,
+  });
+  const calls: string[] = [];
+  fakeFetch({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "GET /api/worlds/world_1/cast": () => Response.json(cast),
+    "GET /api/worlds/world_1/skills": (req) => {
+      calls.push(new URL(req.url).search);
+      return Response.json([skill("hooks"), skill("old", video.created_at)]);
+    },
+    "POST /api/worlds/world_1/skills/hooks/archive": () => Response.json(skill("hooks", "2026-11-22T10:00:00+00:00")),
+    "POST /api/worlds/world_1/skills/hooks/restore": () => Response.json(skill("hooks")),
+  });
+  const { screen } = await mountAt("/worlds/world_1/cast");
+  await expect.element(screen.getByTestId("skill-hooks")).toBeVisible();
+  expect(calls).toEqual(["?archived=true"]);
+  await expect.element(screen.getByTestId("skill-old")).not.toBeInTheDocument();
+  await expect.element(screen.getByText("1 in this world")).toBeVisible();
+
+  const archive = screen.getByRole("button", { name: "Archive skill hooks" });
+  expect(archive.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await archive.click();
+  expect(await answerConfirm(screen, "Archive")).toMatch(/Archive hooks\?.*No stage that starts from now on loads it/);
+  await expect.element(screen.getByTestId("skill-hooks")).not.toBeInTheDocument();
+  await expect.element(screen.getByTestId("no-skills")).toBeVisible();
+
+  const toggle = screen.getByRole("button", { name: "Show archived (2)" });
+  expect(toggle.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await toggle.click();
+  await expect.element(screen.getByTestId("skill-hooks")).toMatchTextContent(/hooks.*archived/);
+  await screen.getByRole("button", { name: "Restore skill hooks" }).click();
+  await expect.element(screen.getByText(/Restored hooks\./)).toBeVisible();
+  await expect.element(screen.getByTestId("skill-hooks")).toMatchTextContent(/hooks.*this world/);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});

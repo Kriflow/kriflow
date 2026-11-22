@@ -53,6 +53,9 @@ export type WorldEvents = {
   /** A World List's Entry was added or changed: which list and key. */
   "entry.added": { list: string; key: string };
   "entry.changed": { list: string; key: string };
+  "entry.deleted": { list: string; key: string };
+  /** A World List was deleted with its Entries. */
+  "list.deleted": { list: string };
 };
 type Handlers = { [K in keyof WorldEvents]?: (payload: WorldEvents[K]) => void };
 const TYPES: (keyof WorldEvents)[] = [
@@ -67,6 +70,8 @@ const TYPES: (keyof WorldEvents)[] = [
   "workflow.saved",
   "entry.added",
   "entry.changed",
+  "entry.deleted",
+  "list.deleted",
 ];
 
 /** The event-log position a snapshot response reflects: the API stamps every GET with it. Null

@@ -1,12 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
+import { useConfirm } from "../Dialog";
 import { api } from "../api/client";
 import { money, took } from "../api/runs";
 import type { components } from "../api/schema";
 import { Empty } from "../Empty";
 import { Loading, Skeleton } from "../Skeleton";
 import { baseline, cap } from "../skin";
+import { notify } from "../Toast";
 
 type Report = components["schemas"]["EvalReport"];
 type Trial = components["schemas"]["Trial"];
@@ -29,6 +31,24 @@ const EVAL_DOCS = "https://github.com/wagleanuj/swarmify#eval-baseline-against-s
 export function Evals() {
   const [reports, setReports] = useState<Report[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, dialog] = useConfirm();
+
+  async function remove(r: Report) {
+    const ok = await confirm({
+      title: `Delete the eval of ${when(r.created_at)}?`,
+      lines: ["Its report, trials and the judge's picks go for good.", "The trial runs stay in their worlds."],
+      action: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    const { error } = await api.DELETE("/api/evals/{eval_id}", { params: { path: { eval_id: r.id } } });
+    if (error) {
+      setError("Could not delete the eval. Try again.");
+      return;
+    }
+    setReports((prev) => (prev ?? []).filter((x) => x.id !== r.id));
+    notify("Eval deleted.", { tone: "ok" });
+  }
 
   useEffect(() => {
     api
@@ -80,9 +100,10 @@ export function Evals() {
             arm made it. Cost is the runtime's estimate, not billing.
           </p>
           <Kinds reports={reports} />
-          <div className="eval-list stagger">{reports.map((r) => <Eval key={r.id} report={r} />)}</div>
+          <div className="eval-list stagger">{reports.map((r) => <Eval key={r.id} report={r} onDelete={() => void remove(r)} />)}</div>
         </>
       )}
+      {dialog}
     </main>
   );
 }
@@ -149,7 +170,7 @@ function Kinds({ reports }: { reports: Report[] }) {
 }
 
 /** One report: its verdict, baseline against swarm in one table, then the judge's picks and every trial. */
-function Eval({ report }: { report: Report }) {
+function Eval({ report, onDelete }: { report: Report; onDelete: () => void }) {
   return (
     <section className="panel" data-testid="eval" aria-label={`Eval of ${when(report.created_at)}`}>
       <div className="panel-head">
@@ -253,9 +274,14 @@ function Eval({ report }: { report: Report }) {
           </tbody>
         </table>
       </details>
-      <p className="faint">
-        {report.tasks} {report.tasks === 1 ? "task" : "tasks"}, k={report.k}
-      </p>
+      <div className="row">
+        <p className="faint">
+          {report.tasks} {report.tasks === 1 ? "task" : "tasks"}, k={report.k}
+        </p>
+        <button type="button" className="danger" onClick={onDelete} aria-label={`Delete the eval of ${when(report.created_at)}`}>
+          Delete
+        </button>
+      </div>
     </section>
   );
 }

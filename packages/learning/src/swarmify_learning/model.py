@@ -43,6 +43,8 @@ class Skill:
     """The world's current version number; None for a shared or hand-written skill."""
     run_id: str | None = None
     created_at: str | None = None
+    archived_at: str | None = None
+    """When it was archived, so no stage loads it; None while it is live."""
 
 
 @dataclass(frozen=True)

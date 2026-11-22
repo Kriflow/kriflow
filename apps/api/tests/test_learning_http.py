@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fake_graph import fake_extract
-from swarmify_api.main import create_app
+from swarmify_api.main import create_app, world_service
 from swarmify_connectors import FakeTransport
 from swarmify_memory import FakeGraphIndex
 from swarmify_swarm import SdkRuntime, tool_id
@@ -411,3 +411,50 @@ def test_the_retro_runs_on_the_casts_retro_model(running: TestClient, script: Sc
     models = {a["name"]: a["model"] for a in running.get(f"/api/runs/{run['id']}/agents").json()}
     assert models["retro"] == "claude-haiku-4-5"
     assert models["worker-1"] == "claude-opus-5-5"  # the global default
+
+
+def test_an_archived_skill_is_hidden_left_out_of_the_next_stage_and_restored(
+    running: TestClient, script: Script, tmp_path: Path
+) -> None:
+    script.scripts, script.cycle = [PLAN, WORK, PASS, QUIET], True
+    world, workflow = setup(running)
+    shared = tmp_path / "skills" / "cite"
+    shared.mkdir(parents=True)
+    (shared / "SKILL.md").write_text(CITE)
+    saved = running.post(f"/api/worlds/{world}/skills", json={"name": "hooks", "content": HOOKS})
+    assert saved.status_code == 201, saved.json()
+
+    archived = running.post(f"/api/worlds/{world}/skills/hooks/archive")
+    assert archived.status_code == 200, archived.json()
+    assert archived.json()["archived_at"]
+    assert [s["name"] for s in running.get(f"/api/worlds/{world}/skills").json()] == ["cite"]
+    shown = running.get(f"/api/worlds/{world}/skills?archived=true").json()
+    assert [(s["name"], s["archived_at"] is not None) for s in shown] == [
+        ("cite", False),
+        ("hooks", True),
+    ]
+    assert running.post(f"/api/worlds/{world}/skills/hooks/archive").status_code == 409
+    assert running.post(f"/api/worlds/{world}/skills/nope/archive").status_code == 404
+    assert running.post("/api/worlds/world_nope/skills/hooks/archive").status_code == 404
+    assert running.post(f"/api/worlds/{world}/skills/cite/restore").status_code == 409
+    assert running.post("/api/worlds/world_nope/skills/cite/restore").status_code == 404
+    types = [e.type for e in world_service(tmp_path).events_after(world)]
+    assert "skill.archived" in types
+
+    # The next stage loads only what is live.
+    run = run_to_review(running, workflow)
+    until(lambda: get(running, run["id"])["status"] == "done")
+    agents = running.get(f"/api/runs/{run['id']}/agents").json()
+    assert all(a["skills"] == [f"{world}:cite"] for a in agents), agents
+
+    restored = running.post(f"/api/worlds/{world}/skills/hooks/restore")
+    assert restored.status_code == 200 and restored.json()["archived_at"] is None
+    assert [s["name"] for s in running.get(f"/api/worlds/{world}/skills").json()] == [
+        "cite",
+        "hooks",
+    ]
+    assert "skill.restored" in [e.type for e in world_service(tmp_path).events_after(world)]
+    run = run_to_review(running, workflow)
+    until(lambda: get(running, run["id"])["status"] == "done")
+    agents = running.get(f"/api/runs/{run['id']}/agents").json()
+    assert all(a["skills"] == [f"{world}:cite", f"{world}:hooks"] for a in agents), agents

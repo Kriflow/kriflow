@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from swarmify_api.eval_harness import Settings, main, run_eval
-from swarmify_api.main import create_app
+from swarmify_api.main import create_app, world_service
 from swarmify_learning.evals import TASKS, blind_order
 from swarmify_memory import FakeGraphIndex
 from swarmify_swarm import SdkRuntime, tool_id
@@ -265,3 +265,28 @@ def test_a_pair_the_judge_cannot_decide_is_left_out_and_the_judge_route_checks_i
     gone = {"world_id": "world_gone", "run_id": "run_1"}
     pair = {"task_id": TASK.id, "baseline": side, "swarm": gone}
     assert running.post("/api/evals/judge", json=pair).status_code == 404
+
+
+def test_a_report_is_deleted_with_an_event_and_a_missing_one_is_404(
+    running: TestClient, tmp_path: Path
+) -> None:
+    trial = {
+        "task_id": TASK.id, "arm": "baseline", "index": 0, "world_id": "world_1",
+        "run_id": "run_1", "status": "done", "cost_usd": 0.1, "duration_s": 1.0,
+    }  # fmt: skip
+    body = {"k": 1, "trials": [trial, {**trial, "arm": "swarm"}]}
+    first = running.post("/api/evals", json=body).json()["id"]
+    second = running.post("/api/evals", json=body).json()["id"]
+    assert running.delete("/api/evals/eval_nope").status_code == 404
+
+    gone = running.delete(f"/api/evals/{first}")
+    assert gone.status_code == 204
+    assert [r["id"] for r in running.get("/api/evals").json()] == [second]
+    assert running.delete(f"/api/evals/{first}").status_code == 404
+    world = running.get("/api/worlds").json()[0]["id"]
+    assert not (tmp_path / "worlds" / world / "runs" / first).exists()
+    events = world_service(tmp_path).events_after(world)
+    deleted = [e for e in events if e.type == "artifact.deleted"]
+    assert [(e.run_id, e.payload["path"]) for e in deleted] == [
+        (first, f"runs/{first}/report/artifacts/report.md")
+    ]

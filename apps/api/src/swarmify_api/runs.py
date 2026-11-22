@@ -31,7 +31,14 @@ from swarmify_runs import (
 from swarmify_runs.control import run_folder
 from swarmify_swarm import OPERATOR, Task
 from swarmify_swarm.network import Waiting
-from swarmify_workflows import Invalid, Stage, Workflows, WorkflowVersion, dump_workflow
+from swarmify_workflows import (
+    Invalid,
+    Stage,
+    Violation,
+    Workflows,
+    WorkflowVersion,
+    dump_workflow,
+)
 from swarmify_worlds import MAX_AGENTS, Worlds
 
 DONE_WHEN = "The goal is met and what was found is written down as notes and artifacts."
@@ -196,6 +203,14 @@ ACTION_ERRORS: dict[int | str, dict[str, Any]] = {
 }
 
 
+class Archived(Invalid):
+    """A run start of an archived workflow: refused until it is restored."""
+
+    def __init__(self, name: str) -> None:
+        message = f"{name} is archived. Restore it to run it."
+        super().__init__([Violation("archived", message, None)])
+
+
 def stage_def(stage: Stage) -> StageDef:
     fields = asdict(stage)
     return StageDef(fields.pop("name"), fields.pop("type"), fields)
@@ -218,12 +233,14 @@ def pinner(workflows: Workflows) -> Callable[..., Pinned]:
     MCP), so it runs today's workflow check first, at the package versions the version
     recorded, which the run will use: rules and connectors change after a version is saved.
     Raises KeyError for an unknown workflow or version, Invalid when the version fails the
-    check."""
+    check or the workflow is archived."""
 
     def pin(workflow_id: str, number: int | None = None) -> Pinned:
         workflow = workflows.get(workflow_id)
         if workflow is None:
             raise KeyError(f"workflow not found: {workflow_id}")
+        if workflow.archived_at is not None:
+            raise Archived(workflow.name)
         version = workflows.version(workflow_id, number or workflow.current_version)
         if version is None:
             raise KeyError(f"version not found: {workflow_id} v{number}")
@@ -340,7 +357,11 @@ def starting(start: Callable[[], Run]) -> Run | JSONResponse:
     try:
         return act(start)
     except Invalid as exc:
-        detail = f"This version fails today's workflow check: {exc}"
+        detail = (
+            str(exc)
+            if isinstance(exc, Archived)
+            else f"This version fails today's workflow check: {exc}"
+        )
         violations = jsonable_encoder(exc.violations)
         return JSONResponse(status_code=409, content={"detail": detail, "violations": violations})
 
@@ -536,12 +557,14 @@ def router(
         response: Response,
         limit: Annotated[int | None, Query(ge=1, le=500)] = None,
         before: str | None = None,
+        archived: bool = False,
     ) -> list[Run]:
-        """Every run, newest first. With `limit`, one page of them: `X-Next-Before` names the
-        last run when more follow, and `?before=<it>` lists the next page."""
+        """Every run not archived, newest first, or with `archived` the archived ones too. With
+        `limit`, one page of them: `X-Next-Before` names the last run when more follow, and
+        `?before=<it>` lists the next page."""
         if worlds.get(world_id) is None:
             raise HTTPException(404, "world not found")
-        runs = runner.list_all(world_id, limit and limit + 1, before)
+        runs = runner.list_all(world_id, limit and limit + 1, before, None if archived else False)
         if limit and len(runs) > limit:
             runs = runs[:limit]
             response.headers["X-Next-Before"] = runs[-1].id
@@ -653,6 +676,17 @@ def router(
         finishes. 409 when no such stage is running or waiting, or an Item is not ready for
         it, 404 for an unknown Item, 422 for a send-back without a note."""
         return act(lambda: runner.review_items(run_id, body.approve, body.send_back, OPERATOR))
+
+    @api.post("/runs/{run_id}/archive", responses=ACTION_ERRORS)
+    def archive(run_id: str) -> Run:
+        """Archive a finished run and its child runs: left out of the runs list and its counts,
+        still opened by link. 409 while the run or a child of it is live."""
+        return act(lambda: runner.archive(run_id))
+
+    @api.post("/runs/{run_id}/restore", responses=ACTION_ERRORS)
+    def restore(run_id: str) -> Run:
+        """Undo an archive, for the run and its child runs."""
+        return act(lambda: runner.restore(run_id))
 
     @api.post("/runs/{run_id}/pause", responses=ACTION_ERRORS)
     def pause(run_id: str) -> Run:

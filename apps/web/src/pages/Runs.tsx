@@ -60,6 +60,7 @@ export function Runs() {
   // The last loaded run when older ones follow (the API's X-Next-Before), else null.
   const [next, setNext] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const shownWorld = useRef<string | null>(null);
   const sentinel = useRef<HTMLDivElement>(null);
 
@@ -75,11 +76,11 @@ export function Runs() {
 
   useEffect(() => {
     api
-      .GET("/api/worlds/{world_id}/workflows", { params: { path: { world_id: worldId }, query: { check: false } } })
+      .GET("/api/worlds/{world_id}/workflows", { params: { path: { world_id: worldId }, query: { check: false, archived: true } } })
       .then(({ data }) => setWorkflows(data ?? []))
       .catch(() => undefined);
     api
-      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId }, query: { limit: PAGE } } })
+      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId }, query: { limit: PAGE, archived: true } } })
       .then(({ data, error, response }) => {
         if (error || !data) throw new Error("load failed");
         // A refresh reloads only the first page and keeps the older pages already loaded.
@@ -97,7 +98,7 @@ export function Runs() {
     if (!next || more) return;
     setMore(true);
     api
-      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId }, query: { limit: PAGE, before: next } } })
+      .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId }, query: { limit: PAGE, before: next, archived: true } } })
       .then(({ data, error, response }) => {
         if (error || !data) throw new Error("load failed");
         setRuns((prev) => {
@@ -121,7 +122,9 @@ export function Runs() {
 
   // ponytail: filtered here, not by the API, so live updates land in the same filter; the tabs
   // count the loaded pages only. Filter in the API if a tab must count every run.
-  const all = runs ?? [];
+  // Archived runs load with the rest and count nowhere until shown.
+  const archivedCount = (runs ?? []).filter((r) => r.archived_at).length;
+  const all = (runs ?? []).filter((r) => showArchived || !r.archived_at);
   const ofWorkflow = all.filter(
     (r) => !workflow || (workflow === AD_HOC ? r.workflow_id === null : r.workflow_id === workflow),
   );
@@ -143,8 +146,8 @@ export function Runs() {
         <div>
           <h1>Runs</h1>
           <p className="sub">
-            {runs && runs.length > 0
-              ? `${next ? "Latest " : ""}${runs.length} ${runs.length === 1 ? "run" : "runs"}, ${money(spentOf(runs))} spent. ${
+            {all.length > 0
+              ? `${next ? "Latest " : ""}${all.length} ${all.length === 1 ? "run" : "runs"}, ${money(spentOf(all))} spent. ${
                   steps[0] ? `Most of the time went to ${steps[0][0]}: ${clock(steps[0][1].secs)} across these runs.` : ""
                 }`
               : "Every run of this world, newest first. Statuses update live."}
@@ -187,7 +190,7 @@ export function Runs() {
               Workflow
               <select value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
                 <option value="">All workflows</option>
-                {workflows.map((w) => (
+                {workflows.filter((w) => !w.archived_at).map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
@@ -195,6 +198,11 @@ export function Runs() {
                 <option value={AD_HOC}>Ad hoc</option>
               </select>
             </label>
+            {archivedCount > 0 && (
+              <button type="button" className="chip-button" aria-pressed={showArchived} onClick={() => setShowArchived(!showArchived)}>
+                Show archived ({archivedCount})
+              </button>
+            )}
           </form>
           <section className="panel runs-panel">
             {runs === null ? (
@@ -230,6 +238,7 @@ export function Runs() {
                               {r.name}
                             </Link>{" "}
                             <span className="faint">{version(r)}</span>
+                            {r.archived_at && <span className="chip">archived</span>}
                           </span>
                           {(r.parent || r.forked_from || r.baseline) && (
                             <span className="faint relation">

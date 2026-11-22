@@ -316,9 +316,13 @@ class Runner(RunControl):
         return run
 
     def list_all(
-        self, world_id: str, limit: int | None = None, before: str | None = None
+        self,
+        world_id: str,
+        limit: int | None = None,
+        before: str | None = None,
+        archived: bool | None = None,
     ) -> list[Run]:
-        return self.storage.list_runs(world_id, limit, before)
+        return self.storage.list_runs(world_id, limit, before, archived)
 
     def set_cap(self, world_id: str) -> None:
         """Register (or update) the world's queues, its slots with its current cap. Call it when
@@ -917,7 +921,11 @@ def _start_item(
     """Record the child run of one Item, with the Item as its given input, and link it. An
     Item from a list hands its Entry to the child, moved to the query's `on_start` status.
     Raises _ItemRefused when the Item cannot start."""
-    pinned = _child_pin(runner, run)(_child_of(runner, run, item, stage))
+    pin = _child_pin(runner, run)
+    try:
+        pinned = pin(_child_of(runner, run, item, stage))
+    except ValueError as exc:  # its workflow is archived, or fails today's check
+        raise _ItemRefused(str(exc)) from exc
     now = datetime.now(UTC).isoformat()
     child = Run(
         new_id("run"), pinned.world_id, pinned.workflow_id, pinned.version,
@@ -1030,7 +1038,9 @@ def _take_item(
                 run.world_id, str(query["list"]), [item.entry], str(query["on_finish"]),
                 by="run", run_id=run_id,
             )  # fmt: skip
-        except (KeyError, ValueError) as exc:
+        except KeyError:
+            pass  # the Entry (or its list) was deleted once no live run held it: nothing to move
+        except ValueError as exc:
             error = f"{type(exc).__name__}: {exc}"
     settled = "done" if error is None else ("aborted" if status == "aborted" else "failed")
     runner.storage.set_item(run_id, index, visit, key, settled, child.id, error)

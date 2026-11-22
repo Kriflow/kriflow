@@ -134,8 +134,40 @@ class SqliteStorage:
             conn.execute("COMMIT")
             return _proposal(row)
 
+    def archived(self, world_id: str) -> dict[str, str]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT name, archived_at FROM archived_skills WHERE world_id = ?", (world_id,)
+            ).fetchall()
+            return {r["name"]: r["archived_at"] for r in rows}
+
+    def archive(self, world_id: str, name: str, at: str, event: Event) -> bool:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            changed = conn.execute(
+                "INSERT OR IGNORE INTO archived_skills (world_id, name, archived_at)"
+                " VALUES (?, ?, ?)",
+                (world_id, name, at),
+            ).rowcount
+            if changed:
+                append(conn, event)
+            conn.execute("COMMIT")
+            return bool(changed)
+
+    def restore(self, world_id: str, name: str, event: Event) -> bool:
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            changed = conn.execute(
+                "DELETE FROM archived_skills WHERE world_id = ? AND name = ?", (world_id, name)
+            ).rowcount
+            if changed:
+                append(conn, event)
+            conn.execute("COMMIT")
+            return bool(changed)
+
     def delete_world(self, world_id: str) -> None:
         with self._conn() as conn:
+            conn.execute("DELETE FROM archived_skills WHERE world_id = ?", (world_id,))
             conn.execute("DELETE FROM skill_versions WHERE world_id = ?", (world_id,))
             conn.execute("DELETE FROM skill_proposals WHERE world_id = ?", (world_id,))
 
