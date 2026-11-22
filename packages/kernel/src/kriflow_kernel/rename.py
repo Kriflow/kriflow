@@ -1,11 +1,13 @@
-"""The module alias of the product rename (Swarmify to Kriflow, kriflow#564).
+"""The module alias of the product rename (Swarmify to Kriflow, kriflow#564, #593).
 
 DBOS pickles workflow inputs, step outputs and errors by module path, so a record names the
-modules of the code that wrote it. Before the rename the code is `swarmify_*`; after it,
-`kriflow_*`. This commit is the rollback target of the rename, so it answers the new names:
-an import of `kriflow_<x>[.y]` returns the `swarmify_<x>[.y]` module itself (no copy, so class
-identity and `isinstance` hold), and runs recorded by the renamed code load here. The rename
-turns it round (old names to new) and keeps it forever. Installed by importing the kernel.
+modules of the code that wrote it. Before the rename the code was `swarmify_*`; now it is
+`kriflow_*`. Runs waiting at a gate when the rename was deployed, and every record written
+before it, name `swarmify_runs.machine.RunState` and the like, so an import of
+`swarmify_<x>[.y]` returns the `kriflow_<x>[.y]` module itself (no copy, so class identity and
+`isinstance` hold). Helper scripts that import the old names keep running too. Permanent: those
+records never change. Installed by importing the kernel. The rollback target (kriflow#592) has
+the reverse alias.
 """
 
 import importlib
@@ -15,9 +17,9 @@ import importlib.util
 import sys
 from types import ModuleType
 
-ALIAS = "kriflow_"
+ALIAS = "swarmify_"
 """The prefix answered here."""
-REAL = "swarmify_"
+REAL = "kriflow_"
 """The prefix of the modules this code has."""
 
 

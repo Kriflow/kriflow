@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 KERNEL = "kriflow_kernel"
+OLD = "swarmify_"
 
 
 @dataclass(frozen=True)
@@ -37,13 +38,13 @@ def _imported_modules(tree: ast.AST) -> list[tuple[int, str]]:
 
 def violations(packages_dir: Path) -> list[Violation]:
     found: list[Violation] = []
-    for pkg_dir in sorted(packages_dir.glob("*/src/swarmify_*")):
+    for pkg_dir in sorted(packages_dir.glob("*/src/kriflow_*")):
         package = pkg_dir.name
         for file in sorted(pkg_dir.rglob("*.py")):
             tree = ast.parse(file.read_text(), filename=str(file))
             for line, module in _imported_modules(tree):
                 top = module.split(".")[0]
-                if top.startswith("swarmify_") and top not in (KERNEL, package):
+                if top.startswith(OLD) or (top.startswith("kriflow_") and top not in (KERNEL, package)):
                     found.append(Violation(package, file, line, module))
     return found
 

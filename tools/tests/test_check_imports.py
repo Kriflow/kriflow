@@ -6,7 +6,7 @@ from check_imports import main, violations
 
 
 def _package(root: Path, name: str, source: str) -> None:
-    pkg = root / name / "src" / f"swarmify_{name}"
+    pkg = root / name / "src" / f"kriflow_{name}"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text(source)
 
@@ -36,6 +36,12 @@ def test_kernel_may_not_import_any_context(tmp_path: Path) -> None:
     _package(tmp_path, "kernel", "from kriflow_runs import Run\n")
     _package(tmp_path, "runs", "")
     assert len(violations(tmp_path)) == 1
+
+
+def test_an_old_module_name_is_a_violation_even_for_its_own_package(tmp_path: Path) -> None:
+    _package(tmp_path, "runs", "import swarmify_runs.ports\nfrom swarmify_kernel import new_id\n")
+    found = violations(tmp_path)
+    assert [v.module for v in found] == ["swarmify_runs.ports", "swarmify_kernel"]
 
 
 def test_main_prints_each_violation_and_fails(
