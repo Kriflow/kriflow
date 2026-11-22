@@ -661,7 +661,7 @@ breaking change that needs an ADR.
 | Contract | Since | What it added |
 | --- | --- | --- |
 | 1 | 2026-11-22 | The core as of the package contract: the Manifest, publish, outcomes and safe resume, check, Setup and sign-in, world types, long jobs, Build Sessions and Templates. |
-| 2 | 2026-11-22 | `SWARMIFY_STAGE_DIR`, the stage's folder, for every process started for a stage. |
+| 2 | 2026-11-22 | World Logins: the Manifest's `[login] accepts`, `SWARMIFY_LOGIN_FILE` and the `SWARMIFY_LOGIN_*` values, the saved session file, Person Checks through `asks/`, `login_result` in a tool answer; and `SWARMIFY_STAGE_DIR`, the stage's folder, for every process started for a stage. |
 
 Once a world enables a package, the Connectors page draws its Setup form from the `[[config]]`
 fields. Values live in `<data dir>/setup.json`, mode 600,
