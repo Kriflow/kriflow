@@ -41,7 +41,7 @@ export function useThemeColour(office: boolean) {
   }, [office]);
 }
 
-const KEY = { days: "swarmify.days", answered: "swarmify.answered", install: "swarmify.install" };
+const KEY = { days: "kriflow.days", answered: "kriflow.answered", install: "kriflow.install" };
 const read = (key: string) => {
   try {
     return localStorage.getItem(key);

@@ -3,7 +3,7 @@ import createClient from "openapi-fetch";
 import type { paths } from "./schema";
 
 /** Dispatched on window when the API refuses a call for want of a session. */
-export const SIGNED_OUT = "swarmify:signed-out";
+export const SIGNED_OUT = "kriflow:signed-out";
 
 // Resolve fetch per call so tests can stub globalThis.fetch after this module loads.
 export const api = createClient<paths>({ fetch: (req) => globalThis.fetch(req) });

@@ -56,7 +56,7 @@ const SAME_AREA = {
   settings: "/worlds/$worldId/settings",
 } as const;
 // The last world opened, so the next cold load names it and links its tabs before the worlds load.
-const LAST = "swarmify.world";
+const LAST = "kriflow.world";
 const stored = (): Pick<World, "id" | "name"> | undefined => {
   try {
     return JSON.parse(localStorage.getItem(LAST) ?? "null") ?? undefined;

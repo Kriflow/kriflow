@@ -8,7 +8,7 @@ export const TEXT_SIZES = [
   ["larger", "Larger"],
 ] as const;
 export type TextSize = (typeof TEXT_SIZES)[number][0];
-const KEY = "swarmify.textSize";
+const KEY = "kriflow.textSize";
 
 export function textSize(): TextSize {
   try {

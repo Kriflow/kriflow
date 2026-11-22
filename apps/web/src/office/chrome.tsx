@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { needsYou, useOpenGates } from "../api/gates";
 
 // Day and night are this browser's choice, never the world's.
-const NIGHT = "swarmify.office.night";
+const NIGHT = "kriflow.office.night";
 const listeners = new Set<() => void>();
 
 /** Night or day in this browser, the same on every office screen and tab. */

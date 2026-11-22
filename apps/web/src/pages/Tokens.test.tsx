@@ -14,7 +14,7 @@ afterEach(() => {
 
 test("creates a token shown once, revokes one and signs out", async () => {
   const signedOut = vi.fn();
-  window.addEventListener("swarmify:signed-out", signedOut);
+  window.addEventListener("kriflow:signed-out", signedOut);
   const calls = fakeFetch({
     "GET /api/worlds/world_1": () => Response.json(video),
     "GET /api/tokens": () => Response.json([old]),
@@ -45,7 +45,7 @@ test("creates a token shown once, revokes one and signs out", async () => {
   await screen.getByRole("button", { name: "Sign out" }).click();
   await vi.waitFor(() => expect(signedOut).toHaveBeenCalled());
   expect(calls).toContain("DELETE /api/session");
-  window.removeEventListener("swarmify:signed-out", signedOut);
+  window.removeEventListener("kriflow:signed-out", signedOut);
 });
 
 test("without a password there is no sign-out, and an empty list says so", async () => {

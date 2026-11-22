@@ -490,7 +490,7 @@ const NOTICE_KIND: Record<Notice["kind"], [one: string, many: string, failed: bo
   // shown above as its own card, to answer here
   person_check: ["run waits for your sign-in", "runs wait for your sign-in", false],
 };
-const DISMISSED = "swarmify.dismissed-notices";
+const DISMISSED = "kriflow.dismissed-notices";
 // Digits stripped, as push does: a notice whose minutes tick up is the same notice. A dismissed
 // one comes back only when its words change.
 const noticeKey = (n: Notice) => `${n.kind}|${n.world_id}|${n.run_id}|${n.text.replace(/[0-9.]+/g, "")}`;

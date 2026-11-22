@@ -7,7 +7,7 @@ import { defineConfig } from "vitest/config";
 
 /** /sw.js from sw.js, with the build's own files as the app shell it precaches (issue 458). */
 const serviceWorker = (): Plugin => ({
-  name: "swarmify-sw",
+  name: "kriflow-sw",
   apply: "build",
   generateBundle(_, bundle) {
     const built = Object.keys(bundle).filter((f) => !f.endsWith(".map"));

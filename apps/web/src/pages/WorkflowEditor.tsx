@@ -1232,7 +1232,7 @@ type Kept = { lines: ChatLine[]; sessionId: string | null };
 /** Where a draft's planner chat is kept for this tab: by world and workflow ("new" before the
  * first save), so the tab does not reopen empty. ponytail: sessionStorage, not the API; move it
  * server side when a chat should follow the operator across devices. */
-const plannerKey = (worldId: string, workflowId?: string) => `swarmify.planner.${worldId}.${workflowId ?? "new"}`;
+const plannerKey = (worldId: string, workflowId?: string) => `kriflow.planner.${worldId}.${workflowId ?? "new"}`;
 
 function readKept(key: string): Kept {
   try {

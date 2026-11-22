@@ -24,8 +24,8 @@ const verdictPill = (r: Report) => (
   <span className={r.swarm_wins ? "pill positive" : "pill negative"}>{r.swarm_wins ? "Swarm wins" : "Swarm does not win"}</span>
 );
 
-/** How to start an eval: the API cannot, the `swarmify-eval` command on the server does. */
-const EVAL_DOCS = "https://github.com/wagleanuj/swarmify#eval-baseline-against-swarm";
+/** How to start an eval: the API cannot, the `kriflow-eval` command on the server does. */
+const EVAL_DOCS = "https://github.com/Kriflow/kriflow#eval-baseline-against-swarm";
 
 /** The eval reports (baseline against swarm), newest first; the newest verdict leads the page. */
 export function Evals() {

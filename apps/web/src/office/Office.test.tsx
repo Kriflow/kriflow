@@ -17,7 +17,7 @@ const spend = { month: "2026-10", spent_usd: 3.5, monthly_budget_usd: 20 };
 
 beforeEach(() => FakeEventSource.install());
 afterEach(() => {
-  localStorage.removeItem("swarmify.skin");
+  localStorage.removeItem("kriflow.skin");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -171,7 +171,7 @@ test("the cast stands in the office in their pack characters", async () => {
 });
 
 test("the office ignores the plain pages' Pied Piper names", async () => {
-  localStorage.setItem("swarmify.skin", "pied-piper");
+  localStorage.setItem("kriflow.skin", "pied-piper");
   fakeFetch({
     "GET /api/worlds/world_1": () => Response.json(video),
     "GET /api/worlds/world_1/cast": () => Response.json([member("worker-1", "worker")]),

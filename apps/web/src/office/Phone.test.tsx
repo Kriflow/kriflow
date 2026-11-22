@@ -55,7 +55,7 @@ function office() {
 
 beforeEach(() => FakeEventSource.install());
 afterEach(async () => {
-  localStorage.removeItem("swarmify.office.night");
+  localStorage.removeItem("kriflow.office.night");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   await page.viewport(1280, 800);
@@ -204,7 +204,7 @@ test("day and night and full screen are this browser's, never the world's", asyn
   await expect.element(night).toHaveAttribute("aria-pressed", "true");
   expect(sky()).toBe("#141a45");
   expect(sky()).not.toBe(day);
-  expect(localStorage.getItem("swarmify.office.night")).toBe("1");
+  expect(localStorage.getItem("kriflow.office.night")).toBe("1");
   await screen.getByRole("button", { name: "Full screen" }).click();
   expect(full).toHaveBeenCalledOnce();
 
@@ -218,7 +218,7 @@ test("day and night and full screen are this browser's, never the world's", asyn
   await screen.getByRole("button", { name: "Night" }).click();
   await expect.element(screen.getByRole("button", { name: "Night" })).toHaveAttribute("aria-pressed", "false");
   expect(sky()).toBe(day);
-  expect(localStorage.getItem("swarmify.office.night")).toBeNull();
+  expect(localStorage.getItem("kriflow.office.night")).toBeNull();
 });
 
 test("night set in another tab reaches this one", async () => {
@@ -226,8 +226,8 @@ test("night set in another tab reaches this one", async () => {
   const { screen } = await mountAt("/worlds/world_1/office");
   const night = screen.getByRole("button", { name: "Night" });
   await expect.element(night).toHaveAttribute("aria-pressed", "false");
-  localStorage.setItem("swarmify.office.night", "1");
-  dispatchEvent(new StorageEvent("storage", { key: "swarmify.office.night", newValue: "1" }));
+  localStorage.setItem("kriflow.office.night", "1");
+  dispatchEvent(new StorageEvent("storage", { key: "kriflow.office.night", newValue: "1" }));
   await expect.element(night).toHaveAttribute("aria-pressed", "true");
   expect(sky()).toBe("#141a45");
 });

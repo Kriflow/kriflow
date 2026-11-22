@@ -169,7 +169,7 @@ test("the setup strip counts what is done at its true percentage, goes when all 
     "GET /api/workflows/wf_1/scorecard": () => Response.json({ runs: [] }),
     "GET /api/gates": () => Response.json([]),
   });
-  localStorage.removeItem("swarmify.setup-hidden.world_1");
+  localStorage.removeItem("kriflow.setup-hidden.world_1");
   const first = await mountAt("/worlds/world_1");
   const setup = first.screen.getByTestId("setup");
   await expect.element(setup.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "75");
@@ -179,8 +179,8 @@ test("the setup strip counts what is done at its true percentage, goes when all 
   await first.screen.getByRole("button", { name: "Hide" }).click();
   await expect.element(first.screen.getByTestId("setup")).not.toBeInTheDocument();
   await expect.element(first.screen.getByRole("region", { name: "Figures" })).toBeVisible();
-  expect(localStorage.getItem("swarmify.setup-hidden.world_1")).toBe("1");
-  localStorage.removeItem("swarmify.setup-hidden.world_1");
+  expect(localStorage.getItem("kriflow.setup-hidden.world_1")).toBe("1");
+  localStorage.removeItem("kriflow.setup-hidden.world_1");
 });
 
 test("the setup strip is gone once a gate has been answered", async () => {
