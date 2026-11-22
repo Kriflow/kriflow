@@ -80,7 +80,17 @@ from swarmify_runs.machine import (
     Started,
     transition,
 )
-from swarmify_runs.model import RERUNS, Item, ItemView, Pinned, Run, StageDef, items_gate
+from swarmify_runs.model import (
+    RERUNS,
+    Item,
+    ItemView,
+    Pinned,
+    Run,
+    StageDef,
+    fans,
+    items_gate,
+    safe_key,
+)  # fmt: skip
 from swarmify_runs.ports import Notifier, Storage
 
 CHILD_QUEUE = "child-runs"
@@ -766,7 +776,7 @@ def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
     if run is None:
         raise KeyError(f"run not found: {run_id}")
     stage_id, stage = runner.storage.stage_def(run_id, index)
-    if not stage.config.get("for_each"):
+    if not fans(stage.config):
         return [], "plain"
     if run.stages[index].status != "running":
         return [], "wait"  # a child that ended after the stage moved on
@@ -795,8 +805,11 @@ def _fan_next(run_id: str, index: int, entering: bool) -> tuple[list[str], str]:
         if held or live >= most:
             break
         if view.status == "pending":
-            started.append(_start_item(runner, run, index, visit, item, stage))
-            live += 1
+            try:
+                started.append(_start_item(runner, run, index, visit, item, stage))
+                live += 1
+            except _ItemRefused as exc:  # this Item fails; its siblings go on
+                runner.storage.set_item(run_id, index, visit, view.key, "failed", None, str(exc))
     rows = runner.storage.items(run_id, index, visit)
     if any(v.status in ("pending", "running") for _, v in rows):
         return started, "wait"
@@ -812,15 +825,19 @@ def _plan(
     """Record the Items of a new visit. A revisit whose note names Items (by key or title,
     whole words, any case) runs only those, except ones named only in a sentence that says to
     keep them (`_KEEP`); the others keep what their last visit gathered."""
-    if runner.items is None:
+    if stage.config.get("from_list"):
+        source = _listed(runner, run, stage)
+    elif runner.items is None:
         raise NotImplementedError("fan-out stages need items to read their source")
+    else:
+        source = runner.items(run, index, stage)
     items, keys = [], set()
-    for item in runner.items(run, index, stage):
+    for item in source:
         key, n = item.key, 1
         while key in keys:  # two cards of one slug still get a folder each
             n, key = n + 1, f"{item.key}-{n + 1}"
         keys.add(key)
-        items.append(Item(key, item.title, item.file, item.data))
+        items.append(Item(key, item.title, item.file, item.data, item.entry))
     note = run.send_back_note(stage.name)
     named = {i.key for i in items if any(_says(note, w) for w in (i.key, i.title))}
     asks = [c for c in re.split(r"[.!?](?:\s|$)|[;\n]", note) if not _KEEP.search(c)]
@@ -832,6 +849,50 @@ def _plan(
     ]
     runner.storage.add_items(run.id, index, visit, rows)
     return rows
+
+
+def _listed(runner: Runner, run: Run, stage: StageDef) -> list[Item]:
+    """The Items of a stage's `from_list` query (issue 541): its Entries, claimed for the run
+    until each is handed to the child that works on it. Each Item is the Entry's file, or the
+    Entry itself as JSON when it has none."""
+    if runner.lists is None:
+        raise NotImplementedError("a fan-out stage with from_list needs World Lists")
+    query = stage.config["from_list"]
+    entries = runner.lists.claim(
+        run.world_id, str(query["list"]), run.id,
+        status=query.get("status") or None, where=query.get("where") or None,
+        order=str(query.get("order") or "-score"), take=int(query.get("take") or 1),
+    )  # fmt: skip
+    world = run_folder(runner.data_dir, run).parent.parent
+    items = []
+    for e in entries:
+        file = world / e.file if e.file and (world / e.file).is_file() else None
+        data = None if file else {"key": e.key, "title": e.title, "score": e.score, **e.fields}
+        items.append(Item(safe_key(e.key), e.title, str(file) if file else None, data, e.key))
+    return items
+
+
+class _ItemRefused(Exception):
+    """One Item cannot start: its Entry maps to no workflow, or another run holds it."""
+
+
+def _child_of(runner: Runner, run: Run, item: Item, stage: StageDef) -> str:
+    """The workflow an Item's child runs: the stage's `runs`, or with `runs_by` the one its
+    Entry's field maps to. Hands the Entry to the child once it is known (`_start_item`)."""
+    runs_by = stage.config.get("runs_by")
+    if not runs_by or item.entry is None:
+        return str(stage.config.get("runs") or "")
+    assert runner.lists is not None  # `_listed` made the Item
+    entry = runner.lists.get(run.world_id, str(stage.config["from_list"]["list"]), item.entry)
+    value = entry.fields.get(runs_by["field"])
+    found = runs_by["map"].get(str(value)) if value is not None else None
+    if found is None:
+        known = ", ".join(sorted(runs_by["map"]))
+        raise _ItemRefused(
+            f"Entry {entry.key!r} has {runs_by['field']} {value!r}, which runs_by maps to no"
+            f" workflow (it maps {known})"
+        )
+    return str(found)
 
 
 def _fresh(item: Item) -> ItemView:
@@ -849,14 +910,25 @@ def _says(note: str, word: str) -> bool:
 def _start_item(
     runner: Runner, run: Run, index: int, visit: int, item: Item, stage: StageDef
 ) -> str:
-    """Record the child run of one Item, with the Item as its given input, and link it."""
-    pinned = _child_pin(runner, run)(str(stage.config.get("runs") or ""))
+    """Record the child run of one Item, with the Item as its given input, and link it. An
+    Item from a list hands its Entry to the child, moved to the query's `on_start` status.
+    Raises _ItemRefused when the Item cannot start."""
+    pinned = _child_pin(runner, run)(_child_of(runner, run, item, stage))
     now = datetime.now(UTC).isoformat()
     child = Run(
         new_id("run"), pinned.world_id, pinned.workflow_id, pinned.version,
         f"{pinned.name}: {item.title}", "queued", now, now, [], parent_run_id=run.id,
         baseline=run.baseline,
     )  # fmt: skip
+    if item.entry is not None and runner.lists is not None:
+        query = stage.config["from_list"]
+        try:
+            runner.lists.hand(
+                run.world_id, str(query["list"]), item.entry, run.id, child.id,
+                query.get("on_start") or None,
+            )  # fmt: skip
+        except (KeyError, ValueError) as exc:
+            raise _ItemRefused(str(exc).strip("'\"")) from exc
     given = run_folder(runner.data_dir, child) / "given"
     given.mkdir(parents=True, exist_ok=True)
     name = str(stage.config.get("as_") or "item.md")
@@ -939,6 +1011,16 @@ def _take_item(
                 runner.take(child, run, stage.id, names, key)
         except Exception as exc:
             shutil.rmtree(folder, ignore_errors=True)
+            error = f"{type(exc).__name__}: {exc}"
+    item = next(i for i, v in runner.storage.items(run_id, index, visit) if v.key == key)
+    query = runner.storage.stage_def(run_id, index)[1].config.get("from_list") or {}
+    if error is None and item.entry and query.get("on_finish") and runner.lists is not None:
+        try:
+            runner.lists.set_status(
+                run.world_id, str(query["list"]), [item.entry], str(query["on_finish"]),
+                by="run", run_id=run_id,
+            )  # fmt: skip
+        except (KeyError, ValueError) as exc:
             error = f"{type(exc).__name__}: {exc}"
     settled = "done" if error is None else ("aborted" if status == "aborted" else "failed")
     runner.storage.set_item(run_id, index, visit, key, settled, child.id, error)
@@ -1124,17 +1206,31 @@ def _execute(run_id: str, index: int) -> bool:
     if run is None:
         raise KeyError(f"run not found: {run_id}")
     shown = runner.previews(run, stage, {}) if stage.type == "connector" else None
-    if shown is not None and not shown.private:
-        before = run.stages[index - 1] if index > 0 else None
-        if before is None or before.type != "gate" or before.status != "done":
-            # The editor refuses this too, but a connector can turn publish after the save.
-            raise PermissionError(
-                f"'{stage.name}' calls a publish connector, so it runs only right after an answered"
-                " gate (ADR 0007)"
-            )
+    if shown is not None and not shown.private and not _gated(runner, run, index):
+        # The editor refuses this too, but a connector can turn publish after the save.
+        raise PermissionError(
+            f"'{stage.name}' calls a publish connector, so it runs only right after an answered"
+            " gate, or after publish stages that do (ADR 0007)"
+        )
     try:
         return bool(call(run, stage_id, stage))
     except OverBudget:
         if runner.storage.stop_of(run_id):  # read in the step, so a replay sees the same answer
             raise _Halted() from None
         raise
+
+
+def _gated(runner: Runner, run: Run, index: int) -> bool:
+    """Whether an answered gate comes right before the stage at `index`, with only finished
+    publish stages between (issue 541): one answer lets every publish stage after it run."""
+    while index > 0:
+        index -= 1
+        before = run.stages[index]
+        if before.type == "gate":
+            return before.status == "done"
+        if before.type != "connector" or before.status != "done":
+            return False
+        # ponytail: asks the connector for a preview per earlier stage; fine for two or three
+        if runner.previews(run, runner.storage.stage_def(run.id, index)[1], {}) is None:
+            return False
+    return False
