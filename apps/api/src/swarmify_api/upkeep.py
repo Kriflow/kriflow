@@ -109,7 +109,8 @@ def record_outcomes(
                 if post not in primary or made_by[post] == connector.name:
                     primary[post] = connector.manifest["primary_metric"]
         for (path, fields), post in zip(records, posts, strict=True):
-            stored = fields.get(CURVES) if isinstance(fields.get(CURVES), dict) else {}
+            stored = fields.get(CURVES)
+            stored = stored if isinstance(stored, dict) else {}
             drawn = {**stored, **curves.get(post["id"], {})} or None
             metrics = found.get(post["id"])
             if not metrics and not curves.get(post["id"]):
