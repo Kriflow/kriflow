@@ -116,7 +116,10 @@ CHECKS = """W => {
     const b = bar.getBoundingClientRect();
     for (const e of document.querySelectorAll('body *')) {
       if (bar.contains(e) || e.contains(bar) || e.closest('dialog[open]') || !shown(e)) continue;
-      if (!['fixed', 'sticky'].includes(getComputedStyle(e).position)) continue;
+      const p = getComputedStyle(e);
+      if (!['fixed', 'sticky'].includes(p.position)) continue;
+      // Only sticky sideways (a table's first column): it scrolls with the page, docks nothing.
+      if (p.position === 'sticky' && p.top === 'auto' && p.bottom === 'auto') continue;
       const r = e.getBoundingClientRect();
       const hit = r.bottom > b.top + 1 && r.top < b.bottom && r.right > b.left && r.left < b.right;
       if (r.width && r.height && hit) add('over the tab bar', e, `bottom ${Math.round(r.bottom)}`);

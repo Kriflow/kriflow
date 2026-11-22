@@ -133,7 +133,7 @@ test("running: the status line says which stage works, the step and the time, an
 
   const running = run("running", [research("done"), voice("done"), video("running", timed(3, null))], { updated_at: at(4) });
   FakeEventSource.emit("run.updated", { payload: running });
-  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Video is working · step 3 of 3");
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Video is working.");
   await expect.element(screen.getByTestId("elapsed")).toHaveTextContent("4m 0s");
   const rail = screen.getByTestId("timeline");
   await expect.element(rail).toMatchTextContent(/research\s*2m 14s\s*voice\s*1m 14s\s*video\s*running/);
@@ -637,8 +637,8 @@ test("the stage rail: each stage wears its kind's glyph or its package's icon, m
   expect(getComputedStyle(node(1).querySelector(".tile")!).borderTopColor).not.toBe(getComputedStyle(node(2).querySelector(".tile")!).borderTopColor);
   expect(getComputedStyle(node(2).querySelector(".tile")!).borderTopStyle).toBe("dashed");
   // The hero says the fan-out's progress and when it should be done at this pace.
-  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Fan is working: 3 of 5 done · step 2 of 7");
-  await expect.element(screen.getByTestId("hero-sub")).toHaveTextContent("About 5 min left at this pace.");
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Fan is working: 3 of 5 done.");
+  await expect.element(screen.getByTestId("hero-sub")).toHaveTextContent("fan, step 2 of 7. About 5 min left at this pace. Nothing needs you yet.");
   // Arriving pins the live stage; a tap selects another and pins it, and nothing moves it after.
   await vi.waitFor(() => expect(router.state.location.search).toEqual({ stage: "stage_1" }));
   await rail.getByRole("button", { name: /^Step 1, research/ }).click();
@@ -656,7 +656,7 @@ test("on a phone the run opens on the hero with its numbers, then the rail, then
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(running) });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
   await expect.element(screen.getByTestId("run-pill")).toHaveTextContent("running");
-  await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/^Video is working · step 3 of 3$/);
+  await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/^Video is working\.$/);
   await expect.element(screen.getByTestId("spend-stat")).toMatchTextContent(/\$5\.01 of \$10\.00$/);
   await expect.element(screen.getByTestId("steps-stat")).toMatchTextContent(/^2 of 3/);
   await expect.element(screen.getByTestId("last-run")).toHaveTextContent("so far, last run 25 min");
@@ -1025,4 +1025,15 @@ test("a rerun stage that runs again shows no failure from its previous attempt (
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
   await expect.element(screen.getByTestId("stage-panel")).toBeVisible();
   expect(screen.getByTestId("failure").query()).toBeNull();
+});
+
+test("only a gate's send-backs read as Sent back: a Follow-up or Rerun is no send-back", async () => {
+  const change = (kind: string, id: string) => ({ id, run_id: "run_1", kind, stage_id: "stage_0", stage_index: 0, stage_name: "research", payload: { note: "Cut it." }, before: {}, by: "operator", at: "2026-10-26T10:03:00+00:00", revision: 3 });
+  const followed = run("waiting_gate", [research("done"), review("waiting", timed(7, null))], { send_backs: 1, changes: [change("follow_up", "change_1")] });
+  fakeFetch({ "GET /api/runs/run_1": () => Response.json(followed), "GET /api/gates": () => Response.json([]) });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await expect.element(screen.getByTestId("status-line")).toBeVisible();
+  expect(screen.getByTestId("status-line").element().textContent).not.toContain("Sent back");
+  FakeEventSource.emit("run.updated", { payload: { ...followed, send_backs: 2, revision: 9, updated_at: "2026-10-26T10:09:00+00:00" } });
+  await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/Sent back once\.\s*$/);
 });

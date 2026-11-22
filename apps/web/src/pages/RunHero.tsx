@@ -43,7 +43,8 @@ export function heroSub(run: Run, seconds: number | null, now = Date.now()): str
   }
   if (run.status === "running" && at) {
     const left = timeLeft(at, now);
-    return left === null ? "" : `About ${took(Math.max(60, left))} left at this pace.`;
+    const pace = left === null ? "" : ` About ${took(Math.max(60, left))} left at this pace.`;
+    return `${of}${pace} Nothing needs you yet.`;
   }
   const last = run.last_run_seconds;
   if (run.status === "done" && seconds !== null && last != null) {

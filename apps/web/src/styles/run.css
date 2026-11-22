@@ -238,7 +238,7 @@ a.made-file:hover { background: var(--raised); }
 
 @media (max-width: 48rem) {
   .run-grid, .result-one, .inline-gate .gate:has(> .artifact-view) { grid-template-columns: minmax(0, 1fr); }
-  .run-page header.page > div:first-child { flex: 1 1 100%; } /* the title block takes the row; Ask this run sits under it */
+  .run-page header.page > div:first-child { flex: 1 1 100%; } /* the title block takes the row */
   .run-pill { display: inline-flex; margin: 6px 8px 0 0; }
   .run-pill .icon { margin-left: -2px; }
   .run-topbar { display: flex; }
@@ -261,13 +261,17 @@ a.made-file:hover { background: var(--raised); }
   .run-grid > .run-side { order: 9; }
   .stage-nav { display: none; }
   .stage-head .tile { width: 40px; height: 40px; }
+  .stage-card { scroll-margin-top: calc(56px + env(safe-area-inset-top)); } /* a rail tap lands it under the top bar */
   /* A pick's cards sit side by side and snap, one and a bit in view */
   .run-page .pick-cards:not(:has(.pick-slot)) { grid-auto-flow: column; grid-auto-columns: 82%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
   .run-page .pick-cards:not(:has(.pick-slot)) > .pick-card { scroll-snap-align: start; }
   .tab-panel.away.keeps-dock .action-bar { visibility: visible; }
   /* The back link and the run menu take the top bar from the world chip; the compact title
      fades in between them. */
-  .topbar:has(.run-topbar) .world-chip, .run-actions .menu-wrap { display: none; }
+  /* Ask this run is the chat glyph beside the menu in the top bar, not a row under the title */
+  .topbar:has(.run-topbar) .world-chip, .run-actions .menu-wrap, .run-actions .ask-run { display: none; }
+  .run-topbar-acts { display: inline-flex; align-items: center; gap: 4px; }
+  .run-actions:not(:has(.follow)) { display: none; } /* nothing left in it to take a row */
   .topbar-slot:has(.run-topbar), .topbar .run-topbar { display: contents; }
   .topbar .run-topbar > a { order: -1; flex: none; }
   .topbar .run-topbar > :not(a) { flex: none; }

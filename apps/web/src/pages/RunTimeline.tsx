@@ -275,6 +275,24 @@ export function RunTimeline() {
     [router, worldId, runId],
   );
 
+  // On a phone a tap on the rail brings the opened card up under the top bar, once the card shows
+  // the tapped step; arriving and stream updates never scroll, so nothing moves by itself.
+  const reveal = useRef(false);
+  const tap = (id: string) => {
+    if (phone) reveal.current = true;
+    if (id === stageId) showCard();
+    else select(id);
+  };
+  useEffect(() => {
+    if (reveal.current) showCard();
+  }, [stageId]);
+  function showCard() {
+    if (!reveal.current) return;
+    reveal.current = false;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => document.querySelector("[data-testid='stage-panel']")?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" }));
+  }
+
   // Arriving with no step (or one this run lacks) pins the picked one; nothing else writes it.
   useEffect(() => {
     if (stageId && !chosen) select(stageId);
@@ -418,6 +436,9 @@ export function RunTimeline() {
     items.push({ label: "Re-run from here", note: `Shows what it resets and costs first; nothing changes until you apply`, onSelect: () => { setEditing(null); setStepping({ id: at.id, kind: "rerun" }); } });
   }
   const changes = run.changes ?? [];
+  // `send_backs` counts every visit back, Reruns and Follow-ups too (not one that made a Fork):
+  // only a gate's send-backs read as "Sent back".
+  const sentBack = Math.max(0, run.send_backs - changes.filter((c) => (c.kind === "rerun" || c.kind === "follow_up") && !c.fork).length);
   if (changes.length > 0) {
     items.push({ label: `Changes (${changes.length})`, note: "Lists every change made to this run; you stay here", onSelect: () => setChangesOpen(!changesOpen) });
   }
@@ -502,7 +523,7 @@ export function RunTimeline() {
               </button>
             </span>
           )}
-          <button type="button" aria-expanded={askOpen} onClick={() => setAskOpen(!askOpen)}>
+          <button type="button" className="ask-run" aria-expanded={askOpen} onClick={() => setAskOpen(!askOpen)}>
             Ask this run
           </button>
           {items.length > 0 && (
@@ -510,7 +531,14 @@ export function RunTimeline() {
           )}
         </div>
       </header>
-      {topbarSlot(items.length > 0 && <Menu label="Run actions" className="icon" button={<Icon name="more" size={20} />} items={items} sheet />)}
+      {topbarSlot(
+        <span className="run-topbar-acts">
+          <button type="button" className="icon" aria-label="Ask this run" aria-expanded={askOpen} onClick={() => setAskOpen(!askOpen)}>
+            <Icon name="chat" size={20} />
+          </button>
+          {items.length > 0 && <Menu label="Run actions" className="icon" button={<Icon name="more" size={20} />} items={items} sheet />}
+        </span>,
+      )}
       {dialog}
       {error && <p role="alert">{error}</p>}
       {saved && (
@@ -540,7 +568,7 @@ export function RunTimeline() {
         line={
           <p role="status" data-testid="status-line" className={`status-line state-${run.status}`}>
             {statusLine(run, gate?.ask, connectors)}
-            {run.send_backs > 0 && ` Sent back ${run.send_backs === 1 ? "once" : `${run.send_backs} times`}.`}
+            {sentBack > 0 && ` Sent back ${sentBack === 1 ? "once" : `${sentBack} times`}.`}
             {run.status === "done" && (post ? ` Posted to ${labelOf(connectors, String(post.fields.connector))}.` : main && ` Made ${main.name}.`)}
           </p>
         }
@@ -548,7 +576,7 @@ export function RunTimeline() {
       <StageRail
         run={run}
         selected={stageId}
-        onSelect={select}
+        onSelect={tap}
         connectors={connectors}
         note={(s) => {
           const edit = changes.filter((c) => c.stage_id === s.id).at(-1);

@@ -150,6 +150,12 @@ def test_waiting_at_a_gate_the_hero_asks_and_the_rail_marks_the_gate(
     expect(gate).to_have_attribute("aria-pressed", "true")
     expect(rail.locator("li").first.locator(".mark-done")).to_be_visible()
     expect(rail.locator(".node-waiting .dt")).to_have_text(re.compile(r"^waiting "))
+    # Ask this run is the chat glyph in the top bar, not a row under the title.
+    ask = phone.locator(".topbar").get_by_role("button", name="Ask this run")
+    assert (ask.bounding_box() or {"height": 0})["height"] >= 44
+    expect(
+        phone.get_by_test_id("run-actions").get_by_role("button", name="Ask this run")
+    ).to_be_hidden()
     _fits(phone)
     _taps(phone)
     _shot(phone, "waiting")
@@ -164,6 +170,16 @@ def test_a_long_run_rail_scrolls_and_a_tap_pins_the_stage(phone: Page, ids: dict
     last.click()
     expect(phone).to_have_url(re.compile(r"\?stage="))
     expect(last).to_have_attribute("aria-pressed", "true")
+    # The tap brings the opened card up, its head just under the top bar (or as far as the
+    # page scrolls).
+    phone.wait_for_function(
+        """() => {
+          const bar = document.querySelector('.topbar').getBoundingClientRect().bottom;
+          const top = document.querySelector('[data-testid=stage-panel]').getBoundingClientRect().top;
+          const end = scrollY + innerHeight >= document.documentElement.scrollHeight - 1;
+          return top >= bar - 1 && (top < bar + 24 || end);
+        }"""
+    )
     box, frame = last.bounding_box(), rail.bounding_box()
     assert (
         box
@@ -201,9 +217,7 @@ def test_a_running_fan_out_shows_its_count_and_its_progress(
 ) -> None:
     phone.goto(f"/worlds/{ids['world']}/runs/{ids['fan']}")
     hero = phone.get_by_test_id("hero")
-    expect(hero.get_by_test_id("status-line")).to_have_text(
-        "Each is working: 0 of 2 done · step 3 of 4"
-    )
+    expect(hero.get_by_test_id("status-line")).to_have_text("Each is working: 0 of 2 done.")
     expect(hero.get_by_role("button", name="Pause")).to_be_visible()
     fan = phone.get_by_test_id("timeline").locator("li").nth(2)
     expect(fan).to_have_class(re.compile("node-running"))
