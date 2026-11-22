@@ -152,6 +152,11 @@ test("lists the world's workflows and refreshes the list when one is saved", asy
   listed = [{ ...weekly, name: "Daily short", current_version: 2 }];
   FakeEventSource.emit("workflow.saved", { seq: 2, type: "workflow.saved", ts: video.created_at });
   await expect.element(screen.getByTestId("workflow-list")).toMatchTextContent(/Daily short.*v2/);
+
+  listed = [{ ...weekly, id: "wf_2", name: "Monthly recap" }]; // wf_1 archived elsewhere
+  FakeEventSource.emit("workflow.archived", { seq: 3, type: "workflow.archived", payload: { workflow_id: "wf_1", name: "Daily short" } });
+  await expect.element(screen.getByTestId("workflow-list")).toMatchTextContent(/Monthly recap/);
+  await expect.element(screen.getByTestId("workflow-list")).not.toMatchTextContent(/Daily short/);
 });
 
 test("the setup strip counts what is done at its true percentage, goes when all is done, and Hide keeps it gone", async () => {

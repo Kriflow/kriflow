@@ -5,6 +5,7 @@ import YAML from "yaml";
 import { useConfirm } from "../Dialog";
 import { api } from "../api/client";
 import { useConnectors } from "../api/connectors";
+import { useWorldEvents } from "../api/events";
 import type { components } from "../api/schema";
 import { Chat, type ChatQuestion, type ChatTurn, DoneLine } from "../Chat";
 import { Icon } from "../Icon";
@@ -173,6 +174,28 @@ export function WorkflowEditor() {
   // The last removal, undone in one step from the text before it.
   const [removed, setRemoved] = useState<string | null>(null);
   const beforeRemove = useRef<string | null>(null);
+  // An archived workflow opened by link says so, with Restore; archive elsewhere shows at once.
+  const [archived, setArchived] = useState(false);
+  const saw = useWorldEvents(worldId, {
+    "workflow.archived": (p) => p.workflow_id === workflowId && setArchived(true),
+    "workflow.restored": (p) => p.workflow_id === workflowId && setArchived(false),
+  });
+  useEffect(() => {
+    if (!workflowId) return setArchived(false);
+    api
+      .GET("/api/workflows/{workflow_id}", { params: { path: { workflow_id: workflowId } } })
+      .then(({ data, response }) => {
+        setArchived(Boolean(data?.archived_at));
+        saw(response);
+      })
+      .catch(() => undefined);
+  }, [workflowId, saw]);
+  async function restore() {
+    if (!workflowId) return;
+    const { data } = await api.POST("/api/workflows/{workflow_id}/restore", { params: { path: { workflow_id: workflowId } } });
+    if (!data) return setError("Could not restore this workflow. Try again.");
+    setArchived(Boolean(data.archived_at));
+  }
 
   useEffect(() => {
     if (!removed) return;
@@ -544,6 +567,14 @@ export function WorkflowEditor() {
         </div>
       </header>
       {error && <p role="alert">{error}</p>}
+      {archived && (
+        <p className="saved" role="status" data-testid="archived">
+          <span className="chip">archived</span> Left out of the lists, its schedule is off and new runs of it are refused.{" "}
+          <button type="button" onClick={restore}>
+            Restore
+          </button>
+        </p>
+      )}
       {!workflowId && starters.length > 0 && (
         <section className="starters" aria-label="Starter workflows">
           {starters.map((s) => (

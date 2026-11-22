@@ -2,6 +2,7 @@ import { Link, useParams, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import { useWorldEvents } from "../api/events";
 import { useConfirm } from "../Dialog";
 import { money, type Run, STATUS_LABEL } from "../api/runs";
 import type { components } from "../api/schema";
@@ -29,6 +30,14 @@ export function Workflows() {
   const [confirm, dialog] = useConfirm();
   const phone = usePhone();
 
+  // Archived or restored elsewhere (another tab, the phone): the row moves at once.
+  const mark = (id: string, archived_at: string | null) =>
+    setWorkflows((prev) => prev?.map((x) => (x.id === id ? { ...x, archived_at } : x)) ?? prev);
+  const saw = useWorldEvents(worldId, {
+    "workflow.archived": (p) => mark(p.workflow_id, new Date().toISOString()),
+    "workflow.restored": (p) => mark(p.workflow_id, null),
+  });
+
   const fresh = useRefresh();
   useEffect(() => {
     // The rows show at once; each workflow's check (seconds, it may start connectors) follows.
@@ -36,9 +45,10 @@ export function Workflows() {
     let checked = false;
     api
       .GET("/api/worlds/{world_id}/workflows", { params: { path, query: { check: false, archived: true } } })
-      .then(({ data }) => {
+      .then(({ data, response }) => {
         if (!data) throw new Error("load failed");
         if (!checked) setWorkflows(data);
+        saw(response);
       })
       .catch(() => setError("Could not load the workflows. Is the API running?"));
     api
@@ -53,7 +63,7 @@ export function Workflows() {
       .GET("/api/worlds/{world_id}/runs", { params: { path: { world_id: worldId } } })
       .then(({ data }) => data && setRuns(data))
       .catch(() => undefined);
-  }, [worldId, fresh]);
+  }, [worldId, fresh, saw]);
 
   async function start(workflowId: string) {
     setStarting(workflowId);
@@ -87,7 +97,7 @@ export function Workflows() {
     const call = archive ? "/api/workflows/{workflow_id}/archive" : "/api/workflows/{workflow_id}/restore";
     const { data } = await api.POST(call, { params: { path: { workflow_id: w.id } } });
     if (!data) return setError(`Could not ${archive ? "archive" : "restore"} ${w.name}. Try again.`);
-    setWorkflows((prev) => prev?.map((x) => (x.id === w.id ? { ...x, archived_at: data.archived_at } : x)) ?? prev);
+    mark(w.id, data.archived_at ?? null);
   }
 
   const live = workflows?.filter((w) => !w.archived_at) ?? null;
