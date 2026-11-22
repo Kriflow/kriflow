@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from swarmify_kernel import scrub
 from swarmify_kernel.events import read_after
 from swarmify_kernel.sqlite import connect
 from swarmify_swarm import Refused, SqliteStorage
@@ -129,3 +130,21 @@ def test_migration_9_keeps_agents_and_their_log(tmp_path: Path) -> None:
     assert board.log("stage_1", "judge", "session").seq == 2
     board.delete_world("world_1")
     assert board.list_log("stage_1") == []
+
+
+def test_a_login_the_stage_holds_never_reaches_its_log_transcript_or_events(
+    board: SqliteStorage, db: Path
+) -> None:
+    board.agent("world_1", "run_1", "stage_1", "worker-1", "worker")
+    scrub.add("stage_1", "run_1", "shop_admin", ["pa55-w0rd-1"])
+    try:
+        board.log(
+            "stage_1", "worker-1", "output", "page says pa55-w0rd-1", input={"t": "pa55-w0rd-1"}
+        )
+    finally:
+        scrub.drop("stage_1")
+    [entry] = board.list_log("stage_1")
+    assert entry.detail == "page says [secret: shop_admin]"
+    assert entry.input == {"t": "[secret: shop_admin]"}
+    with closing(connect(db)) as conn:
+        assert "pa55-w0rd-1" not in str([e.payload for e in read_after(conn, None, 0)])

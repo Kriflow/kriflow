@@ -21,7 +21,7 @@ import re
 import shutil
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
-from contextlib import asynccontextmanager, closing, suppress
+from contextlib import asynccontextmanager, closing, contextmanager, suppress
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
@@ -84,7 +84,7 @@ from swarmify_connectors import (
     resources,
 )
 from swarmify_connectors import SqliteStorage as ConnectorStorage
-from swarmify_kernel import AGENT_TOOLS, Event
+from swarmify_kernel import AGENT_TOOLS, Event, scrub
 from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
 from swarmify_kernel.sqlite import connect, migrate
 from swarmify_learning import MIGRATIONS as LEARNING_MIGRATIONS
@@ -464,6 +464,24 @@ def run_control(root: Path, notifier: Notifier | None = None) -> RunControl:
     )
     control.lists = world_lists(root)
     return control
+
+
+@contextmanager
+def scrubbed(stage_id: str) -> Iterator[None]:
+    """A stage's error with the secrets it holds (a World Login's) replaced, as the run records
+    it; the original is not chained, so no traceback carries it either."""
+    try:
+        yield
+    except Exception as exc:
+        said = str(exc)
+        clean = scrub.text(said, stage_id)
+        if clean == said:
+            raise
+        try:
+            again = type(exc)(clean)
+        except Exception:
+            again = ConnectorError(clean)
+        raise again from None
 
 
 def run_file(world_folder: Path, run: Run, name: str) -> Path:
@@ -899,11 +917,14 @@ def create_app(
 
     def connector_stage(run: Run, stage_id: str, stage: StageDef) -> str | None:
         try:
-            call_connector(run, stage_id, stage)
+            with scrubbed(stage_id):
+                call_connector(run, stage_id, stage)
         except Unsure as exc:  # it waits at the "Did this post go out?" gate with this question
             return str(exc)
         except JobCancelled as exc:  # stopped as agents are, so the run ends aborted, not failed
             raise OverBudget(str(exc)) from exc
+        finally:
+            registry.settle(run.world_id, run.id, stage_id)
 
     worlds_dir = root / "worlds"
     worlds_dir.mkdir(parents=True, exist_ok=True)
@@ -973,24 +994,25 @@ def create_app(
                 )
             stage_logins[stage_id] = str(login)
         try:
-            swarm.run_stage(
-                run.world_id,
-                run.id,
-                stage_id,
-                stage.name,
-                config,
-                folder,
-                [note] if note else [],
-                run.send_backs,
-                baseline=run.baseline,
-                cast=cast,
-                cause=None if cause is None else asdict(cause),
-            )
+            with scrubbed(stage_id):
+                swarm.run_stage(
+                    run.world_id,
+                    run.id,
+                    stage_id,
+                    stage.name,
+                    config,
+                    folder,
+                    [note] if note else [],
+                    run.send_backs,
+                    baseline=run.baseline,
+                    cast=cast,
+                    cause=None if cause is None else asdict(cause),
+                )
         except Stopped as exc:
             raise OverBudget(str(exc)) from exc
         finally:
             stage_logins.pop(stage_id, None)
-            registry.settle(run.id, stage_id)
+            registry.settle(run.world_id, run.id, stage_id)
 
     def run_retro(run: Run, stage_id: str, stage: StageDef) -> bool:
         """The Retro stage: a judge-style session over the world's events, through the swarm's

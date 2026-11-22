@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from swarmify_connectors.model import Call, Connector
-from swarmify_kernel import Event
+from swarmify_kernel import Event, scrub
 from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 
@@ -66,7 +66,8 @@ class SqliteStorage:
             return _call(row) if row else None
 
     def save_call(self, call: Call) -> Call:
-        fields = asdict(call)
+        # a World Login's values never reach the call record or its event (scrub.py)
+        fields = scrub.value(asdict(call), run_id=call.run_id)
         for key in _JSON:
             fields[key] = json.dumps(fields[key]) if fields[key] is not None else None
         names = ", ".join(fields)
@@ -81,7 +82,7 @@ class SqliteStorage:
                 "connector_call.updated",
                 world_id=call.world_id,
                 run_id=call.run_id,
-                payload=asdict(call),
+                payload=asdict(call),  # scrubbed as every event is
             )
             append(conn, event)
             conn.execute("COMMIT")

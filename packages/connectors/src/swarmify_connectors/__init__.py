@@ -73,7 +73,7 @@ from swarmify_connectors.sandbox import (
 )
 from swarmify_connectors.setup import SetupStore
 from swarmify_connectors.sqlite import MIGRATIONS, SqliteStorage
-from swarmify_kernel import AGENT_TOOLS, new_id, posts_privately
+from swarmify_kernel import AGENT_TOOLS, new_id, posts_privately, scrub
 
 __all__ = [
     "CURVES",
@@ -236,6 +236,8 @@ path of its Saved Session file. A coding session never sees these names."""
 SESSION_IN, SESSION_OUT = "login-session.json", "login-session.out.json"
 """The Saved Session the core hands a login's process, mode 600 in its own scratch folder (its
 HOME), and the updated one the process writes beside it, kept once it ends; both deleted then."""
+SCAN_BYTES = 5 * 1024 * 1024
+"""The largest text file of a stage holding a login that is scanned for its secrets."""
 LOGIN_RESULT = "login_result"
 """A tool answer's key saying what came of its sign-in (logins.RESULTS), for `login.used`."""
 
@@ -792,7 +794,8 @@ class Connectors:
             handoff = self._place_session(connector, confined, handed, env, stage)
 
         def report() -> None:
-            if confined and (lines := confined.blocked()):
+            run_id = stage[0] if stage else None
+            if confined and (lines := scrub.value(confined.blocked(), run_id=run_id)):
                 self.on_blocked(connector, stage, lines)
                 if blocked is not None:
                     blocked.extend(lines)
@@ -842,6 +845,10 @@ class Connectors:
                 f"this world has no login named {login} any more: add it on Settings, or take"
                 " it out of the stage"
             ) from None
+        # its values are the stage's secrets now: scrubbed wherever its output goes
+        run_id, stage_id = stage
+        secrets_ = [handed.password, handed.totp, *scrub.cookies(handed.session)]
+        scrub.add(stage_id, run_id, login, secrets_)
         values = {
             "SWARMIFY_LOGIN_NAME": login,
             "SWARMIFY_LOGIN_DOMAINS": ",".join(handed.login.domains),
@@ -882,6 +889,8 @@ class Connectors:
             saved = ""
         if saved.strip():
             self.logins.keep_session(handoff.world_id, handoff.login, saved)
+            run_id, stage_id = handoff.stage
+            scrub.add(stage_id, run_id, handoff.login, scrub.cookies(saved))
         for name in (SESSION_IN, SESSION_OUT):
             (handoff.home / name).unlink(missing_ok=True)
         run_id, stage_id = handoff.stage
@@ -889,10 +898,24 @@ class Connectors:
             handoff.world_id, run_id, stage_id, handoff.package, handoff.login, handoff.result
         )
 
-    def settle(self, run_id: str, stage_id: str) -> None:
-        """A stage has ended: the logins its swarm's tool servers received settle."""
+    def settle(self, world_id: str, run_id: str, stage_id: str) -> None:
+        """A stage has ended: the logins its swarm's tool servers received settle, a secret in
+        any text file it wrote is replaced (UTF-8 files under 5 MB; binaries are skipped), and
+        its secrets are forgotten."""
         for handoff in self._handoffs.pop((run_id, stage_id), []):
             self._settle_login(handoff)
+        if scrub.holds(stage_id):
+            folder = self.data_dir / "worlds" / world_id / "runs" / run_id / stage_id
+            for file in folder.rglob("*") if folder.is_dir() else []:
+                if file.is_symlink() or not file.is_file() or file.stat().st_size > SCAN_BYTES:
+                    continue
+                try:
+                    said = file.read_bytes().decode()
+                except (OSError, UnicodeDecodeError):
+                    continue
+                if (clean := scrub.text(said, stage_id)) != said:
+                    file.write_text(clean)
+        scrub.drop(stage_id)
 
     # The sandbox (ADR 0021)
 

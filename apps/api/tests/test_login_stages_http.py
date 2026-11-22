@@ -122,7 +122,7 @@ def test_only_the_naming_stage_signs_in_and_its_session_round_trips(
 
     store = FileSecrets(data / "secrets.json")
     session = store.get(ref(w, "shop_admin", "session"))
-    assert session and json.loads(session)["sid"] in site.sessions
+    assert session and json.loads(session)["cookies"][0]["value"] in site.sessions
     assert not list((data / "sandbox").rglob("login-session*.json"))  # both gone at once
 
     # The next run reuses the saved session, handed in its mode-600 file
@@ -137,7 +137,9 @@ def test_only_the_naming_stage_signs_in_and_its_session_round_trips(
     assert uses[0]["result"] == "reused_session" and uses[0]["stage_name"] == "sign"
     with closing(connect(data / "swarmify.db")) as conn:
         everything = json.dumps([list(r) for r in conn.execute("SELECT payload FROM events")])
-    assert PASSWORD not in everything and json.loads(session)["sid"] not in everything
+    assert (
+        PASSWORD not in everything and json.loads(session)["cookies"][0]["value"] not in everything
+    )
     for file in (data / "worlds" / w / "runs").rglob("*"):
         assert not file.is_file() or PASSWORD.encode() not in file.read_bytes(), file
 
@@ -165,3 +167,48 @@ def test_a_login_gone_by_the_stage_fails_it_with_a_clear_message(
         time.sleep(0.1)
     assert run["status"] == "failed"
     assert "no login named shop_admin any more" in run["stages"][1]["error"]
+
+
+def test_a_secret_a_stage_leaks_is_scrubbed_everywhere_its_output_goes(
+    client: TestClient, tmp_path: Path, site: FakeSite
+) -> None:
+    """Seam 3, scrubbing: the signer leaks the password and the session cookie in its answer, a
+    page's text, stderr, a text artifact and an error; the call record, the events, the stage's
+    error, the stderr tail and the artifact all hold `[secret: shop_admin]` instead."""
+    data = tmp_path / "data"
+    w = signer_world(client, tmp_path, site)
+    stages = (
+        "  - connector: sign\n    calls: signer\n    params: {login: shop_admin}\n"
+        "  - connector: leak\n    calls: signer\n    output: leak.txt\n"
+        "    params: {login: shop_admin, tool: leak}\n"
+        "  - connector: fail\n    calls: signer\n"
+        "    params: {login: shop_admin, tool: leak_error}\n"
+    )
+    run = run_to_end(client, w, f"name: Leak\nstages:\n{stages}")
+    assert run["status"] == "failed", run
+    session = FileSecrets(data / "secrets.json").get(ref(w, "shop_admin", "session"))
+    cookie = json.loads(session or "{}")["cookies"][0]["value"]
+    secrets = (PASSWORD, cookie)
+
+    leaked = client.get(f"/api/stages/{run['stages'][1]['id']}/call").json()
+    assert leaked["response"]["said"] == "my password is [secret: shop_admin]"
+    assert "pw=[secret: shop_admin] sid=[secret: shop_admin]" in leaked["response"]["page"]
+    assert "the site refused [secret: shop_admin]" in run["stages"][2]["error"]
+    artifact = next((data / "worlds" / w / "runs" / run["id"]).rglob("leak.txt")).read_text()
+    assert artifact == "the password is [secret: shop_admin] and the cookie [secret: shop_admin]\n"
+    tails = [p.read_text() for p in (data / "sandbox").rglob("stderr.log")]
+    assert any("stderr says [secret: shop_admin]" in t for t in tails), tails
+    with closing(connect(data / "swarmify.db")) as conn:
+        stored = json.dumps(
+            [
+                list(r)
+                for t in ("events", "connector_calls", "runs")
+                for r in conn.execute(f"SELECT * FROM {t}")
+            ]
+        )
+    for value in secrets:
+        assert value not in stored
+        assert all(value not in t for t in tails)
+        for file in (data / "worlds" / w / "runs").rglob("*"):
+            assert not file.is_file() or value.encode() not in file.read_bytes(), file
+    assert "[secret: shop_admin]" in stored

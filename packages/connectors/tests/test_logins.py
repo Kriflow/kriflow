@@ -168,7 +168,7 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
     assert stat.S_IMODE(session.stat().st_mode) == 0o600
     (home / "login-session.out.json").write_text('{"sid": "new"}')
 
-    connectors.settle("run_1", "stg_1")
+    connectors.settle("w1", "run_1", "stg_1")
     assert connectors.logins.hand("w1", "shop").session == '{"sid": "new"}'
     assert not session.exists() and not (home / "login-session.out.json").exists()
     [use] = connectors.logins.uses("w1", "shop")

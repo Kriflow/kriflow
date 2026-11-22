@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from swarmify_kernel import Event, new_id
+from swarmify_kernel import Event, new_id, scrub
 from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 from swarmify_swarm.model import (
@@ -573,6 +573,8 @@ def _log(
     ).fetchone()
     if row is None:
         raise KeyError(agent)
+    # a World Login's values never reach the stage log, its transcript or its event
+    detail, input = scrub.text(detail, stage_id), scrub.value(input, stage_id)
     ts = _iso(None)
     seq = conn.execute(
         "INSERT INTO agent_log"

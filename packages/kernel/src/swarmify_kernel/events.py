@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from swarmify_kernel import scrub
 from swarmify_kernel.ids import new_id
 
 
@@ -27,7 +28,9 @@ class Event:
 
 
 def append(conn: sqlite3.Connection, event: Event) -> Event:
-    """Insert `event` in the caller's transaction and return it with its `seq`."""
+    """Insert `event` in the caller's transaction and return it with its `seq`. A secret a stage
+    holds (a World Login's) never reaches the log: its payload is scrubbed first (scrub.py)."""
+    event = replace(event, payload=scrub.value(event.payload, run_id=event.run_id))
     cur = conn.execute(
         "INSERT INTO events (id, world_id, run_id, ts, type, payload) VALUES (?, ?, ?, ?, ?, ?)",
         (event.id, event.world_id, event.run_id, event.ts, event.type, json.dumps(event.payload)),

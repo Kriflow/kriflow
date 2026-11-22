@@ -19,6 +19,15 @@ mcp = MCPServer("signer")
 LOGIN = {k: v for k, v in os.environ.items() if k.startswith("SWARMIFY_LOGIN_")}
 
 
+def _sid(session_file: Path) -> str:
+    """The session cookie from a saved session, kept as Playwright's storage state keeps it."""
+    if not session_file.is_file():
+        return ""
+    return next(
+        c["value"] for c in json.loads(session_file.read_text())["cookies"] if c["name"] == "sid"
+    )
+
+
 def _get(url: str, cookie: str = "", form: dict[str, str] | None = None) -> tuple[int, str, str]:
     """Status, text and the session cookie it set, or a refusal as status 0."""
     data = "&".join(f"{k}={v}" for k, v in form.items()).encode() if form else None
@@ -39,7 +48,7 @@ def signer(other: str = "", idempotency_key: str = "") -> dict[str, Any]:
         return {"names": sorted(LOGIN), "login_result": "failed"}
     site = "http://" + os.environ["SWARMIFY_LOGIN_DOMAINS"].split(",")[0]
     session_file = Path(os.environ["SWARMIFY_LOGIN_SESSION"])
-    kept = json.loads(session_file.read_text())["sid"] if session_file.is_file() else ""
+    kept = _sid(session_file)
     status, _, _ = _get(site + "/account", kept)
     result = "reused_session"
     if status != 200:
@@ -50,7 +59,9 @@ def signer(other: str = "", idempotency_key: str = "") -> dict[str, Any]:
         status, _, kept = _get(site + "/login", form={"username": user, "password": password})
         result = "signed_in" if status == 200 else "failed"
     if kept:
-        session_file.with_name("login-session.out.json").write_text(json.dumps({"sid": kept}))
+        session_file.with_name("login-session.out.json").write_text(
+            json.dumps({"cookies": [{"name": "sid", "value": kept}], "origins": []})
+        )
     reached = _get(other)[0] if other else None
     return {
         "names": sorted(LOGIN),
@@ -67,7 +78,7 @@ def signer(other: str = "", idempotency_key: str = "") -> dict[str, Any]:
 def leak(output_path: str = "", idempotency_key: str = "") -> dict[str, Any]:
     password = os.environ.get("SWARMIFY_LOGIN_PASSWORD", "")
     session_file = Path(os.environ.get("SWARMIFY_LOGIN_SESSION", "/nonexistent"))
-    cookie = json.loads(session_file.read_text())["sid"] if session_file.is_file() else ""
+    cookie = _sid(session_file)
     print(f"stderr says {password}", file=sys.stderr, flush=True)
     if output_path:
         Path(output_path).write_text(f"the password is {password} and the cookie {cookie}\n")

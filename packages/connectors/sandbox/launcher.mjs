@@ -105,7 +105,23 @@ function save() {
   saving = undefined;
   if (plan.stderr && tail.length) writeFileSync(plan.stderr, tail.join("\n") + "\n");
 }
-function said(line) {
+// A World Login's values (spec: World Logins) never leave in a stderr line, to the API's log
+// or the tail: the password, the authenticator secret and the saved session's values.
+const cookies = (x) =>
+  !x || typeof x !== "object" ? [] : Object.entries(x).flatMap(([k, v]) => (k === "value" && typeof v === "string" && v.length >= 8 ? [v] : cookies(v)));
+const session = process.env.SWARMIFY_LOGIN_SESSION;
+let kept = [];
+try {
+  kept = session && existsSync(session) ? cookies(JSON.parse(readFileSync(session, "utf8"))) : [];
+} catch {
+  // a session that does not parse holds nothing to look for
+}
+const secrets = [process.env.SWARMIFY_LOGIN_PASSWORD, process.env.SWARMIFY_LOGIN_TOTP, ...kept]
+  .filter(Boolean)
+  .sort((a, b) => b.length - a.length);
+const hidden = `[secret: ${process.env.SWARMIFY_LOGIN_NAME ?? "login"}]`;
+function said(raw) {
+  const line = secrets.reduce((l, s) => l.replaceAll(s, hidden), raw);
   process.stderr.write(line + "\n");
   tail.push(line.slice(0, LINE));
   if (tail.length > TAIL) tail.shift();
