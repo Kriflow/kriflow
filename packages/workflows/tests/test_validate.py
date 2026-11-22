@@ -30,6 +30,20 @@ def test_publish_must_come_right_after_a_gate() -> None:
     assert rules(WorkflowModel("w", [render, GATE, publish])) == []
 
 
+def test_one_gate_lets_every_publish_stage_right_after_it_run() -> None:
+    """Issue 541: a gate then two publish stages both pass; anything else between still fails."""
+    first, second = ConnectorStage("youtube", "youtube"), ConnectorStage("meta", "youtube")
+    render = ConnectorStage("render", "remotion_render", output="short.mp4")
+    assert rules(WorkflowModel("w", [GATE, first, second])) == []
+    assert rules(WorkflowModel("w", [GATE, first, render, second])) == [
+        ("publish_without_gate", "meta")
+    ]
+    assert rules(WorkflowModel("w", [first, second])) == [
+        ("publish_without_gate", "meta"),
+        ("publish_without_gate", "youtube"),
+    ]
+
+
 def test_a_private_post_needs_no_gate() -> None:
     private = ConnectorStage("upload", "youtube", params={"visibility": "private"})
     public = ConnectorStage("upload", "youtube", params={"visibility": "public"})

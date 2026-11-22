@@ -5,7 +5,13 @@ from dataclasses import asdict
 import pytest
 
 from samples import CONNECTORS
-from swarmify_workflows import ConnectorStage, SwarmStage, WorkflowModel, WorkflowStage
+from swarmify_workflows import (
+    ConnectorStage,
+    GateStage,
+    SwarmStage,
+    WorkflowModel,
+    WorkflowStage,
+)
 from swarmify_workflows.dump import dump_workflow
 from swarmify_workflows.parse import parse_workflow
 from swarmify_workflows.validate import validate
@@ -126,3 +132,72 @@ def test_a_fan_out_stage_may_end_with_an_approve_items_gate_and_it_round_trips()
         "  - workflow: each\n    runs: wf_t\n    for_each: paragraphs\n    approve: 1\n"
     )
     assert bad.startswith("approve must be true or false")
+
+
+PILOT = """\
+  - workflow: make
+    from_list: {list: ideas, status: new, where: {kind: pilot}, order: rank, on_start: making}
+    runs_by: {field: format, map: {blocky: wf_t, body: wf_b}}
+    take: [cut.mp4]
+"""
+
+
+def test_a_fan_out_stage_may_take_its_items_from_a_list_query() -> None:
+    """Issue 541: `from_list` with its defaults filled in, `runs_by` in place of `runs`."""
+    stage = parsed(PILOT).stages[1]
+    assert stage == WorkflowStage(
+        "make", "", ["cut.mp4"], None, "item.md", 2,
+        from_list={
+            "list": "ideas", "status": ["new"], "where": {"kind": "pilot"}, "order": "rank",
+            "take": 1, "on_start": "making", "on_finish": None,
+        },
+        runs_by={"field": "format", "map": {"blocky": "wf_t", "body": "wf_b"}},
+    )  # fmt: skip
+    stages = []
+    for each in parsed(PILOT).stages:
+        fields = asdict(each)
+        stages.append((fields.pop("type"), fields.pop("name"), fields))
+    assert parse_workflow(dump_workflow("N", stages)) == (parsed(PILOT), [])
+    found = validate(parsed(PILOT), workflow_id=None, connectors=CONNECTORS, references={})
+    assert sorted(v.message for v in found) == [
+        "no workflow with id 'wf_b'",
+        "no workflow with id 'wf_t'",
+    ]
+    read = ConnectorStage("read", "remotion_render", input="items.json")
+    assert rules(WorkflowModel("w", [*parsed(PILOT).stages, read])) == [
+        ("unknown_workflow", "make")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ("    runs: wf_t\n    from_list: ideas\n", "from_list must be a mapping"),
+        ("    runs: wf_t\n    from_list: {status: new}\n", "list is required"),
+        ("    runs: wf_t\n    from_list: {list: a, limit: 1}\n", "unknown field 'limit'"),
+        ("    runs: wf_t\n    from_list: {list: a, take: 0}\n", "take must be a positive"),
+        ("    runs: wf_t\n    from_list: {list: a, where: {x: [1]}}\n", "from_list.where"),
+        ("    runs_by: {field: f, map: {a: wf_t}}\n", "runs_by picks a workflow"),
+        ("    runs_by: {field: f}\n", "runs_by must give a field and a map"),
+        (
+            "    runs: wf_t\n    runs_by: {field: f, map: {a: wf_t}}\n    from_list: {list: a}\n",
+            "give runs or runs_by",
+        ),
+        ("    runs: wf_t\n    for_each: paragraphs\n    from_list: {list: a}\n", "give for_each"),
+        ("    from_list: {list: a}\n", "runs is required"),
+    ],
+)
+def test_the_schema_refuses_a_bad_list_query(fields: str, message: str) -> None:
+    (found,) = schema(f"  - workflow: each\n{fields}")
+    assert found.startswith(message), found
+
+
+def test_a_gate_names_where_its_runs_entry_moves_per_answer() -> None:
+    gate = "  - gate: review\n    ask: Good?\n    entry: {approve: review, send_back: making}\n"
+    (_, stage) = parsed(gate).stages
+    assert isinstance(stage, GateStage)
+    assert stage.entry == {"approve": "review", "send_back": "making"}
+    (stray,) = schema("  - gate: g\n    ask: a\n    entry: {publish: x}\n")
+    assert stray.startswith("entry names answers approve, send_back, reject")
+    (pick,) = schema("  - gate: g\n    ask: a\n    kind: pick\n    entry: {send_back: x}\n")
+    assert pick.startswith("entry.send_back needs an approve gate")

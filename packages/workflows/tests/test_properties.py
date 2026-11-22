@@ -54,6 +54,17 @@ models = st.builds(WorkflowModel, name=st.just("w"), stages=stages)
 references = st.fixed_dictionaries({k: st.lists(st.sampled_from(KNOWN), max_size=2) for k in KNOWN})
 
 
+def gated(model: WorkflowModel, index: int) -> bool:
+    """The rule restated: a gate comes before the stage, with only publish stages between."""
+    for before in reversed(model.stages[:index]):
+        if isinstance(before, GateStage):
+            return True
+        ref = CONNECTORS.get(before.calls) if isinstance(before, ConnectorStage) else None
+        if ref is None or ref.kind != "publish":
+            return False
+    return False
+
+
 def clean_model(model: WorkflowModel) -> bool:
     return not validate(model, workflow_id=None, connectors=CONNECTORS, references={})
 
@@ -76,8 +87,7 @@ def test_a_passing_workflow_satisfies_every_rule_restated(model: WorkflowModel, 
         elif isinstance(stage, ConnectorStage):
             ref = CONNECTORS.get(stage.calls)
             if ref is not None and ref.kind == "publish":
-                gated = index > 0 and isinstance(model.stages[index - 1], GateStage)
-                assert gated or "publish_without_gate" in rules
+                assert gated(model, index) or "publish_without_gate" in rules
             if stage.input is not None and stage.input not in produced:
                 assert "input_not_produced" in rules
             if stage.output:
@@ -121,9 +131,8 @@ def test_inserting_a_publish_stage_anywhere_but_after_a_gate_is_caught(
     for index in range(len(model.stages) + 1):
         mutated = WorkflowModel("w", [*model.stages[:index], publish, *model.stages[index:]])
         found = validate(mutated, workflow_id=None, connectors=CONNECTORS, references={})
-        gated = index > 0 and isinstance(model.stages[index - 1], GateStage)
         on_it = {v.rule for v in found if v.stage == "publish_it"}
-        assert ("publish_without_gate" in on_it) == (not gated)
+        assert ("publish_without_gate" in on_it) == (not gated(mutated, index))
 
 
 @given(models.filter(clean_model))
