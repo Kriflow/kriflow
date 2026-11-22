@@ -99,6 +99,7 @@ test("Open on a run's document goes to the reader; a video still opens raw", asy
     "GET /api/worlds/world_1/library": () => Response.json([{ ...script, ...notes }]),
   });
   const { screen, router } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByRole("tab", { name: /^Files/ }).click();
   await screen.getByText("All files (2)").click();
   await expect.element(screen.getByTestId("all-files").getByRole("link", { name: "clip.mp4" })).toHaveAttribute("href", "/api/worlds/world_1/files/runs/run_1/stage_0/artifacts/clip.mp4");
   await screen.getByTestId("all-files").getByRole("link", { name: "notes.md" }).click();
