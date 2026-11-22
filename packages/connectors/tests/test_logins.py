@@ -52,8 +52,13 @@ def test_the_secrets_file_is_mode_600_and_refused_when_others_can_read_it(
     ("domain", "ok"),
     [
         ("admin.myshop.com", True),
-        ("127.0.0.1:8123", True),
-        ("localhost", True),
+        ("127.0.0.1:8123", False),
+        ("127.9.9.9", False),
+        ("localhost", False),
+        ("api.localhost", False),
+        ("169.254.169.254", False),
+        ("0.0.0.0", False),
+        ("10.0.0.5", True),
         ("*.myshop.com", True),
         ("*.com", False),
         ("*", False),
@@ -63,7 +68,14 @@ def test_the_secrets_file_is_mode_600_and_refused_when_others_can_read_it(
     ],
 )
 def test_domains_follow_the_sandboxs_rules(domain: str, ok: bool) -> None:
+    """Loopback and link-local hosts are refused (security review): a login's domains become
+    the stage's network, and the box's own services must stay out of its reach."""
     assert (domain_problem(domain) is None) is ok
+
+
+def test_loopback_is_allowed_under_the_test_flag_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SWARMIFY_LOGIN_ALLOW_LOOPBACK", "1")
+    assert domain_problem("127.0.0.1:8123") is None
 
 
 def test_totp_matches_rfc_6238() -> None:

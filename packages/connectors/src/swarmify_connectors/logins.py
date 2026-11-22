@@ -14,6 +14,8 @@ import base64
 import binascii
 import hashlib
 import hmac
+import ipaddress
+import os
 import re
 import struct
 import time
@@ -28,6 +30,8 @@ from swarmify_kernel import Event
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 """A login's name, short enough to write unquoted in a stage: `login: shop_admin`."""
 _HOST = re.compile(r"^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*(:\d{1,5})?$")
+ALLOW_LOOPBACK = "SWARMIFY_LOGIN_ALLOW_LOOPBACK"
+"""Set to 1 by tests only: a login may then name a loopback host, as the fake site serves on."""
 RESULTS = ("signed_in", "reused_session", "person_check", "refused_origin", "failed", "received")
 """What a stage's use of a login came to, as its `login.used` event says."""
 
@@ -75,11 +79,28 @@ class FileSecrets(PrivateJson):
 
 def domain_problem(domain: str) -> str | None:
     """Why a login's domain is refused, as the sandbox's rules would refuse it: an exact host
-    with an optional port, or `*.example.com` for its strict subdomains; never `*` or `*.com`."""
+    with an optional port, or `*.example.com` for its strict subdomains; never `*` or `*.com`.
+    Never the box itself either (localhost, loopback, link-local such as 169.254.169.254), which
+    would open its own services to a stage, unless a test sets ALLOW_LOOPBACK."""
     if not _HOST.fullmatch(domain):
         return f"{domain or 'an empty line'} is not a host like admin.myshop.com"
     if domain.startswith("*.") and "." not in domain[2:].split(":")[0]:
         return f"{domain} is too broad"
+    host = domain.removeprefix("*.").split(":")[0]
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    inside = (
+        host == "localhost"
+        or host.endswith(".localhost")
+        or (
+            address is not None
+            and (address.is_loopback or address.is_link_local or address.is_unspecified)
+        )
+    )
+    if inside and os.environ.get(ALLOW_LOOPBACK) != "1":
+        return f"{domain} is this box itself, which a login never reaches"
     return None
 
 

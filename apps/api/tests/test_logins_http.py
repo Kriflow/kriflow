@@ -66,6 +66,8 @@ def test_a_login_lives_through_the_api_without_ever_showing_a_secret(
     assert call("POST", "", json=body)["status"] == 409
     for bad, says in [
         ({**body, "name": "two", "domains": ["*.com"]}, "Domains: *.com is too broad"),
+        ({**body, "name": "two", "domains": ["169.254.169.254"]}, "is this box itself"),
+        ({**body, "name": "two", "domains": ["127.0.0.1:8000"]}, "is this box itself"),
         ({**body, "name": "two", "totp_secret": "nope!"}, "Authenticator secret"),
         ({**body, "name": "Two"}, "Name"),
         ({**body, "name": "two", "password": ""}, "Password"),
