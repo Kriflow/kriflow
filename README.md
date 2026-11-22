@@ -333,12 +333,16 @@ may take their names.
 (statuses and Entries, filtered by status and fields, ordered by `score`, `time` or a numeric
 field, `-` for descending), `add_entry` (a key already in the list returns its Entry unchanged,
 `added` false), `set_entry_status` and `set_entry_fields`. A World List is declared per world with
-its statuses (the first is where an Entry starts) and which count as done and rejected:
+its statuses (the first is where an Entry starts), which count as done and rejected, and which
+wait for a person (`review`: while any Entry is in one, Needs you lists a `review` notice):
 `PUT /api/worlds/<w>/lists/<name>`, then `GET|POST .../entries`, `POST .../status` (several keys
 at once, with a note), `GET|PATCH .../entries/<key>` (the Entry with its history). The MCP server
 has the same calls (`declare_list`, `list_lists`, `read_list`, `get_entry`, `add_entry`,
 `set_entry_status`, `set_entry_fields`). Every add and change is an `entry.added` or
-`entry.changed` event on the world's stream with who and the note.
+`entry.changed` event on the world's stream with who and the note. The web skin's Lists page
+(`/worlds/<w>/lists`, phone first) shows a list as status chips over cards: tick several and
+move them to any status with one optional reason, or open an Entry's sheet to edit its score
+and fields, move it, and open its file, the runs that held it and its history.
 
 A connector's keys are Credentials of its package's Setup (see Connector Packages), stored in
 `<data dir>/setup.json` with mode 600; the app refuses to read it when group or others can.

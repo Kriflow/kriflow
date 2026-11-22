@@ -24,6 +24,7 @@ const NAV_ICON = {
   runs: "runs",
   workflows: "workflows",
   library: "library",
+  lists: "steps",
   assets: "assets",
   graph: "memory",
   cast: "people",
@@ -41,12 +42,13 @@ const WORLD_TABS = [
   ["library", "Library", "/worlds/$worldId/library"],
 ] as const;
 // Areas reached through More, so its tab is current on them.
-const MORE = new Set(["overview", "assets", "graph", "cast", "connectors", "settings", "worlds", "evals"]);
+const MORE = new Set(["overview", "lists", "assets", "graph", "cast", "connectors", "settings", "worlds", "evals"]);
 // Switching worlds keeps the area you are in; anywhere else lands where the world opens.
 const SAME_AREA = {
   runs: "/worlds/$worldId/runs",
   workflows: "/worlds/$worldId/workflows",
   library: "/worlds/$worldId/library",
+  lists: "/worlds/$worldId/lists",
   assets: "/worlds/$worldId/assets",
   graph: "/worlds/$worldId/graph",
   cast: "/worlds/$worldId/cast",
@@ -259,6 +261,7 @@ export function Shell() {
               {item("runs", "Runs", { to: "/worlds/$worldId/runs", params })}
               {item("workflows", "Workflows", { to: "/worlds/$worldId/workflows", params })}
               {item("library", "Library", { to: "/worlds/$worldId/library", params })}
+              {item("lists", "Lists", { to: "/worlds/$worldId/lists", params })}
               {item("assets", "Assets", { to: "/worlds/$worldId/assets", params })}
               {item("graph", "Memory", { to: "/worlds/$worldId/graph", params })}
             </>
@@ -327,6 +330,7 @@ export function Shell() {
           {worldId && (
             <>
               {row("Overview", { to: worldHome(world), params }, summary.overview, "overview")}
+              {row("Lists", { to: "/worlds/$worldId/lists", params }, "shared work lists", "lists")}
               {row("Assets", { to: "/worlds/$worldId/assets", params }, summary.assets ?? "files your builds read", "assets")}
               {row("Memory", { to: "/worlds/$worldId/graph", params }, "graph and notes", "graph")}
               {row("Cast", { to: "/worlds/$worldId/cast", params }, summary.cast, "cast")}

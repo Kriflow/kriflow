@@ -449,8 +449,8 @@ export function Gates() {
         </div>
       )}
       <Notices
-        // an account is shared by every world, so only a post's notice belongs to one
-        notices={notices.filter((n) => n.kind !== "visibility" || !n.world_id || inWorld({ world_id: n.world_id }))}
+        // an account is shared by every world, so only a post's or a list's notice belongs to one
+        notices={notices.filter((n) => !["visibility", "review"].includes(n.kind) || !n.world_id || inWorld({ world_id: n.world_id }))}
       />
     </main>
   );
@@ -463,6 +463,7 @@ const NOTICE_KIND: Record<Notice["kind"], [one: string, many: string, failed: bo
   outcomes: ["connector could not read outcomes", "connectors could not read outcomes", true],
   visibility: ["post still not public", "posts still not public", false],
   network: ["run waiting for the network", "runs waiting for the network", false],
+  review: ["list waits for you", "lists wait for you", false],
 };
 const DISMISSED = "swarmify.dismissed-notices";
 // Digits stripped, as push does: a notice whose minutes tick up is the same notice. A dismissed
@@ -508,7 +509,11 @@ function Notices({ notices }: { notices: Notice[] }) {
                 <li key={noticeKey(n)} data-testid="notice">
                   <span>{n.text}</span>
                   <span className="notice-actions">
-                    {n.world_id && n.run_id ? (
+                    {n.world_id && n.kind === "review" ? (
+                      <Link to="/worlds/$worldId/lists" params={{ worldId: n.world_id }}>
+                        Open Lists
+                      </Link>
+                    ) : n.world_id && n.run_id ? (
                       <Link to="/worlds/$worldId/runs/$runId" params={{ worldId: n.world_id, runId: n.run_id }}>
                         Open the run
                       </Link>

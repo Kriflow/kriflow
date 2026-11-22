@@ -50,6 +50,9 @@ export type WorldEvents = {
   "world.updated": Partial<components["schemas"]["World"]>;
   /** A workflow was saved; reload the list to see it. */
   "workflow.saved": unknown;
+  /** A World List's Entry was added or changed: which list and key. */
+  "entry.added": { list: string; key: string };
+  "entry.changed": { list: string; key: string };
 };
 type Handlers = { [K in keyof WorldEvents]?: (payload: WorldEvents[K]) => void };
 const TYPES: (keyof WorldEvents)[] = [
@@ -62,6 +65,8 @@ const TYPES: (keyof WorldEvents)[] = [
   "artifact.created",
   "world.updated",
   "workflow.saved",
+  "entry.added",
+  "entry.changed",
 ];
 
 /** The event-log position a snapshot response reflects: the API stamps every GET with it. Null
