@@ -429,3 +429,78 @@ def test_a_worlds_own_publish_connector_posts_text_through_the_same_gate(
     assert args["input_path"].endswith("01-render/short.mp4")
     # the connector hears the edits, and they stand though this fake ignores them
     assert edits in [c[2]["edits"] for c in transport.calls if c[1] == "preview"]
+
+
+MAKE = """name: Make
+given: [item.md]
+stages:
+  - connector: render
+    calls: maker
+    output: short.mp4
+  - gate: confirm
+    ask: Post it everywhere?
+    kind: confirm
+    entry: {approve: review}
+"""
+POST = """  - connector: %s
+    calls: youtube
+    input: short.mp4
+    params:
+      title: Five hooks that work
+      visibility: public
+      schedule: "2099-01-01T10:00:00+01:00"
+"""
+
+
+def test_a_listed_entry_is_claimed_approved_and_published_by_both_stages_after_one_gate(
+    running: TestClient, transport: FakeTransport, tmp_path: Path
+) -> None:
+    """Issue 541 end to end: a daily fan-out claims the top Entry, the person's confirm moves
+    it, both publish stages after that one gate post, and the Entry ends published with both
+    links and no claim."""
+    sign_in_youtube(tmp_path)
+    world, make = setup(running, MAKE + POST % "youtube" + POST % "again")
+    lists = f"/api/worlds/{world}/lists/ideas"
+    statuses = ["new", "making", "review", "published"]
+    declared = running.put(lists, json={"statuses": statuses, "published": "published"})
+    assert declared.status_code == 200, declared.text
+    assert declared.json()["published"] == "published"
+    for key, rank in (("later", 2), ("first", 1)):
+        body = {"key": key, "title": key.title(), "fields": {"rank": rank}}
+        assert running.post(f"{lists}/entries", json=body).status_code == 201
+    daily = (
+        "name: Daily\nstages:\n  - workflow: make\n"
+        f"    runs: {make}\n"
+        "    from_list: {list: ideas, status: new, order: rank, on_start: making}\n"
+    )
+    saved = running.post(f"/api/worlds/{world}/workflows", json={"yaml": daily})
+    assert saved.status_code == 201, saved.text
+    parent = running.post(f"/api/workflows/{saved.json()['workflow_id']}/runs", json={}).json()
+
+    def child() -> dict:
+        found = running.get(f"/api/runs/{parent['id']}").json()["stages"][0]["items"]
+        run_id = found[0]["child"]["id"] if found and found[0]["child"] else None
+        return running.get(f"/api/runs/{run_id}").json() if run_id else {"status": "none"}
+
+    until(lambda: child()["status"] == "waiting_gate")
+    made = child()
+    out = tmp_path / "worlds" / world / "runs" / made["id"] / made["stages"][0]["id"]
+    (out / "short.mp4").parent.mkdir(parents=True, exist_ok=True)
+    (out / "short.mp4").write_bytes(b"video")
+    entry = running.get(f"{lists}/entries/first").json()
+    assert (entry["status"], entry["claimed_by"]) == ("making", made["id"])
+
+    transport.outputs["publish"] = [
+        {"id": "v1", "url": "https://youtu.be/v1", "public": True},
+        {"id": "v2", "links": {"again": "https://again.example/v2"}, "public": True},
+    ]
+    assert running.post(f"/api/runs/{made['id']}/decision", json={}).status_code == 200
+    until(lambda: running.get(f"/api/runs/{parent['id']}").json()["status"] == "done")
+    assert [c[1] for c in transport.calls if c[0] == "youtube"].count("publish") == 2
+    entry = running.get(f"{lists}/entries/first").json()
+    assert (entry["status"], entry["claimed_by"]) == ("published", None)
+    assert entry["fields"]["links"] == {
+        "youtube": "https://youtu.be/v1",
+        "again": "https://again.example/v2",
+    }
+    assert running.get(f"{lists}/entries/later").json()["status"] == "new"

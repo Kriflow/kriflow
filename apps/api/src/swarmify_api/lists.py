@@ -22,6 +22,8 @@ class Declared(BaseModel):
     """In order: the first is where an added Entry starts."""
     done: list[str] = []
     rejected: list[str] = []
+    published: str | None = None
+    """Where an Entry goes when the run holding it publishes; left where it is when None."""
 
 
 class NewEntry(BaseModel):
@@ -91,7 +93,14 @@ def router(lists: WorldLists, world_exists: WorldExists) -> APIRouter:
     def declare(world_id: str, name: str, body: Declared) -> WorldList:
         return act(
             world_id,
-            lambda: lists.declare(world_id, name, body.statuses, body.done, body.rejected),
+            lambda: lists.declare(
+                world_id,
+                name,
+                body.statuses,
+                body.done,
+                body.rejected,
+                published=body.published,
+            ),  # fmt: skip
         )
 
     @api.get("/{name}/entries")

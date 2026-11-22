@@ -273,6 +273,12 @@ stage with a plain error.
   An Item named only in a sentence (split at `.`, `!`, `?`, `;` or a new line) holding keep,
   pass, fine, leave, unchanged, as is or as they are is kept, so "Paragraph 2: redo it.
   Paragraphs 1 and 3 pass; keep them." reruns only paragraph 2.
+- With `from_list` instead of `for_each` the Items are a World List query's Entries (`list`,
+  `status`, `where`, `order`, `take`, `on_start`, `on_finish`). The parent claims the Entries no
+  other run holds in one transaction and hands each to its child, which is given the Entry's
+  file; a run that ends frees what it holds in the same transaction. No match finishes the stage
+  at once, with no child. `runs_by: {field, map}` picks each child's workflow from an Entry
+  field; an unmapped value fails that Item only.
 - The runs page shows `child of <parent>` on each child, the run timeline links a workflow stage
   to its child and a child to its parent, and the gates inbox labels a child's gate with its
   parent.
@@ -339,6 +345,11 @@ at once, with a note), `GET|PATCH .../entries/<key>` (the Entry with its history
 has the same calls (`declare_list`, `list_lists`, `read_list`, `get_entry`, `add_entry`,
 `set_entry_status`, `set_entry_fields`). Every add and change is an `entry.added` or
 `entry.changed` event on the world's stream with who and the note.
+A list may also name its `published` status: when a run holding an Entry posts publicly, the
+Entry moves there with the post's links in its `links` field. A gate's `entry`
+(`{approve, send_back, reject}`) moves the run's Entries when a person answers on the web or
+through a Remote Approval (reject: the run aborted at the gate), never when an agent answers
+through MCP. One gate answer lets every publish stage right after it run (ADR 0007).
 
 A connector's keys are Credentials of its package's Setup (see Connector Packages), stored in
 `<data dir>/setup.json` with mode 600; the app refuses to read it when group or others can.

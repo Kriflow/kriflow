@@ -436,7 +436,7 @@ def run_control(root: Path, notifier: Notifier | None = None) -> RunControl:
         world = worlds.get(world_id)
         return world.monthly_budget_usd if world else None
 
-    return RunControl(
+    control = RunControl(
         run_storage(root),
         root / "dbos.sqlite",
         root,
@@ -444,6 +444,8 @@ def run_control(root: Path, notifier: Notifier | None = None) -> RunControl:
         previews(connector_service(root), worlds, lambda run: recorded_pins(workflows, run)),
         monthly=monthly,
     )
+    control.lists = world_lists(root)
+    return control
 
 
 def run_file(world_folder: Path, run: Run, name: str) -> Path:
@@ -858,6 +860,8 @@ def create_app(
                 "visibility_said": all(k in config["params"] for k in private_when),
             },
         )
+        if out["links"] and out["public"] is not False:  # a private draft is not published
+            lists_svc.published(run.world_id, run.id, out["links"])
 
     def connector_stage(run: Run, stage_id: str, stage: StageDef) -> None:
         try:
@@ -1006,6 +1010,7 @@ def create_app(
         poll_seconds=max(0.05, min(poll_seconds, 1.0)),
         items=lambda run, index, stage: fanout.items(memory, run, index, stage),
     )
+    runner.lists = lists_svc
     workflow_svc = workflow_service(root, registry, runner)
     runner.pin = runs.pinner(workflow_svc)
     registry.aborted = lambda run_id: runner.storage.stop_of(run_id) == "abort"
