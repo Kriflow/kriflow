@@ -1109,14 +1109,20 @@ class Connectors:
             (run / stage[1]).mkdir(parents=True, exist_ok=True)
             grants.reads.append(run)
             grants.writes.append(run / stage[1])
-            grants.env = self.identity(stage)
+            grants.env = self.identity(world_id, stage)
         return grants
 
-    def identity(self, stage: Stage) -> dict[str, str]:
-        """What tells a package process the run, the top run and the stage it works for."""
+    def identity(self, world_id: str, stage: Stage) -> dict[str, str]:
+        """What tells a package process the run, the top run and the stage it works for, and
+        where that stage's folder is (writable only by a process confined to the stage)."""
         run_id, stage_id = stage
-        root = self.root_of(run_id)
-        return {"SWARMIFY_RUN_ID": run_id, "SWARMIFY_RUN_ROOT": root, "SWARMIFY_STAGE_ID": stage_id}
+        folder = self.data_dir / "worlds" / world_id / "runs" / run_id / stage_id
+        return {
+            "SWARMIFY_RUN_ID": run_id,
+            "SWARMIFY_RUN_ROOT": self.root_of(run_id),
+            "SWARMIFY_STAGE_ID": stage_id,
+            "SWARMIFY_STAGE_DIR": str(folder),
+        }
 
     def _grantable(self, value: str | None) -> Path | None:
         """A folder an operator named (a `path` Setting, a local package's command) when the
@@ -1388,7 +1394,7 @@ class Connectors:
             if login is not None and accepts_login(connector) and (where := stage or run):
                 known, handed = self._hand(connector, login, where)
             else:
-                known = Grants(env=self.identity(run)) if run and not stage else None
+                known = Grants(env=self.identity(world_id, run)) if run and not stage else None
             confined, sandboxed = self.confine(connector, env, where, extra=known)
             assert confined is not None  # it has a command
             self._watched.append((connector, confined))
@@ -1753,7 +1759,7 @@ class Connectors:
     def _held(self, connector: Connector, stage: Stage) -> Iterator[None]:
         """One Slot of each Resource the Manifest's `hold` names, held around the whole call
         (ADR 0030); the wait is logged once and shows on the stage through its waiting note."""
-        identity = self.identity(stage)
+        identity = self.identity(connector.world_id or "", stage)
         note = {
             "run": identity["SWARMIFY_RUN_ID"],
             "root": identity["SWARMIFY_RUN_ROOT"],

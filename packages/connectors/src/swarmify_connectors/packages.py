@@ -63,7 +63,7 @@ CAPABILITIES = (
 )
 OLDEST_CONTRACT = 1
 """The oldest Package Contract this core still runs; raising it drops packages (an ADR)."""
-NEWEST_CONTRACT = 1
+NEWEST_CONTRACT = 2
 """The newest Package Contract this core knows: raised, with a line in the README's Package
 contracts, by any change to what a package may declare or answer."""
 FIELD_TYPES = ("string", "text", "number", "integer", "boolean", "choice", "url", "path", "oauth")

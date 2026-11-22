@@ -53,6 +53,7 @@ def test_a_declared_resource_and_the_run_identity_reach_the_process_and_nothing_
         call = real.run_stage(
             "w1", "run_child", f"s_{name}", {"calls": name, "params": {"tool": "environ"}}
         )
+        assert (call.response or {})["wrote"]  # its stage's folder, which it may write
         return (call.response or {})["env"]
 
     seated, plain = environ("seated"), environ("plain")
@@ -64,6 +65,9 @@ def test_a_declared_resource_and_the_run_identity_reach_the_process_and_nothing_
         assert env["SWARMIFY_RUN_ID"] == "run_child"
         assert env["SWARMIFY_RUN_ROOT"] == "run_top"
         assert env["SWARMIFY_STAGE_ID"] == stage
+        folder = Path(env["SWARMIFY_STAGE_DIR"])
+        assert folder == real.data_dir / "worlds/w1/runs/run_child" / stage
+        assert (folder / "probe.txt").read_text() == "x"
 
 
 TAKE = """
@@ -185,3 +189,9 @@ def test_a_tool_server_lent_to_a_stage_gets_its_resources_and_its_run(
     assert env["SWARMIFY_RESOURCE_SEAT_SLOTS"] == "1"
     assert (env["SWARMIFY_RUN_ID"], env["SWARMIFY_RUN_ROOT"]) == ("run_1", "run_top")
     assert env["SWARMIFY_STAGE_ID"] == "s_swarm"
+    # the path only: a swarm stage's tool server without its login is not confined to the stage,
+    # and neither reads nor writes its folder
+    assert env["SWARMIFY_STAGE_DIR"] == str(real.data_dir / "worlds/w1/runs/run_1/s_swarm")
+    folder = Path(env["SWARMIFY_STAGE_DIR"]).resolve()
+    writes = [Path(p).resolve() for p in plan["sandbox"]["filesystem"]["allowWrite"]]
+    assert writes and not any(folder.is_relative_to(w) for w in writes)
