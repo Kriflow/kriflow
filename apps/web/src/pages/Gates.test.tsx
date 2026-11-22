@@ -822,6 +822,24 @@ test("on a phone the cards sit side by side: a neighbour is inert, and Next open
   await page.viewport(1280, 800);
 });
 
+test("on a phone the deck is as tall as the open card, not the tallest one", async () => {
+  await page.viewport(390, 844);
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([inbox[0]!, gate("confirm", { run_id: "run_4", stage_id: "s4", run_name: "Second one" })]),
+  });
+  const { screen } = await mountAt("/gates");
+  const first = screen.getByTestId("gate-run_3").element() as HTMLElement;
+  const second = screen.getByTestId("gate-run_4").element() as HTMLElement;
+  second.style.minHeight = "3000px"; // a neighbour with a long ask
+  const deck = () => (document.querySelector(".deck") as HTMLElement).getBoundingClientRect().height;
+  await vi.waitFor(() => expect(Math.round(deck())).toBe(Math.round(first.getBoundingClientRect().height)));
+  expect(deck()).toBeLessThan(1000);
+  await screen.getByRole("link", { name: "Next decision" }).click();
+  await vi.waitFor(() => expect(deck()).toBeGreaterThanOrEqual(3000));
+  await page.viewport(1280, 800);
+});
+
 test("with motion on, the answer pops a check in the bar for a beat, then the next card slides in", async () => {
   const real = window.matchMedia.bind(window);
   vi.spyOn(window, "matchMedia").mockImplementation((q) =>

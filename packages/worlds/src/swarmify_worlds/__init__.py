@@ -35,7 +35,7 @@ from swarmify_worlds.model import (
 )
 from swarmify_worlds.packs import BUNDLED, PACK_ID, Casting, Character, SpritePack, SpritePacks
 from swarmify_worlds.ports import Storage
-from swarmify_worlds.sqlite import MIGRATIONS, SETTINGS, SqliteStorage
+from swarmify_worlds.sqlite import MIGRATIONS, MODELS, SETTINGS, SqliteStorage
 
 __all__ = [
     "AGENT_COUNT",
@@ -73,6 +73,7 @@ MAX_RETENTION_DAYS = 3650
 MODEL_ID = re.compile(r"[\w.:\-\[\]@/]{1,100}")
 """A model id: one word of up to 100 characters."""
 MAX_RUN_CAP = 8
+MAX_NAME = 120
 
 
 def _now() -> str:
@@ -82,7 +83,10 @@ def _now() -> str:
 def check_settings(changes: dict[str, Any]) -> None:
     """Raise ValueError for a setting outside its range."""
     for key, value in changes.items():
-        if key == "monthly_budget_usd":
+        if key == "name":
+            if not (isinstance(value, str) and 0 < len(value) <= MAX_NAME):
+                raise ValueError(f"a world's name is 1 to {MAX_NAME} characters")
+        elif key == "monthly_budget_usd":
             if value is not None and not (isinstance(value, int | float) and value > 0):
                 raise ValueError("a monthly budget is a positive amount, or empty for none")
         elif key == "run_cap":
@@ -96,7 +100,7 @@ def check_settings(changes: dict[str, Any]) -> None:
                 raise ValueError(f"the agent count is 1 to {MAX_AGENTS}, got {value}")
         elif key == "skin":
             check_skin(value)
-        elif key in SETTINGS[4:]:
+        elif key in MODELS:
             if value is not None and not (isinstance(value, str) and MODEL_ID.fullmatch(value)):
                 raise ValueError(f"a model is a model id such as claude-opus-5-5, got {value!r}")
         else:
@@ -175,10 +179,12 @@ class Worlds:
         return True
 
     def configure(self, world_id: str, changes: dict[str, Any]) -> World | None:
-        """Change the given settings (`monthly_budget_usd`, `run_cap`, `retention_days`,
+        """Change the given settings (`name`, `monthly_budget_usd`, `run_cap`, `retention_days`,
         `agent_count`, `model`, the per-role `<role>_model` and `skin`, replaced whole). Raises
         ValueError for a value out of range; None for an unknown world. Shrinking the cast drops
         the looks of the agents it leaves out of the skin."""
+        if isinstance(changes.get("name"), str):
+            changes = {**changes, "name": changes["name"].strip()}
         check_settings(changes)
         if {"skin", "agent_count"} & set(changes) and (world := self.get(world_id)) is not None:
             # The retro agent is in the skin's cast too, though its prompt is not the Cast's.

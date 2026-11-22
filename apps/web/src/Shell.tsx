@@ -105,12 +105,17 @@ export function Shell() {
   const [sheet, setSheet] = useState<"world" | "more" | null>(null);
   const [summary, setSummary] = useState<Record<string, string>>({});
 
-  // Refetch on every world change, so a world made a moment ago has its name.
+  // Refetch on every world change, so a world made a moment ago has its name, and when
+  // Settings says a world was renamed.
   useEffect(() => {
-    api
-      .GET("/api/worlds")
-      .then(({ data }) => data && setWorlds(data))
-      .catch(() => undefined);
+    const load = () =>
+      void api
+        .GET("/api/worlds")
+        .then(({ data }) => data && setWorlds(data))
+        .catch(() => undefined);
+    load();
+    addEventListener("worlds-changed", load);
+    return () => removeEventListener("worlds-changed", load);
   }, [worldId]);
   useEffect(() => setSheet(null), [pathname, hash]);
 
