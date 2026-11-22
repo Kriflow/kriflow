@@ -592,7 +592,7 @@ def approvals_server(control: RunControl, asker: RunAssistant, registry: Connect
     forwards replies to the run's assistant and applies or dismisses its proposals."""
     mcp = MCPServer(
         "swarmify-remote-approvals",
-        instructions="Answer a gate Swarmify posted to you, as the person who answered it.",
+        instructions="Answer a gate Kriflow posted to you, as the person who answered it.",
     )
 
     @mcp.tool(

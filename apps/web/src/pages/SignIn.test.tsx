@@ -34,7 +34,7 @@ test("the password can be shown and hidden, autofills as the current password, a
   await screen.getByRole("button", { name: "Hide password" }).click();
   await expect.element(field).toHaveAttribute("type", "password");
 
-  expect(screen.container.querySelector(".mark-in svg")).not.toBeNull();
+  expect(screen.container.querySelector(".mark-in img")).not.toBeNull();
   expect(screen.container.querySelector("form.shake")).toBeNull();
   await field.fill("wrong");
   await screen.getByRole("button", { name: "Sign in" }).click();

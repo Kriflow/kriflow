@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 
 import { PushPrompt } from "./Notifications";
+import { APP } from "./skin";
 import { dismissInstall, earnedInstallHint, install, ios, standalone, update, usePwa } from "./pwa";
 import "./styles/pwa.css";
 import { TextSizePicker } from "./textSize";
@@ -31,7 +32,7 @@ export function PwaNotices() {
         )}
         {waiting && !later && (
           <div className="pwa-note" role="status">
-            <span>A new version of Swarmify is ready.</span>
+            <span>A new version of {APP} is ready.</span>
             <button type="button" className="link" onClick={() => setLater(true)}>
               Later
             </button>
@@ -41,7 +42,7 @@ export function PwaNotices() {
           </div>
         )}
         {hint && (
-        <aside className="pwa-hint" aria-label="Install Swarmify">
+        <aside className="pwa-hint" aria-label={`Install ${APP}`}>
           <p>
             <strong>Put Needs you on your home screen</strong>
             <span className="sub">{offer ? "Your gates open in one tap, full screen." : "In Safari, tap Share, then Add to Home Screen."}</span>
@@ -68,14 +69,14 @@ export function PwaNotices() {
 export function InstallRow({ Row }: { Row: (props: { title: string; about: string; children: ReactNode }) => ReactNode }) {
   const { offer } = usePwa();
   return (
-    <Row title="This device" about="Install Swarmify to open it from the home screen, full screen, at Needs you.">
+    <Row title="This device" about={`Install ${APP} to open it from the home screen, full screen, at Needs you.`}>
       <div className="panel set-panel">
         {standalone() ? (
-          <p>Installed. You are using the Swarmify app.</p>
+          <p>Installed. You are using the {APP} app.</p>
         ) : offer ? (
           <div className="set-save start">
             <button type="button" className="primary" onClick={() => install()}>
-              Install Swarmify
+              Install {APP}
             </button>
           </div>
         ) : ios() ? (

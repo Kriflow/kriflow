@@ -250,7 +250,7 @@ class SignedIn:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "lifespan" or self.allowed(scope):
             return await self.app(scope, receive, send)
-        await JSONResponse({"detail": "Sign in to Swarmify."}, 401)(scope, receive, send)
+        await JSONResponse({"detail": "Sign in to Kriflow."}, 401)(scope, receive, send)
 
 
 class SignIn(BaseModel):

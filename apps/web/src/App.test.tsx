@@ -22,7 +22,7 @@ test("signs in with the password, then goes back to sign-in when the session end
       return session ? new Response(null, { status: 204 }) : Response.json({ detail: "no" }, { status: 401 });
     },
     "GET /api/worlds": () =>
-      session ? Response.json([]) : Response.json({ detail: "Sign in to Swarmify." }, { status: 401 }),
+      session ? Response.json([]) : Response.json({ detail: "Sign in to Kriflow." }, { status: 401 }),
     "GET /api/gates": () => Response.json([]),
   });
   const screen = await render(<App />);

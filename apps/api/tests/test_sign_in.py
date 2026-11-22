@@ -48,7 +48,7 @@ def test_every_api_route_and_the_mcp_server_are_refused_without_a_session(
     for headers in ({}, {"Cookie": f"{COOKIE}=forged.0000"}, {"Authorization": "Basic ZTph"}):
         refused = client.get(path, headers=headers)
         assert refused.status_code == 401, path
-        assert refused.json() == {"detail": "Sign in to Swarmify."}
+        assert refused.json() == {"detail": "Sign in to Kriflow."}
         assert "www-authenticate" not in refused.headers, "no browser basic auth prompt"
 
 

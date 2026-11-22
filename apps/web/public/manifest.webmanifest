@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Swarmify",
-  "short_name": "Swarmify",
+  "name": "Kriflow",
+  "short_name": "Kriflow",
   "description": "Agents running your gated workflows, and the decisions they need from you.",
   "start_url": "/gates",
   "scope": "/",

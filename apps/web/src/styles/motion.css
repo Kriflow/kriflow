@@ -103,7 +103,7 @@ button:not(:disabled):active, a.button:active, label.button:active, .tabbar-item
 
 /* The sign-in mark arrives; a refused password shakes the form once, sideways only. */
 @keyframes mark-in { from { opacity: 0; transform: scale(0.7); } }
-.mark-in svg { animation: mark-in var(--dur-slow) var(--ease-out) both; transform-origin: center; }
+.mark-in img { animation: mark-in var(--dur-slow) var(--ease-out) both; transform-origin: center; }
 @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 .shake { animation: shake 360ms var(--ease-in-out) 1; }
 
@@ -156,5 +156,5 @@ details[open] > summary::before { transform: rotate(90deg); }
   .i-live .i-dots circle { animation: none; opacity: 1; }
   .i-spinning { animation: none; }
   /* An empty place's glyph, the sign-in mark and a refused password: already in place, still. */
-  .i-enter, .mark-in svg, .shake { animation: none; }
+  .i-enter, .mark-in img, .shake { animation: none; }
 }

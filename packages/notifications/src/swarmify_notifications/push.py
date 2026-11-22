@@ -275,7 +275,7 @@ class WebPush:
         target = next((t for t in self.storage.targets(None) if t["id"] == id), None)
         if target is None:
             raise KeyError(id)
-        msg = Message("test", "Swarmify", "Notifications are on for this device.", "/gates", "test")
+        msg = Message("test", "Kriflow", "Notifications are on for this device.", "/gates", "test")
         return self._one(target, msg)
 
     def flush(self) -> None:

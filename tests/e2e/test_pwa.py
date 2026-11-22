@@ -1,4 +1,4 @@
-"""Swarmify installs as an app (issue 458): a valid manifest with reachable icons, a service
+"""Kriflow installs as an app (issue 458): a valid manifest with reachable icons, a service
 worker that controls the page, and a cache that never holds an API response or event stream."""
 
 import httpx
@@ -9,7 +9,7 @@ def test_manifest_and_icons_make_the_app_installable(base_url: str) -> None:
     manifest_response = httpx.get(f"{base_url}/manifest.webmanifest")
     assert manifest_response.headers["content-type"] == "application/manifest+json"
     manifest = manifest_response.json()
-    assert manifest["name"] == manifest["short_name"] == "Swarmify"
+    assert manifest["name"] == manifest["short_name"] == "Kriflow"
     assert manifest["display"] == "standalone"
     assert manifest["start_url"] == "/gates" and manifest["scope"] == "/"
     assert manifest["theme_color"] == manifest["background_color"] == "#171719"
