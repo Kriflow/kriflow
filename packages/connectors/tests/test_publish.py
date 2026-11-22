@@ -126,6 +126,10 @@ def test_outcomes_come_from_each_publish_connector_offering_them_with_its_setup(
         {"p1": {"visibility_label": 2}},
         {"p1": {"privacy": "private"}},  # a platform's own word is no metric
         {"p1": {"clicks": 1}, "_notice": 5},
+        {"p1": {"clicks": 2, "curves": {"kept": [[0, 1], [0.5, 0.25]]}}},
+        {"p1": {"curves": [[0, 1]]}},  # a curve needs its name
+        {"p1": {"curves": {"kept": [[0, 1, 2]]}}},  # a point is [x, y]
+        {"p1": {"curves": {"kept": [["a", 1]]}}},
     ]
     assert connectors.outcomes(clicks, posts) == ({"p1": {"clicks": 12, "rate": 0.5}}, None)
     assert transport.calls[-1] == ("clicks", "outcomes", {"posts": posts}, {"CLICKS_TOKEN": "t"})
@@ -134,6 +138,12 @@ def test_outcomes_come_from_each_publish_connector_offering_them_with_its_setup(
     found = ({"p1": {"clicks": 1, "visible": False, "visibility_label": "draft"}}, "again")
     assert connectors.outcomes(clicks, posts) == found
     for _ in range(6):  # anything but numbers by metric by post
+        with pytest.raises(ConnectorError, match="clicks outcomes answered"):
+            connectors.outcomes(clicks, posts)
+    # beside its numbers a post may carry curves: named lists of [x, y] points
+    curve = {"kept": [[0, 1], [0.5, 0.25]]}
+    assert connectors.outcomes(clicks, posts) == ({"p1": {"clicks": 2, "curves": curve}}, None)
+    for _ in range(3):
         with pytest.raises(ConnectorError, match="clicks outcomes answered"):
             connectors.outcomes(clicks, posts)
 

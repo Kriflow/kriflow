@@ -8,6 +8,8 @@ STAGE_TYPES = ("swarm", "gate", "connector", "workflow")
 MAX_PARALLEL = 8
 """The most children a Fan-out Stage runs at once."""
 GATE_KINDS = ("pick", "approve", "confirm")
+GATE_ANSWERS = ("approve", "send_back", "reject")
+"""The answers a gate's `entry` may move its run's Entry on."""
 PICKS_MAX = 10
 """The most cards a pick gate takes in one answer."""
 
@@ -28,6 +30,9 @@ class SwarmStage:
     agents: int = 1
     """How many workers run the stage (ADR 0020). One works the tasks alone, with no one to
     contend with for a claim; several share the whiteboard as a swarm."""
+    not_before: str | None = None
+    """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
+    such time at or after its turn comes."""
     type: Literal["swarm"] = "swarm"
 
 
@@ -43,6 +48,9 @@ class GateStage:
     picks: int | None = None
     """How many cards a pick gate takes in one answer, 1 to 10 (None: one); the cards offered
     and not picked are Parked."""
+    entry: dict[str, str] = field(default_factory=dict)
+    """The status the run's Entry moves to per answer (approve, send_back, reject: the run
+    aborted at the gate), when a person gives it (issue 541)."""
     type: Literal["gate"] = "gate"
 
 
@@ -57,6 +65,9 @@ class ConnectorStage:
     output: str | None = None
     params: dict[str, object] = field(default_factory=dict)
     inputs: list[str] = field(default_factory=list)
+    not_before: str | None = None
+    """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
+    such time at or after its turn comes."""
     type: Literal["connector"] = "connector"
 
 
@@ -67,7 +78,14 @@ class WorkflowStage:
     cards, the cards picked at a pick gate, or the elements of a JSON list file, each given its
     Item as file `as_` (`as` in YAML), at most `max_parallel` at once. With `approve` the stage
     ends at an items gate once every Item settled: a person approves or sends back each Item
-    with a note, and the stage finishes only when every Item is approved."""
+    with a note, and the stage finishes only when every Item is approved.
+
+    With `from_list` its Items are the Entries of a World List query instead (issue 541):
+    `list`, `status`, `where` (fields equal), `order`, `take` (how many, one when left out),
+    `on_start` and `on_finish` (the status an Entry moves to when its child starts and when it
+    finishes). Each Entry is claimed for the child that works on it, and its file is the
+    child's given input. `runs_by` then picks each Item's workflow from an Entry field through
+    a map (`field`, `map`) instead of one `runs`."""
 
     name: str
     runs: str
@@ -76,7 +94,19 @@ class WorkflowStage:
     as_: str | None = None
     max_parallel: int | None = None
     approve: bool = False
+    not_before: str | None = None
+    """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
+    such time at or after its turn comes."""
+    from_list: dict[str, Any] | None = None
+    runs_by: dict[str, Any] | None = None
     type: Literal["workflow"] = "workflow"
+
+
+def children(stage: WorkflowStage) -> list[str]:
+    """The workflows a workflow stage may start: its `runs`, or every one `runs_by` maps to."""
+    return (
+        [stage.runs] if stage.runs else sorted(set((stage.runs_by or {}).get("map", {}).values()))
+    )
 
 
 Stage = SwarmStage | GateStage | ConnectorStage | WorkflowStage
@@ -95,6 +125,8 @@ class WorkflowModel:
     its stages may name as inputs."""
     budget_warn_usd: float | None = None
     """Spend at which `budget.warning` fires, below `budget_usd`; 80 percent of it when left out."""
+    skip_when_live: bool = False
+    """A schedule tick is skipped, and logged, while a run of the workflow is live."""
 
 
 @dataclass(frozen=True)

@@ -18,8 +18,16 @@ from typing import Any, Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from swarmify_connectors import VISIBILITY_LABEL, VISIBLE, ConnectorError, Connectors, setup
+from swarmify_connectors import (
+    CURVES,
+    VISIBILITY_LABEL,
+    VISIBLE,
+    ConnectorError,
+    Connectors,
+    setup,
+)
 from swarmify_memory import Memory
+from swarmify_runs import WorldLists
 from swarmify_swarm.network import NOTICE_AFTER, Waiting
 from swarmify_worlds import Worlds
 
@@ -34,7 +42,7 @@ HIDDEN_AFTER = timedelta(hours=24)
 class Notice(BaseModel):
     """Something the operator should fix that no gate asks about."""
 
-    kind: Literal["sign_in", "outcomes", "visibility", "network"]
+    kind: Literal["sign_in", "outcomes", "visibility", "network", "review"]
     text: str
     world_id: str | None = None
     """The world whose Connectors page (sign_in, outcomes) or run (visibility, network) fixes
@@ -52,9 +60,11 @@ def record_outcomes(
     """Record fresh Outcomes of publish artifacts; returns how many changed. A post's metrics
     from several connectors add up; its Primary Metric is its own connector's when that one
     answered, else the first that did; whether everyone can see it (`visible`, with the
-    platform's `visibility_label`) is what the first connector to say reported. A
-    connector that cannot answer (its Setup not done) is logged and skipped. What a connector
-    says it could not read goes in `notices` by connector name, logged once, gone once it can."""
+    platform's `visibility_label`) is what the first connector to say reported. Its `curves` are
+    stored as answered, never added up: a later connector's curve of the same name wins, and a
+    stored curve no connector drew this pass is kept. A connector that cannot answer (its Setup
+    not done) is logged and skipped. What a connector says it could not read goes in `notices`
+    by connector name, logged once, gone once it can."""
     changed = 0
     noticed: dict[str, str] = {}
     for world in worlds.list_all():
@@ -70,8 +80,9 @@ def record_outcomes(
         ]
         made_by = {p["id"]: p["connector"] for p in posts}
         found: dict[str, dict[str, float]] = {}
-        seen: dict[str, dict[str, float | bool | str]] = {}
+        seen: dict[str, dict[str, Any]] = {}
         primary: dict[str, str] = {}
+        curves: dict[str, dict[str, Any]] = {}
         for connector in reporters:
             try:
                 answer, notice = registry.outcomes(connector, posts)
@@ -87,7 +98,9 @@ def record_outcomes(
                     continue  # not one of the posts it was asked about
                 mine = found.setdefault(post, {})
                 for metric, n in metrics.items():
-                    if metric not in (VISIBLE, VISIBILITY_LABEL) and not isinstance(n, bool | str):
+                    if metric == CURVES and isinstance(n, dict):
+                        curves.setdefault(post, {}).update(n)
+                    elif metric not in (VISIBLE, VISIBILITY_LABEL) and isinstance(n, int | float):
                         mine[metric] = mine.get(metric, 0) + n
                 if isinstance(metrics.get(VISIBLE), bool) and post not in seen:
                     seen[post] = {
@@ -96,17 +109,21 @@ def record_outcomes(
                 if post not in primary or made_by[post] == connector.name:
                     primary[post] = connector.manifest["primary_metric"]
         for (path, fields), post in zip(records, posts, strict=True):
+            stored = fields.get(CURVES)
+            stored = stored if isinstance(stored, dict) else {}
+            drawn = {**stored, **curves.get(post["id"], {})} or None
             metrics = found.get(post["id"])
-            if not metrics:
+            if not metrics and not curves.get(post["id"]):
                 continue
             ranked_by, shown = primary[post["id"]], seen.get(post["id"], {})
             was = {k: fields[k] for k in (VISIBLE, VISIBILITY_LABEL) if k in fields}
-            if (fields.get("outcomes"), fields.get("primary_metric"), was) != (
-                metrics,
+            if (fields.get("outcomes"), fields.get("primary_metric"), was, fields.get(CURVES)) != (
+                metrics or {},
                 ranked_by,
                 shown,
+                drawn,
             ):
-                memory.record_outcome(world.id, path, metrics, ranked_by, now, shown)
+                memory.record_outcome(world.id, path, metrics or {}, ranked_by, now, shown, drawn)
                 changed += 1
     if notices is not None:
         for name, text in noticed.items():
@@ -174,11 +191,13 @@ def notice_source(
     outcome_notices: Mapping[str, str],
     clock: Callable[[], datetime],
     waiting: Callable[[], list[Waiting]] = lambda: [],
+    lists: WorldLists | None = None,
 ) -> Callable[[], list[Notice]]:
     """What the Needs-you page lists beside the gates: an account whose sign-in the provider
     refused (an expired refresh token, say), what a connector could not read on the last
     upkeep, a post still hidden a day after it went out, and a run whose agents have waited
-    for the network over NOTICE_AFTER. Web Push sends the same list as it changes."""
+    for the network over NOTICE_AFTER, and a World List with Entries in a status it declared
+    for review. Web Push sends the same list as it changes."""
 
     def notices() -> list[Notice]:
         out: list[Notice] = []
@@ -210,6 +229,11 @@ def notice_source(
             records = memory.publish_records(world.id)
             for run, text in hidden_posts(records, run_status, clock(), labels):
                 out.append(Notice(kind="visibility", text=text, world_id=world.id, run_id=run))
+            for declared, n in lists.waiting(world.id) if lists else []:
+                many = "Entry waits" if n == 1 else "Entries wait"
+                where = f"{declared.name} ({', '.join(declared.review)})"
+                text = f"{world.name}: {n} {many} for you in {where}."
+                out.append(Notice(kind="review", text=text, world_id=world.id))
         first = everyone[0].id if everyone else None
         out += [Notice(kind="outcomes", text=t, world_id=first) for t in outcome_notices.values()]
         out += network_notices(waiting(), clock())

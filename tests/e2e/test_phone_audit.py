@@ -52,6 +52,7 @@ ROUTES = [
     "/worlds/{world}/connectors",
     "/worlds/{world}/graph",
     "/worlds/{world}/library",
+    "/worlds/{world}/lists",
     "/worlds/{world}/assets",
     "/worlds/{world}/cast",
     "/worlds/{world}/settings",
@@ -235,6 +236,15 @@ def every(ids: dict[str, str], locked_url: str) -> dict[str, str]:
             time.sleep(0.1)
         raise AssertionError(f"never reached {status}")
 
+    # A list with Entries waiting, one with a long title and many fields (issue 540).
+    lists = f"/worlds/{world}/lists/ideas"
+    review = {"statuses": ["pitched", "new", "rejected"], "rejected": ["rejected"]}
+    api.put(lists, json={**review, "review": ["pitched"]}).raise_for_status()
+    fields = {"format": "a-rather-long-format-name", "rank": 1, "length_seconds": 22}
+    long = "A pitch whose title runs on and on so it has to wrap inside its card " * 2
+    for key, title in (("short", "Short"), ("long", long)):
+        entry = {"key": key, "title": title, "score": 7.25, "fields": fields}
+        api.post(f"{lists}/entries", json=entry).raise_for_status()
     paused = start(FLOW.replace("Brief then research", "Paused"), "waiting_gate")
     api.post(f"/runs/{paused}/pause").raise_for_status()
     return {**ids, "paused": paused, "failed": start(BROKEN, "failed")}

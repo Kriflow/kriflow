@@ -7,7 +7,7 @@ import { who } from "../api/tasks";
 import { CountTick } from "../CountTick";
 import { Elapsed } from "../Elapsed";
 import { Icon, type IconName } from "../Icon";
-import { stageSeconds, stepMeta } from "./StagePanel";
+import { holding, stageSeconds, stepMeta } from "./StagePanel";
 
 type Stage = Run["stages"][number];
 
@@ -40,6 +40,9 @@ export function heroSub(run: Run, seconds: number | null, now = Date.now()): str
   if (run.status === "waiting_gate" && at) {
     const waited = stageSeconds(at, now);
     return `${of}${waited === null ? "" : ` Waiting ${took(waited)}.`}`;
+  }
+  if (run.status === "running" && at && holding(at, now)) {
+    return `${of} Waits until ${new Date(at.runs_at!).toLocaleString()}. Nothing needs you yet.`;
   }
   if (run.status === "running" && at) {
     const left = timeLeft(at, now);

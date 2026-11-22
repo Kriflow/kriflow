@@ -1,5 +1,6 @@
 """Workflow schedules on real DBOS cron (ADR 0014): a fired schedule starts an ordinary run."""
 
+import logging
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -18,11 +19,14 @@ EVERY_SECOND = "* * * * * *"
 def pin(workflow_id: str, number: int | None = None) -> Pinned:
     if workflow_id == "wf_stale":  # saved before a rule it now breaks
         raise ValueError("a swarm stage cannot build a video")
-    if workflow_id not in ("wf_1", "wf_dropped"):
+    if workflow_id not in ("wf_1", "wf_dropped", "wf_live"):
         raise KeyError(workflow_id)
     # wf_dropped's current version no longer has a schedule, but DBOS still holds the old cron.
     cron = None if workflow_id == "wf_dropped" else EVERY_SECOND
-    return Pinned("world_1", workflow_id, 2, "Weekly short", [PICK], budget_usd=5.0, schedule=cron)
+    return Pinned(
+        "world_1", workflow_id, 2, "Weekly short", [PICK], budget_usd=5.0, schedule=cron,
+        skip_when_live=workflow_id == "wf_live",
+    )  # fmt: skip
 
 
 @pytest.fixture
@@ -104,3 +108,19 @@ def test_a_busy_database_fails_the_schedule_instead_of_deferring_it(
     monkeypatch.setattr(runner.client, "delete_schedule", locked)
     with pytest.raises(OperationalError, match="database is locked"):
         runner.schedule("wf_1", EVERY_SECOND)
+
+
+def test_skip_when_live_skips_and_logs_ticks_while_a_run_is_live(
+    runner: Runner, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger="swarmify_runs.runner")
+    runner.schedule("wf_live", EVERY_SECOND)
+    wait_for(lambda: len(runner.list_all("world_1")) == 1, 30)
+    first = runner.list_all("world_1")[0]
+    wait_for(lambda: caplog.text.count("skipped: a run of it is live") >= 2, 30)
+    assert [r.id for r in runner.list_all("world_1")] == [first.id]
+
+    wait_for(lambda: getattr(runner.get(first.id), "status", None) == "waiting_gate", 30)
+    runner.decide(first.id, choice="idea 2")
+    wait_for(lambda: len(runner.list_all("world_1")) >= 2, 30)  # ended, so the next tick runs
+    runner.schedule("wf_live", None)

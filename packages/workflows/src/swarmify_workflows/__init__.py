@@ -24,6 +24,7 @@ from swarmify_workflows.model import (
     WorkflowStage,
     WorkflowVersion,
     calls,
+    children,
 )
 from swarmify_workflows.parse import parse_workflow
 from swarmify_workflows.ports import Storage
@@ -269,7 +270,9 @@ class Workflows:
         for workflow_id, yaml in self.storage.current_yaml().items():
             model, _ = parse_workflow(yaml)
             stages = model.stages if model else []
-            refs[workflow_id] = [s.runs for s in stages if isinstance(s, WorkflowStage)]
+            refs[workflow_id] = [
+                r for s in stages if isinstance(s, WorkflowStage) for r in children(s)
+            ]
         return refs
 
 

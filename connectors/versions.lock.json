@@ -16,8 +16,8 @@
     "files": "bd3a3a5cd4ee81de25a34ff7cb1bebde224bc8e0c64a4f0bbdcdd69c6b90e28c"
   },
   "meta": {
-    "version": "1.1.0",
-    "files": "ec754b3162a678d1a78d4e601cd725978788bab1a8cf8ec0daddf8410a2b0e01"
+    "version": "1.2.0",
+    "files": "01982ece36fd17781ecda0faf68838e97da9e4da388d15f1e6899718c2fc0f93"
   },
   "remotion_build": {
     "version": "1.0.4",
@@ -40,7 +40,7 @@
     "files": "eaf577b5c8ab2ac0a961fa02517fe573c14cc84dcecd83e9cdf968e266934201"
   },
   "youtube": {
-    "version": "1.4.0",
-    "files": "9724fba95d482ceb730dbfb296634d481d99dd7c5a98159bb3b3967b045dd55b"
+    "version": "1.5.0",
+    "files": "d09d0c56c2b40e985a626b48553a878e07b80fced5fb7028845a6d275f317091"
   }
 }

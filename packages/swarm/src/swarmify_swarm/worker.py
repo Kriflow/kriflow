@@ -81,9 +81,6 @@ T = TypeVar("T")
 GRAPH, CLAIM = tool_id("query_graph"), tool_id("claim_task")
 BUILTIN = ["Skill", "Read"]
 """Built-ins every worker may use. Read is limited to the world folder by the hooks."""
-STAGE_TOOLS = {"web_search": ["WebSearch", "WebFetch"], "graph": []}
-"""What each Agent Tool (the kernel's AGENT_TOOLS) grants; the graph tools come with every
-non-baseline stage. A stage's other `tools` name connectors, allowed as `mcp__<name>__*`."""
 
 Servers = Callable[..., dict[str, dict[str, Any]]]
 """(world id, connector names, package versions, run=(run id, stage id)) to their MCP server
@@ -166,6 +163,20 @@ class Graphs(Protocol):
         ...
 
     def call(self, folder: Path, tool: str, args: dict[str, Any]) -> str: ...
+
+
+class Lists(Protocol):
+    """What the swarm needs from the world's World Lists (Runs): one of LIST_TOOLS called by
+    `agent` in run `run_id`, answered as text. Raises ToolError for a refused call."""
+
+    def call(
+        self, world_id: str, run_id: str, agent: str, tool: str, args: dict[str, Any]
+    ) -> str: ...
+
+
+class NoLists:
+    def call(self, world_id: str, run_id: str, agent: str, tool: str, args: dict[str, Any]) -> str:
+        raise ToolError("This world has no World Lists here.")
 
 
 class NoGraphs:
@@ -387,6 +398,73 @@ GRAPH_TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "graph_stats": ("Size of the graph: nodes, edges, communities.", _obj(world=_WORLD)),
 }
+_LIST = _str("The list's name")
+_KEY = _str("The Entry's key, unique in its list")
+_NOTE = _str("Why, kept in the Entry's history")
+_FIELDS = {"type": "object", "description": "Small facts by name (numbers, short text)"}
+LIST_TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
+    "read_list": (
+        "Read a World List of this world: its statuses and its Entries (key, title, status,"
+        " score, fields, file, who holds it). Omit `list` for the world's lists. Check your"
+        " work against the whole list here, not a summary.",
+        _obj(
+            list=_LIST,
+            status={"type": "array", "items": {"type": "string"}, "description": "Any of these"},
+            fields={"type": "object", "description": "Only Entries whose fields equal these"},
+            order=_str("score, time or a numeric field; a leading - for descending (-score)"),
+            limit={"type": "integer", "description": "At most this many"},
+        ),
+    ),
+    "add_entry": (
+        "Add an Entry to a World List. A key already in the list returns that Entry unchanged,"
+        " with `added` false. It starts in the list's first status unless you name one.",
+        _obj(
+            "list",
+            "key",
+            "title",
+            list=_LIST,
+            key=_KEY,
+            title=_str("A short title"),
+            status=_str("A status the list declares"),
+            score={"type": "number", "description": "Higher is better"},
+            fields=_FIELDS,
+            file=_str("The Entry's content: a path in the world folder"),
+        ),
+    ),
+    "set_entry_status": (
+        "Move Entries of a World List to a status it declares, with a note.",
+        _obj(
+            "list",
+            "keys",
+            "status",
+            list=_LIST,
+            keys={"type": "array", "items": {"type": "string"}, "description": "Entry keys"},
+            status=_str("A status the list declares"),
+            note=_NOTE,
+        ),
+    ),
+    "set_entry_fields": (
+        "Set fields (null removes one) and optionally the score of an Entry of a World List.",
+        _obj(
+            "list",
+            "key",
+            "fields",
+            list=_LIST,
+            key=_KEY,
+            fields=_FIELDS,
+            score={"type": "number"},
+            note=_NOTE,
+        ),
+    ),
+}
+"""The `lists` Agent Tool: given only to a stage whose `tools` names it."""
+STAGE_TOOLS = {
+    "web_search": ["WebSearch", "WebFetch"],
+    "graph": [],
+    "lists": [tool_id(t) for t in LIST_TOOLS],
+}
+"""What each Agent Tool (the kernel's AGENT_TOOLS) grants; the graph tools come with every
+non-baseline stage. A stage's other `tools` name connectors, allowed as `mcp__<name>__*`."""
 TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     **GRAPH_TOOLS,
     "list_tasks": ("The stage's whiteboard: every task with its status and notes.", _obj()),
@@ -420,7 +498,8 @@ TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "publish_outcomes": (
         "How the world's published posts did: each publish record's path and fields, with its"
         " latest outcomes (views and other metrics by name, `outcomes_at`, `primary_metric`)"
-        " once the platform reported them.",
+        " once the platform reported them, and its `curves` (such as a retention curve, each a"
+        " list of [x, y] points) when the platform gave any.",
         _obj(),
     ),
     "write_note": (
@@ -451,8 +530,10 @@ class Swarm:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         budget: Budget = no_budget,
         network: NetworkWait | None = None,
+        lists: Lists | None = None,
     ) -> None:
         """`network` waits for the model API after a session died for want of it."""
+        self.lists = lists or NoLists()
         self.budget = budget
         self.network = network or NetworkWait()
         self._waiting: dict[tuple[str, str, str], Waiting] = {}
@@ -679,6 +760,8 @@ class Swarm:
                     entry.name,
                     self._readable_at(at),
                     at.baseline,
+                    lists="lists" in stage_tools
+                    and (entry.tools is None or "lists" in entry.tools),
                 ),
                 allowed=allowed,
                 servers=self.servers(
@@ -1226,7 +1309,9 @@ class Swarm:
         agent: str,
         readable: dict[str, Path],
         baseline: bool = False,
+        lists: bool = False,
     ) -> list[AgentTool]:
+        """`lists` adds LIST_TOOLS, for a stage whose `tools` names `lists`."""
         board, files, now = self.board, self.files, self.clock
 
         def task_text(task: Task) -> str:
@@ -1312,9 +1397,15 @@ class Swarm:
 
             return run
 
+        def list_tool(tool: str) -> Callable[[dict[str, Any]], str]:
+            return lambda a: self.lists.call(world_id, run_id, agent, tool, a)
+
+        if lists:
+            handlers.update({tool: list_tool(tool) for tool in LIST_TOOLS})
+        offered = {**TOOLS, **(LIST_TOOLS if lists else {})}
         return [
             AgentTool(name, about, schema, bind(handlers[name]))
-            for name, (about, schema) in TOOLS.items()
+            for name, (about, schema) in offered.items()
             if not (baseline and name in GRAPH_TOOLS)
         ]
 

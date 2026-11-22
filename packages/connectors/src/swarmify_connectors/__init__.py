@@ -74,6 +74,7 @@ from swarmify_connectors.sqlite import MIGRATIONS, SqliteStorage
 from swarmify_kernel import AGENT_TOOLS, new_id, posts_privately
 
 __all__ = [
+    "CURVES",
     "KINDS",
     "MIGRATIONS",
     "STAGE_TYPES",
@@ -193,6 +194,17 @@ NOTICE = "_notice"
 VISIBLE, VISIBILITY_LABEL = "visible", "visibility_label"
 """The keys of a post's outcomes that are not metrics: whether everyone can see it, and the
 platform's word for that."""
+CURVES = "curves"
+"""The key of a post's outcomes that holds its curves: named lists of [x, y] points, stored as
+answered and never added up like numbers."""
+Curves = dict[str, list[list[float]]]
+
+
+def _curves(value: Any) -> Curves:
+    """An outcome's `curves`, checked: each a list of [x, y] number pairs, else ValueError."""
+    if not isinstance(value, dict):
+        raise ValueError(f"curves are not named: {value!r}")
+    return {str(k): [[_number(x), _number(y)] for x, y in points] for k, points in value.items()}
 
 
 def _number(value: Any) -> float:
@@ -1282,15 +1294,18 @@ class Connectors:
 
     def outcomes(
         self, connector: Connector, posts: list[dict[str, Any]]
-    ) -> tuple[dict[str, dict[str, float | bool | str]], str | None]:
+    ) -> tuple[dict[str, dict[str, float | bool | str | Curves]], str | None]:
         """The connector's `outcomes` answer for the world's posts (`{connector, id, links}`
         each): metrics by post id, for the posts it claims, each a number but `visible` (a
-        boolean: everyone can see the post) and `visibility_label` (the platform's word for
-        it), and the answer's `_notice`, what it could not read and how to fix it (publish.py).
+        boolean: everyone can see the post), `visibility_label` (the platform's word for
+        it) and `curves` (named lists of [x, y] points), and the answer's `_notice`, what it
+        could not read and how to fix it (publish.py).
         Raises ConnectorError, as when its Setup is not done or it answers anything else."""
         answer = self._tool(connector, "outcomes", {"posts": posts}, self._env(connector))
 
-        def value(metric: str, n: Any) -> float | bool | str:
+        def value(metric: str, n: Any) -> float | bool | str | Curves:
+            if metric == CURVES:
+                return _curves(n)
             if metric == VISIBLE and isinstance(n, bool):
                 return n
             if metric == VISIBILITY_LABEL and isinstance(n, str):

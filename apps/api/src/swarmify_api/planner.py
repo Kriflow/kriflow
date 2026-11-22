@@ -74,7 +74,8 @@ ANSWER_SCHEMA: dict[str, Any] = {
 SYSTEM = """You are the planner of swarmify. You turn what an operator describes into a workflow
 and edit the one they have. Answer only with the JSON the schema asks for.
 
-A workflow is YAML: `name`, optional `schedule` (cron, UTC), `budget_usd`, `agents` (the
+A workflow is YAML: `name`, optional `schedule` (cron, UTC), `skip_when_live` (true: a schedule
+tick starts nothing while a run of it is live), `budget_usd`, `agents` (the
 default for swarm stages), `given` (the files a run of it is handed before its first stage, when
 a fan-out stage runs it per item: its stages may name them as inputs), and `stages`, a list where
 each stage is `- <type>: <stage name>` plus its fields:
@@ -100,8 +101,19 @@ each stage is `- <type>: <stage name>` plus its fields:
   repeats per item (each picked idea, each needed asset). With approve: true the stage ends at
   one gate where a person approves or sends back each item with a note (only that item's
   child runs again); it finishes once every item is approved.
-Rules: a publish connector must come right after a gate, unless the stage posts privately (the
-check names the params); a connector's input must be produced
+  Instead of for_each, from_list takes the items from a World List: list, optional status (one
+  or a list), where (Entry fields equal), order (score, time or a numeric field, - for
+  descending; -score by default), take (how many, 1 by default), on_start and on_finish (the
+  status an Entry moves to when its child starts and when it finishes). Each Entry is claimed
+  for its child, which is given the Entry's file; no match finishes the stage at once.
+  runs_by: {field, map} then picks each child's workflow from an Entry field instead of runs.
+  A gate may set entry: {approve, send_back, reject}, the status the run's Entry moves to when
+  a person answers so (reject: the run aborted at the gate).
+Any swarm, connector or workflow stage may set not_before, a local time and an IANA timezone
+(`17:00 America/Toronto`): it waits for the next such time once its turn comes, the next day's
+when its turn comes later. Use it only when asked for a set time.
+Rules: a publish connector must come right after a gate, or after publish stages that do,
+unless the stage posts privately (the check names the params); a connector's input must be produced
 by an earlier stage; connectors must exist in the world. Swarm agents write text only, so a swarm
 stage produces text files (script.md, ideas.json), never video, audio or an image: such a file
 comes from a connector stage whose output has that media type (the world's connectors, below).

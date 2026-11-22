@@ -21,7 +21,9 @@ Manifest: `outcomes` gets `posts`, every publish record of a world as `{connecto
 `{post_id: {metric: number}}` for the posts it can read, whoever posted them: a package may claim
 another's posts by their links. Beside the numbers a post may carry `visible` (true when everyone
 can see it on the platform now) and `visibility_label` (the platform's own word for that, such as
-"unlisted", shown in notices), and the answer `_notice`: what it could not read and how to fix it.
+"unlisted", shown in notices) and `curves`: named lists of [x, y] points, such as a retention
+curve, stored as answered and never added up like numbers. The answer's `_notice` says what it
+could not read and how to fix it.
 Core decides on the booleans alone; the words stay the connector's.
 """
 

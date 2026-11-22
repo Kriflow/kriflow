@@ -129,13 +129,16 @@ def test_a_worker_lists_the_world_assets(board: SqliteStorage, tmp_path: Path) -
 def test_a_worker_reads_the_world_publish_outcomes(board: SqliteStorage, tmp_path: Path) -> None:
     _seed(board)
     files = DiskFiles(tmp_path)
-    files.published = [("runs/r0/s/artifacts/publish.md", {"outcomes": {"views": 1200}})]
+    curve = {"retention": [[0.0, 1.0], [0.5, 0.4]]}
+    files.published = [
+        ("runs/r0/s/artifacts/publish.md", {"outcomes": {"views": 1200}, "curves": curve})
+    ]
     script = Script([GRAPH, CLAIM, Call(tool_id("publish_outcomes")), FINISH, Say("Done.")], PASS)
     swarm = Swarm(board, SdkRuntime(transport=script.transport), files, graphs=DiskGraphs(tmp_path))
     _run(swarm, tmp_path)
     assert not any(o.is_error for o in script.outcomes), script.outcomes
     assert json.loads(script.outcomes[2].text) == [
-        {"path": "runs/r0/s/artifacts/publish.md", "outcomes": {"views": 1200}}
+        {"path": "runs/r0/s/artifacts/publish.md", "outcomes": {"views": 1200}, "curves": curve}
     ]
 
 
@@ -388,6 +391,25 @@ def test_a_claim_before_any_graph_query_is_denied(board: SqliteStorage, tmp_path
         (tool_id("finish_task"), False),
     ]
     assert script.outcomes[0].text == denied[0].detail
+
+
+def test_the_lists_tools_come_only_with_the_lists_agent_tool(
+    board: SqliteStorage, tmp_path: Path
+) -> None:
+    _seed(board)
+    read = Call(tool_id("read_list"), {"list": "things"})
+    script = Script([GRAPH, read, CLAIM, FINISH], PASS)
+    _run(_swarm(board, tmp_path, script), tmp_path)  # a stage without `lists`
+    assert _tools(board, "denied") == [tool_id("read_list")]
+    assert tool_id("read_list") not in script.sessions[0].allowed_tools
+
+    script = Script([GRAPH, read, CLAIM, FINISH], PASS)
+    swarm = _swarm(board, tmp_path, script)
+    board.add_task(W, R, "stage_2", "Pitch", added_by=OPERATOR)
+    swarm.run_stage(W, R, "stage_2", "pitch", {**STAGE, "tools": ["lists"]}, _world(tmp_path))
+    assert tool_id("read_list") in script.sessions[0].allowed_tools
+    # No World Lists handed in: the call is allowed and answered with why it cannot be served.
+    assert script.outcomes[1].is_error and "no World Lists" in script.outcomes[1].text
 
 
 def test_tools_outside_the_stage_allowlist_are_denied(board: SqliteStorage, tmp_path: Path) -> None:

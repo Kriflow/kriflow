@@ -1252,6 +1252,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/worlds/{world_id}/lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Lists */
+        get: operations["list_lists_api_worlds__world_id__lists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/lists/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Declare */
+        put: operations["declare_api_worlds__world_id__lists__name__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/lists/{name}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read */
+        get: operations["read_api_worlds__world_id__lists__name__entries_get"];
+        put?: never;
+        /** Add */
+        post: operations["add_api_worlds__world_id__lists__name__entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/lists/{name}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Status */
+        post: operations["set_status_api_worlds__world_id__lists__name__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/lists/{name}/entries/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get */
+        get: operations["get_api_worlds__world_id__lists__name__entries__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set Fields */
+        patch: operations["set_fields_api_worlds__world_id__lists__name__entries__key__patch"];
+        trace?: never;
+    };
     "/api/runs/{run_id}/agents": {
         parameters: {
             query?: never;
@@ -2711,6 +2798,8 @@ export interface components {
             };
             /** Inputs */
             inputs?: string[];
+            /** Not Before */
+            not_before?: string | null;
             /**
              * Type
              * @default connector
@@ -2887,6 +2976,28 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** Declared */
+        Declared: {
+            /** Statuses */
+            statuses: string[];
+            /**
+             * Done
+             * @default []
+             */
+            done: string[];
+            /**
+             * Rejected
+             * @default []
+             */
+            rejected: string[];
+            /**
+             * Review
+             * @default []
+             */
+            review: string[];
+            /** Published */
+            published?: string | null;
+        };
         /**
          * Device
          * @description A subscribed browser. Its endpoint is a credential and is never returned.
@@ -2915,6 +3026,33 @@ export interface components {
             name: string;
             /** Version */
             version: string;
+        };
+        /** Entry */
+        Entry: {
+            /** List */
+            list: string;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Score */
+            score: number | null;
+            /** Fields */
+            fields: {
+                [key: string]: unknown;
+            };
+            /** File */
+            file: string | null;
+            /** Claimed By */
+            claimed_by: string | null;
+            /** Runs */
+            runs: string[];
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
         };
         /** EvalReport */
         EvalReport: {
@@ -2957,6 +3095,23 @@ export interface components {
              * @default 0
              */
             seconds: number;
+        };
+        /** FieldsChange */
+        FieldsChange: {
+            /**
+             * Fields
+             * @default {}
+             */
+            fields: {
+                [key: string]: unknown;
+            };
+            /** Score */
+            score?: number | null;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** Fork */
         Fork: {
@@ -3029,6 +3184,10 @@ export interface components {
             max_send_backs?: number | null;
             /** Picks */
             picks?: number | null;
+            /** Entry */
+            entry?: {
+                [key: string]: string;
+            };
             /**
              * Type
              * @default gate
@@ -3397,6 +3556,26 @@ export interface components {
             /** Network */
             network?: string[];
         };
+        /** NewEntry */
+        NewEntry: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Status */
+            status?: string | null;
+            /** Score */
+            score?: number | null;
+            /**
+             * Fields
+             * @default {}
+             */
+            fields: {
+                [key: string]: unknown;
+            };
+            /** File */
+            file?: string | null;
+        };
         /** NewEval */
         NewEval: {
             /** K */
@@ -3495,7 +3674,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "sign_in" | "outcomes" | "visibility" | "network";
+            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review";
             /** Text */
             text: string;
             /** World Id */
@@ -4136,6 +4315,8 @@ export interface components {
             items?: components["schemas"]["ItemView"][];
             /** Waiting */
             waiting?: string | null;
+            /** Runs At */
+            runs_at?: string | null;
         };
         /** SaveAsWorkflow */
         SaveAsWorkflow: {
@@ -4546,6 +4727,18 @@ export interface components {
             /** Yaml */
             yaml: string;
         };
+        /** StatusChange */
+        StatusChange: {
+            /** Keys */
+            keys: string[];
+            /** Status */
+            status: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
         /**
          * Subscribe
          * @description A browser's PushSubscription as `toJSON()` gives it, and a name for the device.
@@ -4598,6 +4791,8 @@ export interface components {
              * @default 1
              */
             agents: number;
+            /** Not Before */
+            not_before?: string | null;
             /**
              * Type
              * @default swarm
@@ -4883,6 +5078,11 @@ export interface components {
             given?: string[];
             /** Budget Warn Usd */
             budget_warn_usd?: number | null;
+            /**
+             * Skip When Live
+             * @default false
+             */
+            skip_when_live: boolean;
         };
         /**
          * WorkflowStage
@@ -4892,6 +5092,13 @@ export interface components {
          *     Item as file `as_` (`as` in YAML), at most `max_parallel` at once. With `approve` the stage
          *     ends at an items gate once every Item settled: a person approves or sends back each Item
          *     with a note, and the stage finishes only when every Item is approved.
+         *
+         *     With `from_list` its Items are the Entries of a World List query instead (issue 541):
+         *     `list`, `status`, `where` (fields equal), `order`, `take` (how many, one when left out),
+         *     `on_start` and `on_finish` (the status an Entry moves to when its child starts and when it
+         *     finishes). Each Entry is claimed for the child that works on it, and its file is the
+         *     child's given input. `runs_by` then picks each Item's workflow from an Entry field through
+         *     a map (`field`, `map`) instead of one `runs`.
          */
         WorkflowStage: {
             /** Name */
@@ -4911,6 +5118,16 @@ export interface components {
              * @default false
              */
             approve: boolean;
+            /** Not Before */
+            not_before?: string | null;
+            /** From List */
+            from_list?: {
+                [key: string]: unknown;
+            } | null;
+            /** Runs By */
+            runs_by?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Type
              * @default workflow
@@ -4990,6 +5207,31 @@ export interface components {
             /** Retro Model */
             retro_model?: string | null;
             skin?: components["schemas"]["Skin"];
+        };
+        /**
+         * WorldList
+         * @description A list as the world declared it. `statuses` keeps its order: the first is where an added
+         *     Entry starts unless the adder names another.
+         */
+        WorldList: {
+            /** World Id */
+            world_id: string;
+            /** Name */
+            name: string;
+            /** Statuses */
+            statuses: string[];
+            /** Done */
+            done: string[];
+            /** Rejected */
+            rejected: string[];
+            /** Review */
+            review: string[];
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Published */
+            published?: string | null;
         };
         /** WorldRef */
         WorldRef: {
@@ -7475,6 +7717,255 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_lists_api_worlds__world_id__lists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorldList"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    declare_api_worlds__world_id__lists__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Declared"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorldList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_worlds__world_id__lists__name__entries_get: {
+        parameters: {
+            query?: {
+                status?: string[] | null;
+                /** @description name=value */
+                where?: string[] | null;
+                order?: string;
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_api_worlds__world_id__lists__name__entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewEntry"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_status_api_worlds__world_id__lists__name__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_api_worlds__world_id__lists__name__entries__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_fields_api_worlds__world_id__lists__name__entries__key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldsChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
                 };
             };
             /** @description Validation Error */

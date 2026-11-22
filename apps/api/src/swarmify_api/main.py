@@ -49,6 +49,7 @@ from swarmify_api import (
     graph,
     learning,
     library,
+    lists,
     mcp,
     notifications,
     planner,
@@ -112,6 +113,7 @@ from swarmify_runs import (
     RunControl,
     Runner,
     StageDef,
+    WorldLists,
 )
 from swarmify_runs import MIGRATIONS as RUNS_MIGRATIONS
 from swarmify_runs import SqliteStorage as RunStorage
@@ -299,6 +301,10 @@ def task_board(root: Path) -> TaskStorage:
     return TaskStorage(migrated_db(root))
 
 
+def world_lists(root: Path) -> WorldLists:
+    return WorldLists(migrated_db(root))
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -430,7 +436,7 @@ def run_control(root: Path, notifier: Notifier | None = None) -> RunControl:
         world = worlds.get(world_id)
         return world.monthly_budget_usd if world else None
 
-    return RunControl(
+    control = RunControl(
         run_storage(root),
         root / "dbos.sqlite",
         root,
@@ -438,6 +444,8 @@ def run_control(root: Path, notifier: Notifier | None = None) -> RunControl:
         previews(connector_service(root), worlds, lambda run: recorded_pins(workflows, run)),
         monthly=monthly,
     )
+    control.lists = world_lists(root)
+    return control
 
 
 def run_file(world_folder: Path, run: Run, name: str) -> Path:
@@ -552,6 +560,7 @@ def create_app(
     registry.install_defaults()
     registry.adopt_world_connectors()  # V1's world-added connectors become local packages
     whiteboard = task_board(root)
+    lists_svc = world_lists(root)
 
     def blocked(connector: ConnectorDef, stage: tuple[str, str] | None, lines: list[str]) -> None:
         """What the sandbox blocked (ADR 0021) goes to the API's log, and for a stage's call to
@@ -851,6 +860,11 @@ def create_app(
                 "visibility_said": all(k in config["params"] for k in private_when),
             },
         )
+        if out["links"] and out["public"] is not False:  # a private draft is not published
+            try:  # the post is out: a failure here must not fail the stage and post again
+                lists_svc.published(run.world_id, run.id, out["links"])
+            except Exception:
+                log.warning("run %s posted, but its Entries did not move", run.id, exc_info=True)
 
     def connector_stage(run: Run, stage_id: str, stage: StageDef) -> None:
         try:
@@ -872,6 +886,7 @@ def create_app(
         clock=clock,
         budget=lambda run_id: runner.check_stop(run_id),  # the Budget, pause and abort live in Runs
         network=network,
+        lists=lists.AgentLists(lists_svc),
     )
 
     def run_swarm(run: Run, stage_id: str, stage: StageDef) -> None:
@@ -998,6 +1013,7 @@ def create_app(
         poll_seconds=max(0.05, min(poll_seconds, 1.0)),
         items=lambda run, index, stage: fanout.items(memory, run, index, stage),
     )
+    runner.lists = lists_svc
     workflow_svc = workflow_service(root, registry, runner)
     runner.pin = runs.pinner(workflow_svc)
     registry.aborted = lambda run_id: runner.storage.stop_of(run_id) == "abort"
@@ -1038,6 +1054,7 @@ def create_app(
         outcome_notices,
         clock,
         swarm.waiting,
+        lists_svc,
     )
 
     def upkeep_once() -> None:
@@ -1120,7 +1137,7 @@ def create_app(
         return Models(default=default_model(), models=list(PRICES))
 
     delete = world_deleter(
-        world_svc, workflow_svc, runner, registry, whiteboard, channels, learning_svc
+        world_svc, workflow_svc, runner, registry, whiteboard, channels, learning_svc, lists_svc
     )
     app.include_router(worlds.router(world_svc, delete, lambda w: runner.set_cap(w.id)))
     app.include_router(worlds.events_router(world_svc))
@@ -1164,6 +1181,7 @@ def create_app(
 
     app.include_router(connectors.router(registry, world_svc, workflow_svc))
     app.include_router(tasks.router(whiteboard, runner.get, clock))
+    app.include_router(lists.router(lists_svc, lambda w: world_svc.get(w) is not None))
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))
     app.include_router(graph.router(world_svc, index, writer))
     app.include_router(graph.stalled_router(world_svc, writer))
@@ -1202,6 +1220,7 @@ def create_app(
         runner,
         delete,
         memory=memory,
+        lists=lists_svc,
         retro=retro,
         ask=asker.ask,
     )

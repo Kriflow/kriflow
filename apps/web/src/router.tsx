@@ -17,6 +17,7 @@ import { Graph } from "./pages/Graph";
 import { Gates } from "./pages/Gates";
 import type { Gate } from "./api/runs";
 import { Library } from "./pages/Library";
+import { Lists } from "./pages/Lists";
 import { PackageVersions } from "./pages/PackageVersions";
 import { Reader } from "./pages/Reader";
 import { Runs } from "./pages/Runs";
@@ -191,6 +192,15 @@ export const assetsRoute = createRoute({
   component: Assets,
 });
 
+// `list` is the World List shown, `status` its status chip ("" for all).
+export const listsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/worlds/$worldId/lists",
+  component: Lists,
+  validateSearch: (search: Record<string, unknown>): { list?: string; status?: string } =>
+    Object.fromEntries((["list", "status"] as const).flatMap((k) => (typeof search[k] === "string" ? [[k, search[k]]] : []))),
+});
+
 // A document artifact or note, rendered to fit a phone; `path` is its path in the world folder.
 export const readerRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -229,6 +239,7 @@ const routeTree = rootRoute.addChildren([
   packageRoute,
   graphRoute,
   libraryRoute,
+  listsRoute,
   assetsRoute,
   readerRoute,
   castRoute,

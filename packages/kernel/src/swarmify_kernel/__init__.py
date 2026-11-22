@@ -6,12 +6,15 @@ from typing import Any
 
 from swarmify_kernel.events import Event
 from swarmify_kernel.ids import new_id
+from swarmify_kernel.local_time import local_time_problem, next_local
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 
 AGENT_TOOLS = {
     "web_search": "the web, through Claude's own WebSearch and WebFetch",
     "graph": "this world's graph, read only",
+    "lists": "this world's World Lists: read Entries by status, field and order, add Entries,"
+    " set their status and fields",
 }
 """The Agent Tools (ADR 0023): names a swarm stage's `tools` may list that the core itself
 provides, not a Connector, so they have no package, version or Credentials. Shared here because
@@ -25,4 +28,12 @@ def posts_privately(private_when: Mapping[str, Any], params: Mapping[str, Any]) 
     return bool(private_when) and all(params.get(k) == v for k, v in private_when.items())
 
 
-__all__ = ["AGENT_TOOLS", "MIGRATIONS", "Event", "new_id", "posts_privately"]
+__all__ = [
+    "AGENT_TOOLS",
+    "MIGRATIONS",
+    "Event",
+    "local_time_problem",
+    "new_id",
+    "next_local",
+    "posts_privately",
+]

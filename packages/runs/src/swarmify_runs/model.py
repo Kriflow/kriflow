@@ -1,6 +1,7 @@
 """The Runs language: a Run of a pinned workflow version, its Stages in order, and the
 Decisions people made at its gates."""
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,12 +29,25 @@ class RunLink:
 @dataclass(frozen=True)
 class Item:
     """One Item of a Fan-out Stage (ADR 0031), as its source gives it: a card's `file` (its
-    absolute path) or a JSON list's element `data`. `key` names its folder of gathered files."""
+    absolute path) or a JSON list's element `data`. `key` names its folder of gathered files.
+    `entry` is the key of the World List Entry it came from, for a stage with `from_list`."""
 
     key: str
     title: str
     file: str | None = None
     data: Any = None
+    entry: str | None = None
+
+
+def safe_key(key: str) -> str:
+    """An Item key that names a folder: letters, digits, dot, dash and underscore."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip(".-")[:80] or "item"
+
+
+def fans(config: dict[str, Any]) -> bool:
+    """Whether a workflow stage's config makes it a Fan-out Stage: over `for_each` or a
+    `from_list` query."""
+    return bool(config.get("for_each") or config.get("from_list"))
 
 
 @dataclass(frozen=True)
@@ -105,6 +119,8 @@ class Pinned:
     """The version's cron, if any: a tick that fires after the schedule was dropped finds None."""
     budget_warn_usd: float | None = None
     """The workflow's warn amount: the spend at which `budget.warning` fires."""
+    skip_when_live: bool = False
+    """A schedule tick starts nothing, and says so in the log, while a run of it is live."""
 
 
 @dataclass(frozen=True)
@@ -183,6 +199,9 @@ class RunStageView:
     """A fan-out stage's Items of its latest visit, each with its child run (ADR 0031)."""
     waiting: str | None = None
     """What Resource the running stage waits for and who holds it, while it does (ADR 0030)."""
+    runs_at: str | None = None
+    """For a running stage with `not_before`: when it runs, the next such local time at or after
+    its visit started (ISO, UTC). Until then it holds no slot and does nothing."""
 
 
 @dataclass(frozen=True)

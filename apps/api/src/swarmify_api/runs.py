@@ -242,6 +242,7 @@ def pinner(workflows: Workflows) -> Callable[..., Pinned]:
             version.model.budget_usd,
             version.model.schedule,
             version.model.budget_warn_usd,
+            version.model.skip_when_live,
         )
 
     return pin
@@ -598,6 +599,7 @@ def router(
                 seen=body.seen,
                 artifacts=body.artifacts,
                 rejects=[r.model_dump() for r in body.rejects or []],
+                person=True,
             )
         )
 
@@ -664,6 +666,6 @@ def router(
     @api.post("/runs/{run_id}/abort", responses=ACTION_ERRORS)
     def abort(run_id: str) -> Run:
         """Aborts the run and every child run it started."""
-        return act(lambda: runner.abort(run_id))
+        return act(lambda: runner.abort(run_id, person=True))
 
     return api

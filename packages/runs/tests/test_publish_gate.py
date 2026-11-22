@@ -151,13 +151,32 @@ def test_a_gate_before_a_stage_that_does_not_publish_has_no_preview(runner: Runn
     assert runner.gates()[0].publish is None
 
 
+SECOND = StageDef("meta", "connector", {"calls": "youtube", "params": {"title": "Hooks"}})
+
+
+def test_one_gate_answer_lets_both_publish_stages_after_it_run(
+    runner: Runner, connector: FakeConnector
+) -> None:
+    """Issue 541: the editor allows a gate then two publish stages, and so does the runner."""
+    run = runner.start("world_1", "wf_1", 1, "Everywhere", [CONFIRM, PUBLISH, SECOND])
+    wait_for(lambda: status(runner, run.id) == "waiting_gate")
+    runner.decide(run.id)
+    wait_for(lambda: status(runner, run.id) == "done")
+    assert [name for _, name in connector.calls] == ["publish", "meta"]
+
+
 @pytest.mark.parametrize(
-    "stages", [[PUBLISH], [RENDER, PUBLISH]], ids=["first stage", "after a connector"]
+    "stages",
+    [[PUBLISH], [RENDER, PUBLISH], [CONFIRM, SECOND, RENDER, PUBLISH]],
+    ids=["first stage", "after a connector", "after a publish stage and a connector"],
 )
 def test_the_runner_refuses_a_publish_stage_no_gate_precedes(
     runner: Runner, connector: FakeConnector, stages: list[StageDef]
 ) -> None:
     run = runner.start("world_1", "wf_1", 1, "Sneaky", stages)
+    wait_for(lambda: status(runner, run.id) in ("failed", "waiting_gate"))
+    if status(runner, run.id) == "waiting_gate":
+        runner.decide(run.id)
     wait_for(lambda: status(runner, run.id) == "failed")
     failed = runner.get(run.id)
     assert failed is not None

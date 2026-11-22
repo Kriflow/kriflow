@@ -16,11 +16,12 @@ from swarmify_api import tasks
 from swarmify_api.agents import run_artifacts
 from swarmify_api.assistant import Card, Message, RunAssistant, Unanswered, read_run_text, title
 from swarmify_api.auth import CALLER
+from swarmify_api.lists import entry_view
 from swarmify_api.runs import checker, pinner, start_pinned
 from swarmify_connectors import Connectors
 from swarmify_connectors.resources import snapshot
 from swarmify_memory import Memory
-from swarmify_runs import TERMINAL, Illegal, Run, RunChange, RunControl
+from swarmify_runs import TERMINAL, Illegal, Run, RunChange, RunControl, WorldLists
 from swarmify_swarm import OPERATOR, Refused, Storage
 from swarmify_swarm import ToolError as AgentToolError
 from swarmify_workflows import Invalid, Workflows
@@ -36,6 +37,7 @@ def server(
     memory: Memory | None = None,
     retro: bool = True,
     ask: Callable[[Run, str], Awaitable[Message]] | None = None,
+    lists: WorldLists | None = None,
 ) -> MCPServer:
     """`control` acts on runs hosted by the API process, and records the runs it starts queued
     for that process to adopt; `delete` is the composition root's world delete
@@ -49,12 +51,14 @@ def server(
     delete = delete or worlds.delete
     root = control.data_dir
     memory = memory or Memory(root / "swarmify.db", root)
+    world_lists = lists or WorldLists(root / "swarmify.db")
     pin = control.pin = pinner(workflows)
     control.check = checker(workflows)
     mcp = MCPServer(
         "swarmify",
         instructions="Drive swarmify: worlds, workflows, runs (start, fork, artifacts, Run"
-        " Changes, the Run Assistant), swarm stage whiteboards, and the gates runs wait at.",
+        " Changes, the Run Assistant), swarm stage whiteboards, the gates runs wait at, and each"
+        " world's World Lists of Entries.",
     )
 
     def scope() -> str | None:
@@ -130,7 +134,11 @@ def server(
         " under top-level `given`). Each child's `take` lands in <stage>/artifacts/<item key>/"
         " with an items.json index; when items fail the stage waits at an `items` gate. With"
         " `approve: true` it waits at an `approve_items` gate instead until review_items has"
-        " approved every item."
+        " approved every item. With `from_list` (list, status, where, order, take, on_start,"
+        " on_finish) its items are the World List Entries the query matches, each claimed for"
+        " its child, and `runs_by` ({field, map}) picks each child's workflow from an Entry"
+        " field. A gate's `entry` ({approve, send_back, reject}) moves the run's Entry when a"
+        " person answers."
     )
     def save_workflow(world_id: str, yaml: str, workflow_id: str | None = None) -> dict[str, Any]:
         reach(world_id)
@@ -340,6 +348,145 @@ def server(
             except Unanswered as exc:
                 raise ToolError(f"The assistant did not answer: {exc}") from exc
 
+    def listed[T](world_id: str, act: Callable[[], T]) -> T:
+        """A World List call, its refusal shown to the client."""
+        reach(world_id)
+        if worlds.get(world_id) is None:
+            raise ToolError(f"world not found: {world_id}")
+        try:
+            return act()
+        except KeyError as exc:
+            raise ToolError(str(exc).strip("'\"")) from exc
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
+
+    def who() -> str:
+        token = CALLER.get()
+        return token.name if token else OPERATOR
+
+    @mcp.tool(
+        description="List a world's World Lists with their statuses, done, rejected, review"
+        " and published."
+    )
+    def list_lists(world_id: str) -> list[dict[str, Any]]:
+        return listed(world_id, lambda: [asdict(w) for w in world_lists.lists(world_id)])
+
+    @mcp.tool(
+        description="Declare a World List of a world, or declare it again: its `statuses` in"
+        " order (the first is where an added Entry starts), and which of them count as `done`"
+        " and `rejected`, in which Entries wait for a person (`review`: Needs you says so"
+        " while any do), and `published`, where an Entry goes when the run holding it"
+        " publishes. Refused when a status some Entry is in would go."
+    )
+    def declare_list(
+        world_id: str,
+        name: str,
+        statuses: list[str],
+        done: list[str] | None = None,
+        rejected: list[str] | None = None,
+        review: list[str] | None = None,
+        published: str | None = None,
+    ) -> dict[str, Any]:
+        return listed(
+            world_id,
+            lambda: asdict(
+                world_lists.declare(
+                    world_id, name, statuses, done, rejected, who(), review, published
+                )
+            ),
+        )
+
+    @mcp.tool(
+        description="Read a World List's Entries: any of `status`, fields equal to `fields`,"
+        " by `order` (score, time or a numeric field; a leading - for descending, default"
+        " -score), at most `limit`."
+    )
+    def read_list(
+        world_id: str,
+        list: str,
+        status: list[str] | None = None,
+        fields: dict[str, Any] | None = None,
+        order: str = "-score",
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        found = listed(
+            world_id,
+            lambda: world_lists.read(
+                world_id, list, status=status, where=fields, order=order, limit=limit
+            ),
+        )
+        return [asdict(e) for e in found]
+
+    @mcp.tool(description="Get one Entry of a World List with its history (who, when, why).")
+    def get_entry(world_id: str, list: str, key: str) -> dict[str, Any]:
+        return listed(world_id, lambda: entry_view(world_lists, world_id, list, key))
+
+    @mcp.tool(
+        description="Add an Entry to a World List: a `key` unique in the list, a `title`, and"
+        " optionally a `status` (else the list's first), `score`, small `fields` and `file` (a"
+        " path in the world folder). A key already there returns that Entry unchanged, with"
+        " `added` false."
+    )
+    def add_entry(
+        world_id: str,
+        list: str,
+        key: str,
+        title: str,
+        status: str | None = None,
+        score: float | None = None,
+        fields: dict[str, Any] | None = None,
+        file: str | None = None,
+    ) -> dict[str, Any]:
+        entry, added = listed(
+            world_id,
+            lambda: world_lists.add(
+                world_id,
+                list,
+                key,
+                title,
+                status=status,
+                score=score,
+                fields=fields,
+                file=file,
+                by=who(),
+            ),  # fmt: skip
+        )
+        return {**asdict(entry), "added": added}
+
+    @mcp.tool(
+        description="Move Entries of a World List (`keys`, one or several) to a declared"
+        " `status`, with a `note` kept in their history. All or none."
+    )
+    def set_entry_status(
+        world_id: str, list: str, keys: list[str], status: str, note: str = ""
+    ) -> list[dict[str, Any]]:
+        moved = listed(
+            world_id,
+            lambda: world_lists.set_status(world_id, list, keys, status, note=note, by=who()),
+        )
+        return [asdict(e) for e in moved]
+
+    @mcp.tool(
+        description="Set an Entry's `fields` (merged; a null removes one) and optionally its"
+        " `score`, with a `note` kept in its history."
+    )
+    def set_entry_fields(
+        world_id: str,
+        list: str,
+        key: str,
+        fields: dict[str, Any] | None = None,
+        score: float | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        return listed(
+            world_id,
+            lambda: asdict(
+                world_lists.set_fields(
+                    world_id, list, key, fields or {}, score=score, note=note, by=who()
+                )
+            ),
+        )
+
     @mcp.tool(description="List every open gate across all worlds and runs, newest first.")
     def list_gates() -> list[dict[str, Any]]:
         return [asdict(g) for g in control.gates() if scope() in (None, g.world_id)]
@@ -462,6 +609,7 @@ def approvals_server(control: RunControl, asker: RunAssistant, registry: Connect
                 artifact=artifact,
                 gate=(stage_index, visit),
                 by=by.strip()[:100] or None,
+                person=True,  # a Remote Approval's answer is a person's
             )
         except (KeyError, ValueError) as exc:  # Illegal is a ValueError
             raise ToolError(str(exc).strip("'\"")) from exc
@@ -547,6 +695,7 @@ def stdio_server(root: Path, control: RunControl) -> MCPServer:
         task_board,
         workflow_service,
         world_deleter,
+        world_lists,
         world_service,
     )
 
@@ -560,6 +709,7 @@ def stdio_server(root: Path, control: RunControl) -> MCPServer:
         whiteboard,
         notification_service(root),
         learning_service(root),
+        world_lists(root),
     )
     return server(worlds, workflows, whiteboard, control, delete)
 

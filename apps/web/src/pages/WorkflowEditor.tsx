@@ -41,6 +41,9 @@ const NEW_STAGE: Record<StageType, RawStage> = {
   workflow: { workflow: "child", runs: "" },
 };
 /** The per-stage fields the list edits. `list` fields are comma separated in the input. */
+/** A local time and its timezone the stage waits for once its turn comes; the check refuses a bad one. */
+const NOT_BEFORE = { key: "not_before", label: "Not before (17:00 America/Toronto)", kind: "text" } as const;
+
 const FIELDS: Record<StageType, { key: string; label: string; kind: "text" | "long" | "list" | "gate_kind" | "count" }[]> = {
   swarm: [
     { key: "goal", label: "Goal", kind: "long" },
@@ -50,6 +53,7 @@ const FIELDS: Record<StageType, { key: string; label: string; kind: "text" | "lo
     { key: "produces", label: "Produces", kind: "list" },
     { key: "graphs", label: "Graphs", kind: "list" },
     { key: "agents", label: "Agents", kind: "count" },
+    NOT_BEFORE,
   ],
   gate: [
     { key: "ask", label: "Ask", kind: "text" },
@@ -60,10 +64,12 @@ const FIELDS: Record<StageType, { key: string; label: string; kind: "text" | "lo
     { key: "input", label: "Input", kind: "text" },
     { key: "inputs", label: "Inputs", kind: "list" },
     { key: "output", label: "Output", kind: "text" },
+    NOT_BEFORE,
   ],
   workflow: [
     { key: "runs", label: "Runs", kind: "text" },
     { key: "take", label: "Take", kind: "list" },
+    NOT_BEFORE,
   ],
 };
 
@@ -432,6 +438,7 @@ export function WorkflowEditor() {
   const title =
     asText(parsed?.doc.name).trim() || model?.name?.trim() || (workflowId ? "Workflow" : "New workflow");
   const schedule = typeof parsed?.doc.schedule === "string" ? parsed.doc.schedule : "";
+  const skipWhenLive = parsed?.doc.skip_when_live === true;
   const steps = parsed?.stages ?? [];
   const current = Math.min(selected, Math.max(steps.length - 1, 0));
   // The UI reads the stage package's declaration, never its name (ADR 0025).
@@ -660,6 +667,7 @@ export function WorkflowEditor() {
                     ? `Next run ${new Date(nextRunAt).toLocaleString()}.`
                     : "Save a valid schedule to see the next run."}
                   {workflowId && !dirty && nextRunAt && " It starts on its own and shows on the runs page."}
+                  {skipWhenLive && " A tick is skipped while a run of it is live."}
                 </>
               ) : (
                 "None. Add a cron schedule in Stages or YAML to run it on its own."
@@ -800,6 +808,14 @@ function StageList({
                 ? "Not a cron expression yet."
                 : "Runs only when you start it."}
           </span>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={doc.skip_when_live === true}
+              onChange={(e) => onTop("skip_when_live", e.target.checked || "")}
+            />
+            Skip a tick while a run of it is live
+          </label>
         </div>
         <label>
           <span>Budget (USD)</span>
