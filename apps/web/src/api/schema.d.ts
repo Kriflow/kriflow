@@ -985,7 +985,7 @@ export interface paths {
         /**
          * Package Index
          * @description The curated index of known packages, read from `SWARMIFY_CONNECTOR_INDEX` (an https
-         *     URL or a local file; by default the swarmify-connectors repository's `index.toml`). 502
+         *     URL or a local file; by default Kriflow/packages' `index.toml`). 502
          *     saying why when it cannot be fetched or read.
          */
         get: operations["package_index_api_packages_index_get"];
