@@ -42,11 +42,11 @@ def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[
     # The planner drafts it from plain words; the stage rail and the check follow the draft.
     page.get_by_test_id("no-workflows").get_by_role("link", name="Write a workflow").click()
     page.get_by_role("tab", name="Planner").click()
-    page.get_by_label("Message to Planner").fill(
+    page.get_by_test_id("planner-chat").get_by_role("textbox").fill(
         "A weekly short: research ideas, I pick one, render it, I review it, then post it."
     )
     page.get_by_role("button", name="Send", exact=True).click()
-    expect(page.get_by_test_id("chat-log")).to_contain_text("post after you confirm")
+    expect(page.get_by_test_id("planner-chat")).to_contain_text("post after you confirm")
     expect(page.get_by_test_id("check-status")).to_contain_text("Planner updated the draft")
     page.get_by_role("tab", name="Stages").click()
     rail = page.get_by_test_id("stage-rows")
@@ -73,7 +73,7 @@ def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[
     card.get_by_role("radio", name=re.compile("Hook first")).click()
     card.get_by_role("button", name="Continue with this pick").click()
     expect(card).to_contain_text("Watch it. Approve or send back.", timeout=20_000)
-    card.get_by_role("button", name="Approve").click()
+    card.get_by_role("button", name="Approve", exact=True).click()
 
     # The confirm gate shows exactly what goes out, and only then posts it.
     expect(card).to_contain_text("Post it?", timeout=20_000)
@@ -108,10 +108,12 @@ def _run(page: Page, base_url: str, data_dir: Path, world: str, until: Callable[
     step("research")
     expect(page.get_by_test_id("artifact-card").first).to_contain_text("Hook first")
     step("render")
+    page.get_by_role("tab", name="Details").click()
     page.get_by_text("Technical details").click()
     expect(page.get_by_test_id("call-request")).to_contain_text('"output": "short.mp4"')
     step("publish")
     expect(page.get_by_test_id("publish")).to_contain_text("Five hooks that work")
+    page.get_by_role("tab", name="Details").click()
     page.get_by_text("Technical details").click()
     expect(page.get_by_test_id("call-response")).to_contain_text("https://youtu.be/e2e-video")
 

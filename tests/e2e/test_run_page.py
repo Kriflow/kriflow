@@ -79,7 +79,7 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
         expect(page.get_by_test_id("build-log")).to_contain_text("Installed packages")
 
         page.get_by_role("button", name="Answer review").click()
-        page.get_by_role("button", name="Approve").click()
+        page.get_by_role("button", name="Approve", exact=True).click()
         expect(status).to_have_text(
             re.compile(r"^Done in \d+ s\. Made video\.mp4\.$"), timeout=20_000
         )

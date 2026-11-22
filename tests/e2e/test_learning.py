@@ -50,7 +50,7 @@ def test_approve_an_edited_skill_proposal_and_see_skills_records_and_scores(
         expect(change).to_contain_text("the judge passed the hook-first idea as #1")
         change.get_by_text("Read or edit SKILL.md before approving").click()
         change.get_by_label("SKILL.md (edit before approving)").fill(EDITED)
-        card.get_by_role("button", name="Approve").click()
+        card.get_by_role("button", name="Approve", exact=True).click()
         expect(status).to_have_text(re.compile(r"^Done in "), timeout=20_000)
         skill = tmp_path / "worlds" / world / "skills/hooks/SKILL.md"
         assert skill.read_text() == EDITED

@@ -82,6 +82,7 @@ def test_add_a_connector_see_its_tools_and_open_its_call_on_the_timeline(
         expect(status).to_have_text("Waiting for you: Ship it?", timeout=20_000)
 
         page.get_by_test_id("timeline").get_by_role("button", name=re.compile(r"^Step 1,")).click()
+        page.get_by_role("tab", name="Details").click()
         page.get_by_text("Technical details").click()
         expect(page.get_by_test_id("call")).to_contain_text("polled 2 times")
         request = page.get_by_test_id("call-request")

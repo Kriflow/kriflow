@@ -156,7 +156,9 @@ dialog.sheet.chat-sheet .composer { padding-bottom: max(12px, env(safe-area-inse
 
 @media (max-width: 48rem) {
   .chat { font-size: 0.875rem; }
-  .composer button.icon { width: 36px; min-width: 36px; height: 36px; }
+  .composer button.icon { width: 44px; min-width: 44px; height: 44px; }
+  /* A thumb's 44 px for every chat button on a phone. */
+  button.chat-starter, button.chipbtn, button.choice, .not-sent button, .code-head button, button.code-more { min-height: 44px; }
   /* At a gate the answer bar steps aside while you type a question. */
   .gate:has(.gate-ask textarea:focus) .action-bar { display: none; }
   .planner-view > .chat { border: 0; border-radius: 0; margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter-l)); }

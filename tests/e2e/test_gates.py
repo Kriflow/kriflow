@@ -36,13 +36,13 @@ def test_answer_a_gate_from_the_inbox_and_watch_the_run_finish(page: Page, base_
         expect(card).to_contain_text("Watch it. Approve or send back.", timeout=15_000)
         expect(card).to_contain_text("2 of 2 revisions left")
 
-        card.get_by_text("Add a note or ask").click()
+        card.get_by_text("Add a note", exact=True).click()
         card.get_by_label(r"Note").fill("Darker.")
         card.get_by_role("button", name="Send back to...").click()
         card.get_by_role("menuitem").first.click()
         expect(card).to_contain_text("1 of 2 revisions left", timeout=15_000)
 
-        card.get_by_role("button", name="Approve").click()
+        card.get_by_role("button", name="Approve", exact=True).click()
         empty = page.get_by_test_id("no-gates")
         expect(empty).to_contain_text("All clear", timeout=15_000)
 
@@ -76,7 +76,9 @@ def test_answer_in_needs_you_opens_the_next_and_links_to_the_answered_step(
         until(lambda: {first, second} <= gates().keys())
         gate = gates()[first]
         page.goto(f"{base_url}/gates?world={world['id']}&gate={gate}")
-        page.get_by_test_id(f"gate-{first}").get_by_role("button", name="Approve").click()
+        page.get_by_test_id(f"gate-{first}").get_by_role(
+            "button", name="Approve", exact=True
+        ).click()
 
         expect(page.get_by_test_id(f"gate-{second}")).to_contain_text(
             "Watch it. Approve or send back.", timeout=15_000

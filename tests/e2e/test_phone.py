@@ -320,7 +320,7 @@ def test_a_gate_is_answered_from_a_phone_as_the_stream_moves(phone: Page, ids: d
     phone.goto(f"/gates?gate={ids['run_gate']}")
     card = phone.get_by_test_id(f"gate-{ids['run']}")
     expect(card).to_contain_text("Which idea do we shoot?")
-    card.get_by_role("button", name="Approve").click()
+    card.get_by_role("button", name="Approve", exact=True).click()
     expect(phone.locator(".toasts")).to_contain_text("You approved it", timeout=15_000)
     expect(card).to_have_count(0)  # the next decision opens in its place
 

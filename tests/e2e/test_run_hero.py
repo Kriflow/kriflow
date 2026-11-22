@@ -175,7 +175,8 @@ def test_a_long_run_rail_scrolls_and_a_tap_pins_the_stage(phone: Page, ids: dict
     phone.wait_for_function(
         """() => {
           const bar = document.querySelector('.topbar').getBoundingClientRect().bottom;
-          const top = document.querySelector('[data-testid=stage-panel]').getBoundingClientRect().top;
+          const panel = document.querySelector('[data-testid=stage-panel]');
+          const top = panel.getBoundingClientRect().top;
           const end = scrollY + innerHeight >= document.documentElement.scrollHeight - 1;
           return top >= bar - 1 && (top < bar + 24 || end);
         }"""
