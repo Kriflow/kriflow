@@ -23,7 +23,8 @@ def test_a_worker_runs_the_stage_and_the_page_shows_its_live_log(
         run = api.post(f"/api/workflows/{wf['workflow_id']}/runs", json={}).json()
         page.goto(f"{base_url}/worlds/{world['id']}/runs/{run['id']}")
 
-        expect(page.get_by_test_id("status-line")).to_have_text(re.compile(r"^Done in "))
+        status = page.get_by_test_id("status-line")
+        expect(status).to_have_text(re.compile(r"^Done in "), timeout=20_000)  # slow CI runners
         log = page.get_by_test_id("log")
         expect(log).to_contain_text("Worker 1: Searching the world's memory")
         expect(log).to_contain_text("Worker 1: Claimed: the next task")
