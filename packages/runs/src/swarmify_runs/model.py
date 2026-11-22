@@ -105,6 +105,8 @@ class Pinned:
     """The version's cron, if any: a tick that fires after the schedule was dropped finds None."""
     budget_warn_usd: float | None = None
     """The workflow's warn amount: the spend at which `budget.warning` fires."""
+    skip_when_live: bool = False
+    """A schedule tick starts nothing, and says so in the log, while a run of it is live."""
 
 
 @dataclass(frozen=True)
@@ -183,6 +185,9 @@ class RunStageView:
     """A fan-out stage's Items of its latest visit, each with its child run (ADR 0031)."""
     waiting: str | None = None
     """What Resource the running stage waits for and who holds it, while it does (ADR 0030)."""
+    runs_at: str | None = None
+    """For a running stage with `not_before`: when it runs, the next such local time at or after
+    its visit started (ISO, UTC). Until then it holds no slot and does nothing."""
 
 
 @dataclass(frozen=True)

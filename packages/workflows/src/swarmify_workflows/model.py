@@ -28,6 +28,9 @@ class SwarmStage:
     agents: int = 1
     """How many workers run the stage (ADR 0020). One works the tasks alone, with no one to
     contend with for a claim; several share the whiteboard as a swarm."""
+    not_before: str | None = None
+    """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
+    such time at or after its turn comes."""
     type: Literal["swarm"] = "swarm"
 
 
@@ -57,6 +60,9 @@ class ConnectorStage:
     output: str | None = None
     params: dict[str, object] = field(default_factory=dict)
     inputs: list[str] = field(default_factory=list)
+    not_before: str | None = None
+    """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
+    such time at or after its turn comes."""
     type: Literal["connector"] = "connector"
 
 
@@ -76,6 +82,9 @@ class WorkflowStage:
     as_: str | None = None
     max_parallel: int | None = None
     approve: bool = False
+    not_before: str | None = None
+    """A local time with its timezone (`17:00 America/Toronto`): the stage waits for the next
+    such time at or after its turn comes."""
     type: Literal["workflow"] = "workflow"
 
 
@@ -95,6 +104,8 @@ class WorkflowModel:
     its stages may name as inputs."""
     budget_warn_usd: float | None = None
     """Spend at which `budget.warning` fires, below `budget_usd`; 80 percent of it when left out."""
+    skip_when_live: bool = False
+    """A schedule tick is skipped, and logged, while a run of the workflow is live."""
 
 
 @dataclass(frozen=True)

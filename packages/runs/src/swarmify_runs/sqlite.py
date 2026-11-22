@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from swarmify_kernel import Event, new_id
+from swarmify_kernel import Event, local_time_problem, new_id, next_local
 from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
 from swarmify_runs.machine import MAX_SEND_BACKS, Illegal, RunState
@@ -32,6 +32,14 @@ ENDED = ("done", "failed", "aborted")
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _runs_at(config: dict[str, Any], status: str, started_at: str | None) -> str | None:
+    """When a running stage with `not_before` runs: the next such time from its visit's start."""
+    rule = config.get("not_before")
+    if status != "running" or not started_at or local_time_problem(rule) is not None:
+        return None
+    return next_local(str(rule), datetime.fromisoformat(started_at)).isoformat()
 
 
 class SqliteStorage:
@@ -692,6 +700,7 @@ class SqliteStorage:
                     items=[v for _, v in _items(conn, run_id, s["idx"], None)]
                     if s["type"] == "workflow"
                     else [],
+                    runs_at=_runs_at(json.loads(s["config"]), s["status"], s["started_at"]),
                 )
                 for s in stages
             ],

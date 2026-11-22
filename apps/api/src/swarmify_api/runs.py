@@ -242,6 +242,7 @@ def pinner(workflows: Workflows) -> Callable[..., Pinned]:
             version.model.budget_usd,
             version.model.schedule,
             version.model.budget_warn_usd,
+            version.model.skip_when_live,
         )
 
     return pin
