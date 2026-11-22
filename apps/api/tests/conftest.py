@@ -1,11 +1,11 @@
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pytest
 import uvicorn
-from api_fakes import youtube_preview
+from api_fakes import fake_preview
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -13,6 +13,7 @@ from fake_graph import fake_extract
 from swarmify_api import main
 from swarmify_api.main import create_app
 from swarmify_connectors import Connectors, FakeTransport, Packages
+from swarmify_connectors.fake import FIXTURE_DEFAULTS
 from swarmify_memory import FakeGraphIndex
 from swarmify_swarm import SdkRuntime
 from swarmify_swarm.fake import Script
@@ -20,27 +21,25 @@ from swarmify_swarm.network import NetworkWait
 
 
 @pytest.fixture(autouse=True)
-def no_default_install_steps(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Each default package's install step runs for real in connectors/*/test_*.py and
-    packages/connectors/tests; the API starts the app ~200 times, so here it is skipped. A
-    module that starts a default package's `.venv` sets `real_default_installs = True`."""
-    if getattr(request.module, "real_default_installs", False):
-        return
+def fixture_defaults(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The app's default packages are the fixture ones (FIXTURE_DEFAULTS), never the real
+    packages, and their install steps are skipped: the API starts the app ~200 times. A module
+    that needs an install step to run sets `real_default_installs = True`."""
     real = Connectors.install_defaults
+    skip = not getattr(request.module, "real_default_installs", False)
 
-    def install_defaults(self: Connectors) -> dict[str, str]:
+    def install_defaults(self: Connectors, sources: Sequence[str] | None = None) -> dict[str, str]:
         with monkeypatch.context() as m:
-            m.setattr(Packages, "_run_install", lambda *a: None)
-            return real(self)
+            if skip:
+                m.setattr(Packages, "_run_install", lambda *a: None)
+            return real(self, FIXTURE_DEFAULTS if sources is None else sources)
 
     monkeypatch.setattr(Connectors, "install_defaults", install_defaults)
 
 
 @pytest.fixture(autouse=True)
 def no_prepare_commands(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A Template's prepare command (remotion_build's `npm ci`) runs for real only in a module
+    """A Template's prepare command (kit's `prepare.py`) runs for real only in a module
     that sets `real_prepare = True`; elsewhere every prepare succeeds at once."""
     if not getattr(request.module, "real_prepare", False):
         monkeypatch.setattr(Packages, "prepare", lambda *a: None)
@@ -48,9 +47,9 @@ def no_prepare_commands(request: pytest.FixtureRequest, monkeypatch: pytest.Monk
 
 @pytest.fixture
 def transport() -> FakeTransport:
-    """Every package's `preview` answers as the youtube package's own does; a test of another
-    publish connector sets its own."""
-    return FakeTransport(outputs={"preview": [youtube_preview]})
+    """Every package's `preview` answers as fake_publish's own does; a test of another publish
+    connector sets its own."""
+    return FakeTransport(outputs={"preview": [fake_preview]})
 
 
 @pytest.fixture

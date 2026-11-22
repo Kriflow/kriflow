@@ -37,6 +37,18 @@ def test_defaults_install_once_and_a_broken_one_is_left_out(
     assert not (installed / "installed.txt").exists()  # installed already: not again
 
 
+def test_defaults_install_from_the_folders_given_instead(
+    connectors: Connectors, repo: Path
+) -> None:
+    """The core's tests give fixture packages as the defaults, never the real ones."""
+    shutil.copytree(FIXTURES / "packages/kit", repo / "fixtures/kit")
+    assert connectors.install_defaults(["fixtures/kit", "connectors/probe"]) == {
+        "kit": "1.0.0",
+        "probe": "1.0.0",
+    }
+    assert [p.name for p in connectors.packages.list()] == ["kit", "probe"]
+
+
 def test_the_first_install_carries_v1_s_settings_and_keys_into_the_shared_setup(
     connectors: Connectors, repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

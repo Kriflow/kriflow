@@ -6,6 +6,16 @@ from typing import Any
 
 from swarmify_connectors.model import Connector, ConnectorError, Tool
 
+FIXTURE_DEFAULTS = (
+    "connectors/python_script",
+    *(f"packages/connectors/tests/fixtures/packages/{n}" for n in ("fake_publish", "kit")),
+    "packages/connectors/tests/fixtures/packages/sketch",
+)
+"""The default packages of the core's API and end-to-end tests (issue 586): `python_script`, the
+core's own, and fixture packages standing in for the real ones (`fake_publish` for a publish
+platform, `kit` for a Templates render, `sketch` for a Build Session), so no core test needs a
+real package."""
+
 Answer = dict[str, Any] | BaseException | Callable[[dict[str, Any]], dict[str, Any]]
 
 

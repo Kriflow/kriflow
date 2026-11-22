@@ -5,18 +5,17 @@ tools, each scripted by its role, told apart by its system prompt: the planner s
 the worker queries the graph, claims it, writes a note and an artifact and finishes it; the
 judge passes with two ranked ideas. A stage named `steer` has a worker that waits mid-turn for
 a person's message. Every run's retro session proposes nothing, or, with
-`SWARMIFY_E2E_RETRO=propose` in the app's environment, one new skill. A `remotion_build` stage's
+`SWARMIFY_E2E_RETRO=propose` in the app's environment, one new skill. A `sketch` stage's
 builder session installs packages and writes src/Main.tsx.
 
-The planner chat, told apart by its system prompt too, drafts GOLDEN. The Remotion render,
-speech and YouTube connectors answer from a fake ConnectorTransport (render writes the video and
-its sidecar, as the real wrapper does; speech writes timings.json and a silent take per scene;
-YouTube posts and counts 1,234 views, while its preview is the youtube package's own, over MCP;
-with SWARMIFY_E2E_GOOGLE set, YouTube posts with the package's own code against that fake Google);
-a connector a test adds goes through the real MCP transport. Every world has the Remotion
-Template `shorts` its workflows render. remotion_render installs with an `npm` and `npx` that do
-nothing, so each app does not fetch the Remotion CLI and Chrome (800 MB) its fake renders never
-use. Upkeep runs every second.
+The app's default packages are fixtures only (issue 586): `kit` renders, `sketch` builds and
+`fake_publish` posts, and a test's `voice` (the echo fixture renamed, conftest.py) voices, all
+answered by a fake ConnectorTransport (kit writes the video and its sidecar; voice writes
+timings.json and a silent take per scene; fake_publish previews as its fixture module does, posts
+and counts 1,234 views; with SWARMIFY_E2E_PLATFORM set, it uploads resumably to that fake platform
+instead, keeping a Publish Record as a real package does); a connector a test adds goes through the
+real MCP transport. Every world has the kit Template `shorts` its workflows render. Upkeep runs
+every second.
 
 The GraphWriter's extract writes a fixed graph instead of calling graphify's model, a second
 after the last change; the real graphify MCP process answers queries over it."""
@@ -24,7 +23,6 @@ after the last change; the real graphify MCP process answers queries over it."""
 import importlib.util
 import json
 import os
-import tempfile
 import wave
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -37,8 +35,10 @@ from fastapi import FastAPI
 
 from swarmify_api.main import create_app as real_app
 from swarmify_api.planner import SYSTEM as PLANNER_SYSTEM
-from swarmify_connectors import Connector, FakeTransport, McpTransport, packages
+from swarmify_connectors import Connector, ConnectorError, Connectors, FakeTransport, McpTransport
+from swarmify_connectors.fake import FIXTURE_DEFAULTS
 from swarmify_connectors.mcp_transport import Caller
+from swarmify_connectors.model import Tool
 from swarmify_learning import SYSTEM as RETRO_SYSTEM
 from swarmify_memory import GRAPH_OUT
 from swarmify_swarm import SdkRuntime, tool_id
@@ -46,8 +46,9 @@ from swarmify_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedT
 from swarmify_worlds import World, Worlds
 
 REPO = Path(__file__).parents[2]
-BUILDER_SYSTEM = (REPO / "connectors/remotion_build/system.md").read_text()
-"""The remotion_build package's system prompt for its Build Session."""
+FIXTURES = REPO / "packages/connectors/tests/fixtures/packages"
+BUILDER_SYSTEM = (FIXTURES / "sketch/session/system.md").read_text()
+"""The sketch package's system prompt for its Build Session."""
 IDEAS_MD = """# Ideas
 
 ```
@@ -96,25 +97,20 @@ IDEAS = [
     },
     {"title": "The chase", "body": "A chase in 30 seconds.", "rank": 2, "sources": []},
 ]
-SCRIPT = {
+LINE = {
     "title": "The hedgehog",
     "body": "Who sleeps all winter? A hedgehog.",
     "rank": 1,
     "sources": [],
-    "fields": {
-        "scenes": [
-            {"id": "hook", "lines": [{"text": "Who sleeps all winter?", "pause_after": 0.3}]},
-            {"id": "fact", "lines": [{"text": "A hedgehog.", "pause_after": 0.3}]},
-        ]
-    },
+    "fields": {"text": "Who sleeps all winter? A hedgehog."},
 }
 
 
 def _verdict(options: ClaudeAgentOptions) -> dict[str, Any]:
-    """Two ideas, or for a stage promising the speech connector's `script` type, a script in
-    that type's schema (issue 133)."""
-    if '"scenes"' in json.dumps(options.output_format):
-        return {"passed": True, "reasons": ["A script."], "items": [SCRIPT]}
+    """Two ideas, or for a stage promising voice's `line` type, a line in that type's schema
+    (issue 133)."""
+    if '"text"' in json.dumps(options.output_format):
+        return {"passed": True, "reasons": ["A line."], "items": [LINE]}
     return {"passed": True, "reasons": ["Two ideas, ranked."], "items": IDEAS}
 
 
@@ -153,7 +149,7 @@ stages:
     ask: Pick one idea.
     kind: pick
   - connector: render
-    calls: remotion_render
+    calls: kit
     input: ideas.md
     output: short.mp4
     params: {project: shorts, composition: Short}
@@ -164,7 +160,7 @@ stages:
     ask: Post it?
     kind: confirm
   - connector: publish
-    calls: youtube
+    calls: fake_publish
     input: short.mp4
     params: {title: Five hooks that work, visibility: unlisted}
 """
@@ -189,11 +185,11 @@ PLANNER_CHAT = [
 ]
 VIDEO = "e2e-video"
 SCENES = [("hook", 1.5, True), ("payoff", 2.0, False)]
-"""The speech fake's takes: scene, seconds, and whether its first line runs into the next."""
+"""The voice fake's takes: scene, seconds, and whether its first line runs into the next."""
 
 
 def voice(out: Path) -> dict[str, Any]:
-    """What the speech connector leaves: timings.json and a silent take per scene beside it."""
+    """What the voice fake leaves: timings.json and a silent take per scene beside it."""
     (out.parent / "narration").mkdir(exist_ok=True)
     takes = []
     for scene, seconds, joined in SCENES:
@@ -216,69 +212,106 @@ def voice(out: Path) -> dict[str, Any]:
     }
 
 
-GOOGLE = os.environ.get("SWARMIFY_E2E_GOOGLE", "")
-"""A fake Google's address: when set, YouTube posts with the youtube package's own publish code,
-against that fake, which a test serves outside the app so it outlives a restart."""
+PLATFORM = os.environ.get("SWARMIFY_E2E_PLATFORM", "")
+"""A fake platform's address: when set, fake_publish uploads to it resumably, which a test serves
+outside the app so it outlives a restart."""
 
 
-class _ToGoogle(httpx.HTTPTransport):
-    """Google's hosts, sent to the fake Google instead."""
-
-    def __init__(self, base: str) -> None:
-        super().__init__()
-        self.base = httpx.URL(base)
-
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
-        request.url = request.url.copy_with(
-            scheme=self.base.scheme, host=self.base.host, port=self.base.port
-        )
-        return super().handle_request(request)
-
-
-def _youtube() -> Any:
-    """The youtube package's module, from its folder."""
-    spec = importlib.util.spec_from_file_location("youtube", REPO / "connectors/youtube/youtube.py")
+def _fake_publish() -> Any:
+    """The fake_publish fixture's module: its preview, as its tool would answer."""
+    spec = importlib.util.spec_from_file_location(
+        "fake_publish", FIXTURES / "fake_publish/fake_publish.py"
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
+def upload(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Upload the input to PLATFORM in one resumable session, or finish the session an earlier
+    try under the same key began, from its Publish Record in the stage folder (as a real publish
+    package does). `unsure:` when it cannot tell."""
+    video, key = Path(arguments["input_path"]), arguments.get("idempotency_key", "")
+    run = next(p for p in video.parents if p.parent.name == "runs")
+    record = run / key.split(".")[0] / f"fake_publish-{key}.json"
+    kept = json.loads(record.read_text()) if record.is_file() else {}
+    body, size = video.read_bytes(), video.stat().st_size
+
+    def done(answer: httpx.Response) -> dict[str, Any]:
+        vid = str(answer.json()["id"])
+        return {"id": vid, "url": f"https://fake.example.org/v/{vid}", "status": "published"}
+
+    with httpx.Client(base_url=PLATFORM, timeout=httpx.Timeout(60.0, write=None)) as http:
+        if session := kept.get("session"):
+            try:
+                at = http.put(session, headers={"Content-Range": f"bytes */{size}"})
+            except httpx.HTTPError as exc:
+                raise ConnectorError("fake_publish: unsure: the platform did not answer") from exc
+            if at.status_code == 200:
+                return done(at)
+            if at.status_code != 308:
+                raise ConnectorError(f"fake_publish: unsure: the session answered {at.status_code}")
+            start = int(at.headers.get("range", "-1").rpartition("-")[2]) + 1
+        else:
+            started = http.post("/upload", headers={"X-Upload-Content-Length": str(size)})
+            session, start = started.headers["location"], 0
+            record.write_text(json.dumps({"session": session}))
+        span = {"Content-Range": f"bytes {start}-{size - 1}/{size}"} if start else {}
+        try:
+            sent = http.put(session, content=body[start:], headers=span)
+        except httpx.HTTPError as exc:
+            raise ConnectorError("fake_publish: unsure: the upload dropped") from exc
+        return done(sent)
+
+
+FAKED = {
+    "kit": ["kit"],
+    "sketch": ["finish", "preview"],
+    "voice": ["voice"],
+    "fake_publish": ["preview", "publish", "outcomes"],
+}
+"""The fixture packages the transport answers itself, with their tools: none starts a process."""
+
+
 class Transport(McpTransport):
-    """The real MCP transport, but the render connector and YouTube's posting are fakes."""
+    """The real MCP transport, but the fixture packages answer from fakes."""
 
     def __init__(self) -> None:
         super().__init__()
         self.fake = FakeTransport(
             outputs={
-                "publish": [{"id": VIDEO, "url": f"https://youtu.be/{VIDEO}"}],
+                "publish": [{"id": VIDEO, "url": f"https://fake.example.org/v/{VIDEO}"}],
                 "outcomes": [{VIDEO: {"views": 1234}}],
             }
         )
+        self.preview = _fake_publish().preview_of
+
+    def list_tools(self, connector: Connector, env: dict[str, str]) -> list[Tool]:
+        if connector.name in FAKED:
+            return [Tool(t) for t in FAKED[connector.name]]
+        return super().list_tools(connector, env)
 
     def call(
         self, connector: Connector, tool: str, arguments: dict[str, Any], env: dict[str, str]
     ) -> dict[str, Any]:
-        if connector.name == "remotion_render" and tool == "remotion_render":
+        if connector.name == "kit" and tool == "kit":
             out = Path(arguments["output_path"])
             out.write_bytes(b"not really an mp4")
             head = {**arguments["frontmatter"], "type": "video", "file": out.name}
             front = "\n".join(f"{k}: {json.dumps(v)}" for k, v in head.items())
             out.with_name(f"{out.name}.md").write_text(f"---\n{front}\n---\n\n# {out.name}\n")
             return self.fake.call(connector, tool, arguments, env) | {"output": out.name}
-        if connector.name == "youtube" and tool == "publish" and GOOGLE:
-            with httpx.Client(transport=_ToGoogle(GOOGLE), timeout=60.0) as http:
-                return _youtube().publish_fields(
-                    http,
-                    env,
-                    arguments["fields"],
-                    arguments["input_path"],
-                    arguments.get("idempotency_key", ""),
-                )
-        if connector.name == "youtube" and tool != "preview":
+        if connector.name == "fake_publish":
+            if tool == "preview":
+                return self.preview(arguments)
+            if tool == "publish" and PLATFORM:
+                return upload(arguments)
             return self.fake.call(connector, tool, arguments, env)
-        if connector.name == "speech" and tool == "speech":  # its types answer for real
+        if connector.name == "voice" and tool == "voice":
             return voice(Path(arguments["output_path"]))
+        if connector.name in FAKED:
+            return self.fake.call(connector, tool, arguments, env)
         return super().call(connector, tool, arguments, env)
 
     @contextmanager
@@ -304,35 +337,31 @@ def extract(folder: Path, allow_shrink: bool = False) -> None:
     (folder / GRAPH_OUT / "graph.json").write_text(json.dumps(GRAPH))
 
 
-def _no_node_installs() -> None:
-    bin_dir = Path(tempfile.mkdtemp())
-    for tool in ("npm", "npx"):
-        (bin_dir / tool).write_text("#!/bin/sh\n")
-        (bin_dir / tool).chmod(0o755)
-    real = packages._install_env
-
-    def install_env() -> dict[str, str]:
-        env = real()
-        return {**env, "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"}
-
-    packages._install_env = install_env
-
-
 def _with_shorts_template() -> None:
-    """Every world made gets the Remotion Template `shorts` the e2e workflows render (ADR 0028),
-    as if its operator had placed it."""
+    """Every world made gets the kit Template `shorts` the e2e workflows render (ADR 0028), as
+    if its operator had placed it."""
     made = Worlds.create
 
     def create(self: Worlds, name: str, purpose: str = "") -> World:
         world = made(self, name, purpose)
-        (self.folder(world.id) / "assets/remotion_templates/shorts").mkdir(parents=True)
+        (self.folder(world.id) / "assets/kit_templates/shorts").mkdir(parents=True)
         return world
 
     Worlds.create = create  # type: ignore[method-assign]
 
 
+def _fixture_defaults() -> None:
+    """The defaults are the fixture packages, never the real ones."""
+    real = Connectors.install_defaults
+
+    def install_defaults(self: Connectors, sources: Any = None) -> dict[str, str]:
+        return real(self, FIXTURE_DEFAULTS if sources is None else sources)
+
+    Connectors.install_defaults = install_defaults  # type: ignore[method-assign]
+
+
 def create_app() -> FastAPI:
-    _no_node_installs()
+    _fixture_defaults()
     retro = PROPOSE if os.environ.get("SWARMIFY_E2E_RETRO") == "propose" else RETRO
     scripts = {  # the first whose marker is in the system prompt plays the session
         PLANNER_SYSTEM: Script(PLANNER_CHAT, cost=0.0042),

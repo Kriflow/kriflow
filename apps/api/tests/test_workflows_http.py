@@ -25,13 +25,13 @@ stages:
     done_when: script.md written
     produces: [script.md]
   - connector: render
-    calls: remotion_build
+    calls: sketch
     input: script.md
     output: short.mp4
     params: {composition: Short}
   - gate: review
     ask: Approve?
-  - connector: youtube
+  - connector: fake_publish
     input: short.mp4
     params: {title: Five hooks, visibility: public}
 """
@@ -67,7 +67,7 @@ def test_save_creates_versions_that_can_be_listed_and_fetched(client: TestClient
     assert v1["model"]["stages"][3] == {
         "type": "connector",
         "name": "render",
-        "calls": "remotion_build",
+        "calls": "sketch",
         "input": "script.md",
         "output": "short.mp4",
         "params": {"composition": "Short"},
@@ -99,7 +99,7 @@ def test_an_invalid_workflow_is_a_422_naming_every_violation_and_saves_nothing(
 ) -> None:
     world_id = _world(client)
     bad = (
-        "name: Bad\nstages:\n  - connector: youtube\n    input: short.mp4\n"
+        "name: Bad\nstages:\n  - connector: fake_publish\n    input: short.mp4\n"
         "    params: {title: Hooks}\n"
     )
     refused = client.post(f"/api/worlds/{world_id}/workflows", json={"yaml": bad})
@@ -108,14 +108,14 @@ def test_an_invalid_workflow_is_a_422_naming_every_violation_and_saves_nothing(
         "violations": [
             {
                 "rule": "publish_without_gate",
-                "message": "publish connector 'youtube' must come right after a gate"
+                "message": "publish connector 'fake_publish' must come right after a gate"
                 " unless it posts privately (visibility: private)",
-                "stage": "youtube",
+                "stage": "fake_publish",
             },
             {
                 "rule": "input_not_produced",
                 "message": "input 'short.mp4' is not produced by an earlier stage",
-                "stage": "youtube",
+                "stage": "fake_publish",
             },
         ],
         "warnings": [],
@@ -335,7 +335,7 @@ stages:
     done_when: video.mp4 exists
     produces: [script.md, video.mp4]
   - connector: render
-    calls: remotion_render
+    calls: kit
     input: script.md
     output: short.mp4
     params:
@@ -343,7 +343,7 @@ stages:
   - gate: review
     ask: Approve?
   - connector: publish
-    calls: youtube
+    calls: fake_publish
     input: short.mp4
 """
     found = client.post(url, json={"yaml": kids}).json()["violations"]
@@ -358,12 +358,7 @@ stages:
         (
             "connector_params",
             "render",
-            "remotion_render needs params.composition, the composition ID",
-        ),
-        (
-            "connector_params",
-            "render",
-            "the Template nowhere is not one of this world's Remotion render Templates",
+            "the Template nowhere is not one of this world's Kit Templates",
         ),
         ("connector_params", "publish", "a publish stage needs params.title"),
     ]

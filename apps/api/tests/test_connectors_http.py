@@ -24,6 +24,9 @@ from swarmify_kernel.sqlite import connect
 from swarmify_workflows import ConnectorRef, Workflows
 from swarmify_workflows import SqliteStorage as WorkflowStorage
 
+FIXTURES = "packages/connectors/tests/fixtures/packages"
+DEFAULTS = ["fake_publish", "kit", "python_script", "sketch"]
+"""The fixture defaults the API tests start with (FIXTURE_DEFAULTS)."""
 FAL = {
     "name": "fal_video",
     "kind": "stage",
@@ -122,28 +125,17 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
     )
     assert body["missing"] == [] and "s3cret" not in added.text
     assert [(p["name"], p["version"], p["source"]) for p in client.get("/api/packages").json()] == [
-        ("blender_build", "1.1.2", "connectors/blender_build"),
-        ("blender_render", "1.0.7", "connectors/blender_render"),
+        ("fake_publish", "1.0.0", f"{FIXTURES}/fake_publish"),
         ("fal_video", "0.0.1", "local"),
-        ("hyperframes_build", "1.0.2", "connectors/hyperframes_build"),
-        ("hyperframes_render", "1.0.2", "connectors/hyperframes_render"),
-        ("meta", "1.3.0", "connectors/meta"),
+        ("kit", "1.0.0", f"{FIXTURES}/kit"),
         ("python_script", "1.0.0", "connectors/python_script"),
-        ("remotion_build", "1.0.4", "connectors/remotion_build"),
-        ("remotion_render", "1.0.9", "connectors/remotion_render"),
-        ("slack", "1.1.2", "connectors/slack"),
-        ("speech", "1.3.1", "connectors/speech"),
-        ("upload_post", "1.0.1", "connectors/upload_post"),
-        ("youtube", "1.6.0", "connectors/youtube"),
+        ("sketch", "1.0.0", f"{FIXTURES}/sketch"),
     ]
     assert client.get(f"/api/worlds/{w}/packages").json() == [
+        {"name": "fake_publish", "version": "1.0.0"},
         {"name": "fal_video", "version": "0.0.1"},
-        {"name": "meta", "version": "1.3.0"},
-        {"name": "remotion_build", "version": "1.0.4"},
-        {"name": "remotion_render", "version": "1.0.9"},
-        {"name": "speech", "version": "1.3.1"},
-        {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.6.0"},
+        {"name": "kit", "version": "1.0.0"},
+        {"name": "sketch", "version": "1.0.0"},
     ]
     form = client.get(f"/api/worlds/{w}/packages/fal_video/setup")
     (field,) = form.json()["fields"]
@@ -171,18 +163,18 @@ def test_every_connector_carries_a_label_capabilities_and_what_it_makes(
     # ADR 0025: a skin picks a step's panel from these, never from the connector's name
     w = world(client)
     client.post(f"/api/worlds/{w}/connectors", json=FAL)
+    assert install(client, f"{FIXTURES}/echo").status_code == 201
+    client.put(f"/api/worlds/{w}/packages/echo", json={"version": "1.0.0"})
     shown = {
         c["name"]: (c["label"], c["capabilities"], [o["media_type"] for o in c["outputs"]])
         for c in client.get(f"/api/worlds/{w}/connectors").json()
     }
     assert shown == {
-        "remotion_render": ("Remotion render", ["templates"], ["video/mp4"]),
-        "remotion_build": ("Remotion build", ["build_session", "templates"], ["video/mp4"]),
-        "meta": ("Meta", ["publish", "outcomes", "safe_resume"], []),
-        "youtube": ("YouTube", ["publish", "outcomes", "safe_resume"], []),
-        "upload_post": ("Upload-Post", ["publish"], []),
-        "speech": ("Speech", [], ["application/json", "audio/wav"]),
+        "fake_publish": ("Fake Publish", ["publish", "outcomes", "safe_resume"], []),
+        "kit": ("Kit", ["templates"], []),
+        "sketch": ("Sketch", ["build_session", "templates"], []),
         "fal_video": ("fal_video", [], []),
+        "echo": ("Echo", ["check"], ["audio/wav"]),
     }
 
 
@@ -190,8 +182,7 @@ def test_a_connector_names_the_folder_its_templates_are_in(client: TestClient) -
     # the workflow editor offers a stage's Templates by this, never by the package's name
     w = world(client)
     held = {c["name"]: c["templates"] for c in client.get(f"/api/worlds/{w}/connectors").json()}
-    assert held["remotion_build"] == held["remotion_render"] == "remotion_templates"  # shared
-    assert held["youtube"] == ""
+    assert (held["kit"], held["sketch"], held["fake_publish"]) == ("kit_templates", "sketches", "")
 
 
 def test_workflows_see_the_registry(client: TestClient) -> None:
@@ -332,44 +323,36 @@ def test_progress_streams_on_the_world_events(live_url: str, transport: FakeTran
     assert seen == [("running", None), ("polling", 0.0), ("polling", 0.5), ("done", 1.0)]
 
 
-def test_the_speech_package_shows_whether_each_engine_answers(client: TestClient) -> None:
+def test_a_package_shows_whether_each_of_its_services_answers(
+    client: TestClient, transport: FakeTransport
+) -> None:
     w = world(client)
-    listed = {c["name"]: c for c in client.get(f"/api/worlds/{w}/connectors").json()}
-    assert listed["speech"]["services"] == ["engines"] and listed["speech"]["version"] == "1.3.1"
-    assert listed["youtube"]["services"] == [] and listed["youtube"]["health"] is None
-    down = "http://127.0.0.1:9"  # nothing listens on discard
-    setup = {"shared": {"speech_endpoints": down}, "world": {}}
-    assert client.put(f"/api/worlds/{w}/packages/speech/setup", json=setup).status_code == 200
-    (check,) = client.get(f"/api/worlds/{w}/packages/speech/health").json()
-    assert check["name"] == down and check["ok"] is False and check["message"]
     assert client.get(f"/api/worlds/{w}/packages/echo/health").status_code == 404
-    assert client.get("/api/worlds/nope/packages/speech/health").status_code == 404
-    assert client.get(f"/api/worlds/{w}/packages/remotion_build/health").json() == []
+    assert install(client, f"{FIXTURES}/echo").status_code == 201
+    client.put(f"/api/worlds/{w}/packages/echo", json={"version": "1.0.0"})
+    listed = {c["name"]: c for c in client.get(f"/api/worlds/{w}/connectors").json()}
+    assert listed["echo"]["services"] == ["echo_service"] and listed["echo"]["version"] == "1.0.0"
+    assert listed["fake_publish"]["services"] == [] and listed["fake_publish"]["health"] is None
+    down = "http://127.0.0.1:9"  # nothing listens on discard
+    setup = {"shared": {"api_key": "k", "endpoint": down}, "world": {}}
+    assert client.put(f"/api/worlds/{w}/packages/echo/setup", json=setup).status_code == 200
+    transport.outputs["echo_health"] = [{"checks": []}]
+    checks = client.get(f"/api/worlds/{w}/packages/echo/health").json()
+    assert checks[0]["name"] == down and checks[0]["ok"] is False and checks[0]["message"]
+    assert client.get("/api/worlds/nope/packages/echo/health").status_code == 404
+    assert client.get(f"/api/worlds/{w}/packages/sketch/health").json() == []
 
 
 def test_install_a_package_from_this_repo_and_list_it(client: TestClient, tmp_path: Path) -> None:
-    # the defaults: slack and the HyperFrames pair are installed too, but no world is given them
-    assert [p["name"] for p in client.get("/api/packages").json()] == [
-        "blender_build",
-        "blender_render",
-        "hyperframes_build",
-        "hyperframes_render",
-        "meta",
-        "python_script",
-        "remotion_build",
-        "remotion_render",
-        "slack",
-        "speech",
-        "upload_post",
-        "youtube",
-    ]
+    # the defaults: python_script is installed too, but no world is given it
+    assert [p["name"] for p in client.get("/api/packages").json()] == DEFAULTS
     source = "packages/connectors/tests/fixtures/packages/echo"
     installed = install(client, source)
     assert installed.status_code == 201, installed.text
     assert (tmp_path / "packages/echo/1.0.0/installed.txt").is_file()
     listed = client.get("/api/packages").json()
-    assert listed[2] == installed.json() and len(listed) == 13
-    assert {k: listed[2][k] for k in ("name", "version", "label", "kind", "state", "source")} == {
+    assert listed[0] == installed.json() and len(listed) == 5
+    assert {k: listed[0][k] for k in ("name", "version", "label", "kind", "state", "source")} == {
         "name": "echo",
         "version": "1.0.0",
         "label": "Echo",
@@ -383,7 +366,7 @@ def test_install_a_package_from_this_repo_and_list_it(client: TestClient, tmp_pa
     # installed for the whole install: no world holds it, and the built-ins are unchanged
     world_id = world(client)
     names = [c["name"] for c in client.get(f"/api/worlds/{world_id}/connectors").json()]
-    assert "echo" not in names and "speech" in names
+    assert "echo" not in names and "kit" in names
 
 
 def test_a_package_serves_the_icon_its_manifest_names_as_an_image_only(
@@ -391,19 +374,21 @@ def test_a_package_serves_the_icon_its_manifest_names_as_an_image_only(
 ) -> None:
     w = world(client)
     listed = {c["name"]: c for c in client.get(f"/api/worlds/{w}/connectors").json()}
-    assert listed["youtube"]["icon"] == "icon.svg" and listed["upload_post"]["icon"] == "icon.png"
-    assert {p["name"]: p["icon"] for p in client.get("/api/packages").json()}["meta"] == "icon.svg"
-    svg = client.get("/api/packages/youtube/1.6.0/icon")
+    assert listed["fake_publish"]["icon"] == "icon.png" and listed["sketch"]["icon"] is None
+    icons = {p["name"]: p["icon"] for p in client.get("/api/packages").json()}
+    assert icons["python_script"] == "icon.svg"
+    svg = client.get("/api/packages/python_script/1.0.0/icon")
     assert svg.status_code == 200 and svg.headers["content-type"] == "image/svg+xml"
-    assert svg.content == (Path(__file__).parents[3] / "connectors/youtube/icon.svg").read_bytes()
+    core = Path(__file__).parents[3] / "connectors/python_script/icon.svg"
+    assert svg.content == core.read_bytes()
     assert svg.headers["x-content-type-options"] == "nosniff"
     csp = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
     assert svg.headers["content-security-policy"] == csp
-    png = client.get("/api/packages/upload_post/1.0.1/icon")
+    png = client.get("/api/packages/fake_publish/1.0.0/icon")
     assert png.headers["content-type"] == "image/png" and png.content.startswith(b"\x89PNG")
     assert install(client, "packages/connectors/tests/fixtures/packages/echo").is_success
     assert client.get("/api/packages/echo/1.0.0/icon").status_code == 404  # it names none
-    assert client.get("/api/packages/youtube/9.9.9/icon").status_code == 404
+    assert client.get("/api/packages/fake_publish/9.9.9/icon").status_code == 404
     assert client.get("/api/packages/nope/1.0.0/icon").status_code == 404
 
 
@@ -427,20 +412,7 @@ def test_an_invalid_manifest_is_refused_naming_the_field(
         "echo 1.0.0 needs package contract 2, and this Kriflow runs contract 1."
         " Update Kriflow first, or install an older echo.",
     )
-    assert [p["name"] for p in client.get("/api/packages").json()] == [
-        "blender_build",
-        "blender_render",
-        "hyperframes_build",
-        "hyperframes_render",
-        "meta",
-        "python_script",
-        "remotion_build",
-        "remotion_render",
-        "slack",
-        "speech",
-        "upload_post",
-        "youtube",
-    ]
+    assert [p["name"] for p in client.get("/api/packages").json()] == DEFAULTS
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -579,12 +551,9 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
         assert put.status_code == 200 and put.json() == {"name": "echo", "version": "1.0.0"}
     assert client.get(f"/api/worlds/{one}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
-        {"name": "meta", "version": "1.3.0"},
-        {"name": "remotion_build", "version": "1.0.4"},  # the default packages
-        {"name": "remotion_render", "version": "1.0.9"},
-        {"name": "speech", "version": "1.3.1"},
-        {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.6.0"},
+        {"name": "fake_publish", "version": "1.0.0"},  # the default packages
+        {"name": "kit", "version": "1.0.0"},
+        {"name": "sketch", "version": "1.0.0"},
     ]
     echo = next(
         c for c in client.get(f"/api/worlds/{one}/connectors").json() if c["name"] == "echo"
@@ -596,26 +565,20 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
 
     assert client.delete(f"/api/worlds/{one}/packages/echo").status_code == 204
     assert client.get(f"/api/worlds/{one}/packages").json() == [
-        {"name": "meta", "version": "1.3.0"},
-        {"name": "remotion_build", "version": "1.0.4"},
-        {"name": "remotion_render", "version": "1.0.9"},
-        {"name": "speech", "version": "1.3.1"},
-        {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.6.0"},
+        {"name": "fake_publish", "version": "1.0.0"},
+        {"name": "kit", "version": "1.0.0"},
+        {"name": "sketch", "version": "1.0.0"},
     ]
     assert client.get(f"/api/worlds/{two}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
-        {"name": "meta", "version": "1.3.0"},
-        {"name": "remotion_build", "version": "1.0.4"},
-        {"name": "remotion_render", "version": "1.0.9"},
-        {"name": "speech", "version": "1.3.1"},
-        {"name": "upload_post", "version": "1.0.1"},
-        {"name": "youtube", "version": "1.6.0"},
+        {"name": "fake_publish", "version": "1.0.0"},
+        {"name": "kit", "version": "1.0.0"},
+        {"name": "sketch", "version": "1.0.0"},
     ]
     assert client.post(f"/api/worlds/{one}/workflows", json={"yaml": ECHO}).status_code == 422
     assert client.post(f"/api/worlds/{two}/workflows", json={"yaml": ECHO}).status_code == 201
     names = [c["name"] for c in client.get(f"/api/worlds/{one}/connectors").json()]
-    assert "echo" not in names and "speech" in names and "youtube" in names
+    assert "echo" not in names and "kit" in names and "fake_publish" in names
 
     assert client.delete(f"/api/worlds/{one}/packages/echo").status_code == 404
     missing = client.put(f"/api/worlds/{one}/packages/echo", json={"version": "9.0.0"})

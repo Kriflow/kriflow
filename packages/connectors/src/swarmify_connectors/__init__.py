@@ -23,7 +23,7 @@ import secrets
 import shlex
 import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -407,18 +407,21 @@ class Connectors:
 
     # Default packages (ADR 0023): this repository's own, given to every world
 
-    def install_defaults(self) -> dict[str, str]:
-        """Install each package of this repository's `connectors/` folder whose version is not
+    def install_defaults(self, sources: Sequence[str] | None = None) -> dict[str, str]:
+        """Install each package of this repository's `connectors/` folder (or of `sources`,
+        folders of this repository: the core's tests give fixture packages) whose version is not
         installed yet, and keep them as the defaults worlds are given, but for those whose
         Manifest says `enable_by_default = false`, which a world enables when it wants them.
         The first install of a package carries what V1 kept for it into its shared Setup: a
         Setting from the app's env and a Credential from the credentials file, each found by its
         field's `env` name, and an oauth field's V1 refresh token (`_carry`). One that does not
         install is logged and left out; the others still are."""
-        for manifest in sorted((self.packages.repo / DEFAULTS).glob(f"*/{MANIFEST}")):
-            source = f"{DEFAULTS}/{manifest.parent.name}"
+        if sources is None:
+            found = sorted((self.packages.repo / DEFAULTS).glob(f"*/{MANIFEST}"))
+            sources = [f"{DEFAULTS}/{m.parent.name}" for m in found]
+        for source in sources:
             try:
-                m = read_manifest(manifest.parent)
+                m = read_manifest(self.packages.repo / source)
                 first = not (self.packages.root / m["name"]).is_dir()
                 try:
                     self.packages.manifest(m["name"], m["version"])

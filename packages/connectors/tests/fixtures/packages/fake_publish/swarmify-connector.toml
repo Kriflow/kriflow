@@ -1,0 +1,56 @@
+# A fixture publish package standing in for a real platform in the core's tests (issue 586): a
+# preview, the outcomes capability with a Primary Metric, a private_when, safe resume and a
+# sign-in. Its answers come from fake_publish.py, which the tests call in-process.
+name = "fake_publish"
+version = "1.0.0"
+label = "Fake Publish"
+about = "Posts a video to a pretend platform. A fixture."
+kind = "publish"
+icon = "icon.png"
+stage_types = ["connector"]
+capabilities = ["publish", "outcomes", "safe_resume"]
+primary_metric = "views"
+
+runtime = "uv"
+command = ["python3", "fake_publish.py"]
+
+[params]
+type = "object"
+[params.properties.title]
+type = "string"
+description = "required unless metadata names a file whose frontmatter has a title"
+[params.properties.metadata]
+type = "string"
+description = "a file an earlier stage produced; its frontmatter's title and description win"
+[params.properties.description]
+type = "string"
+[params.properties.visibility]
+enum = ["public", "unlisted", "private"]
+default = "private"
+description = "public needs a gate before the stage; left out, the post stays private"
+[params.properties.schedule]
+type = "string"
+description = "ISO 8601 with a timezone; needs public"
+
+[private_when]
+visibility = "private"
+
+[[inputs]]
+description = "the video"
+media_type = "video/mp4"
+
+# The platform account: the core signs in and refreshes; the process gets FAKE_PUBLISH_TOKEN.
+[[config]]
+key = "account"
+label = "Platform account"
+type = "oauth"
+required = true
+env = "FAKE_PUBLISH_TOKEN"
+[config.oauth]
+authorize_url = "https://auth.example.org/authorize"
+token_url = "https://auth.example.org/token"
+scopes = ["upload", "read"]
+pkce = true
+
+[permissions]
+network = ["api.example.org"]

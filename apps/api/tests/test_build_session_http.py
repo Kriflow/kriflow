@@ -1,6 +1,7 @@
-"""The Build Session Capability is generic (ADR 0018, issue 217): the fixture package `sketch`
-requests one in its Manifest, and a run through the API gives it a sandboxed session with its
-system prompt, brief, starter and network, charged to the run's budget, then calls its own
+"""The Build Session Capability is generic (ADR 0018, issue 217): the fixture package `sketch`,
+one of the test app's defaults, requests one in its Manifest, and a run through the API gives
+it a sandboxed session with its system prompt, brief, starter and network, charged to the run's
+budget, then calls its own
 `finish` tool on the result as a long job. Real DBOS on SQLite, the fake ConnectorTransport and
 the Agent SDK client with a scripted CLI."""
 
@@ -82,7 +83,6 @@ def test_a_package_requesting_a_build_session_gets_one_then_its_tool_runs_on_the
     client = running
     script.scripts = [[Answer(lambda o: (Path(o.cwd) / "page.css").write_text("x")), Say("Done.")]]
     script.cost = 0.25
-    assert install(client, SKETCH).status_code == 201
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     enabled = client.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"})
@@ -136,7 +136,6 @@ def test_a_build_session_gets_its_packages_tool_servers_confined_to_the_stage(
     `params.tools` names, whole; each server reads the run and writes only the stage."""
     client = running
     script.scripts = [[Say("Done.")]]
-    assert install(client, SKETCH).status_code == 201
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     assert client.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"}).is_success
@@ -167,7 +166,6 @@ def test_a_build_whose_tool_package_is_not_enabled_fails_before_its_session(
     running: TestClient, script: Script
 ) -> None:
     client = running
-    assert install(client, SKETCH).status_code == 201
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     assert client.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"}).is_success
@@ -190,7 +188,6 @@ def test_a_build_with_a_base_starts_from_a_copy_of_the_worlds_template(
     and fingerprint, and the brief names its guide file when it has one."""
     client = running
     script.scripts = [[Answer(lambda o: (Path(o.cwd) / "page.css").write_text("x")), Say("Done.")]]
-    assert install(client, SKETCH).status_code == 201
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     enabled = client.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"})
@@ -251,8 +248,7 @@ def test_a_shared_templates_folder_applies_the_rules_of_the_package_that_added_e
     toml = plain / "swarmify-connector.toml"
     text = toml.read_text().replace('name = "sketch"', 'name = "sketch_plain"', 1)
     toml.write_text(text.replace('guide = "GUIDE.md"\n', ""))
-    for source in (SKETCH, str(plain)):
-        assert install(client, source).status_code == 201
+    assert install(client, str(plain)).status_code == 201  # sketch is a default
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     for name in ("sketch", "sketch_plain"):
@@ -280,7 +276,6 @@ def test_the_workflow_check_flags_a_base_the_world_does_not_have(
     """Issue 348: the base resolves in the world's own Templates, never another world's or the
     data directory's."""
     client = running
-    assert install(client, SKETCH).status_code == 201
     w, other = (client.post("/api/worlds", json={"name": n}).json()["id"] for n in ("A", "B"))
     for world in (w, other):
         enabled = client.put(f"/api/worlds/{world}/packages/sketch", json={"version": "1.0.0"})
@@ -318,7 +313,6 @@ def test_a_finished_build_is_saved_as_a_template_without_what_belonged_to_its_ru
     script.scripts = [[Answer(builds), Say("Done.")]]
     # the first run's render fails, so its build never finished
     transport.outputs["finish"].insert(0, ConnectorError("the render broke"))
-    assert install(client, SKETCH).status_code == 201
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     enabled = client.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"})
@@ -381,7 +375,6 @@ def test_the_run_assistant_reads_which_template_a_build_started_from(
     """Issue 354: get_run shows a build stage's Template, its name and fingerprint as the call
     recorded them, so the assistant answers from the run's record."""
     client = running
-    assert install(client, SKETCH).status_code == 201
     w = client.post("/api/worlds", json={"name": "Pages"}).json()["id"]
     assert client.post(f"/api/worlds/{w}/connectors", json=DRAFT).status_code == 201
     enabled = client.put(f"/api/worlds/{w}/packages/sketch", json={"version": "1.0.0"})

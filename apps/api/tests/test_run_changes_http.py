@@ -128,9 +128,9 @@ def test_a_partial_stage_edit_is_stored_with_the_defaults_a_workflow_fills_in(
     ("config", "refused"),
     [
         (
-            {"calls": "youtube", "input": "short.mp4", "params": {"title": "Hooks",
+            {"calls": "fake_publish", "input": "short.mp4", "params": {"title": "Hooks",
              "visibility": "public"}},
-            "publish connector 'youtube' must come right after a gate",
+            "publish connector 'fake_publish' must come right after a gate",
         ),
         ({"input": "nothing.md"}, "input 'nothing.md' is not produced by an earlier stage"),
         ({"calls": "nobody"}, "no connector named 'nobody'"),
