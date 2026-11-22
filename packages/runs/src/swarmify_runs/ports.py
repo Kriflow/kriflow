@@ -143,10 +143,20 @@ class Storage(Protocol):
         ...
 
     def list_runs(
-        self, world_id: str, limit: int | None = None, before: str | None = None
+        self,
+        world_id: str,
+        limit: int | None = None,
+        before: str | None = None,
+        archived: bool | None = None,
     ) -> list[Run]:
         """Newest first; with `limit`, at most that many, and with `before`, only the runs listed
-        after that run id."""
+        after that run id. `archived` False keeps only shown runs, True only archived ones, None
+        every run."""
+        ...
+
+    def set_archived(self, run_ids: list[str], archived_at: str | None) -> list[Run]:
+        """Set when the runs were archived (None: shown again), each appending `run.updated`, in
+        one transaction. Returns the runs that exist."""
         ...
 
     def open_gates(self) -> list[Gate]:

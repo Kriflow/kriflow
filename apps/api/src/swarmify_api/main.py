@@ -200,7 +200,8 @@ def workflow_service(
     root: Path, registry: Connectors | None = None, control: RunControl | None = None
 ) -> Workflows:
     """Workflows learns what a world's connectors allow from the registry, by name. With a
-    `control`, every saved version's `schedule` becomes (or removes) a DBOS cron for it."""
+    `control`, every saved version's `schedule` becomes (or removes) a DBOS cron for it, and an
+    archived workflow has none."""
     registry = registry or connector_service(root)
 
     def refs(world_id: str, pins: Mapping[str, str]) -> dict[str, ConnectorRef]:
@@ -224,9 +225,12 @@ def workflow_service(
 
     def on_saved(version: WorkflowVersion) -> None:
         if control is not None:
-            control.schedule(version.workflow_id, version.model.schedule)
+            workflow = workflows.get(version.workflow_id)
+            live = workflow is not None and workflow.archived_at is None
+            control.schedule(version.workflow_id, version.model.schedule if live else None)
 
-    return Workflows(WorkflowStorage(migrated_db(root)), refs, on_saved)
+    workflows = Workflows(WorkflowStorage(migrated_db(root)), refs, on_saved)
+    return workflows
 
 
 def unschedule_world(workflows: Workflows, control: RunControl, world_id: str) -> None:

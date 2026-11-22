@@ -2,6 +2,7 @@ import { Link, useParams, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import { useConfirm } from "../Dialog";
 import { money, type Run, STATUS_LABEL } from "../api/runs";
 import type { components } from "../api/schema";
 import { Empty } from "../Empty";
@@ -11,6 +12,7 @@ import { Loading, Skeleton } from "../Skeleton";
 import { usePhone } from "../usePhone";
 import { useRefresh } from "../refresh";
 import { PullToRefresh } from "../PullToRefresh";
+import { Menu } from "./Menu";
 
 type Workflow = components["schemas"]["ListedWorkflow"];
 
@@ -23,6 +25,8 @@ export function Workflows() {
   const [runs, setRuns] = useState<Run[] | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [confirm, dialog] = useConfirm();
   const phone = usePhone();
 
   const fresh = useRefresh();
@@ -31,14 +35,14 @@ export function Workflows() {
     const path = { world_id: worldId };
     let checked = false;
     api
-      .GET("/api/worlds/{world_id}/workflows", { params: { path, query: { check: false } } })
+      .GET("/api/worlds/{world_id}/workflows", { params: { path, query: { check: false, archived: true } } })
       .then(({ data }) => {
         if (!data) throw new Error("load failed");
         if (!checked) setWorkflows(data);
       })
       .catch(() => setError("Could not load the workflows. Is the API running?"));
     api
-      .GET("/api/worlds/{world_id}/workflows", { params: { path } })
+      .GET("/api/worlds/{world_id}/workflows", { params: { path, query: { archived: true } } })
       .then(({ data }) => {
         if (!data) return;
         checked = true;
@@ -68,20 +72,59 @@ export function Workflows() {
     void router.navigate({ to: "/worlds/$worldId/runs/$runId", params: { worldId, runId: data.id } });
   }
 
+  /** Archive hides it and stops its schedule; restore undoes both. The row keeps its check. */
+  async function setArchived(w: Workflow, archive: boolean) {
+    if (
+      archive &&
+      !(await confirm({
+        title: `Archive ${w.name}?`,
+        lines: ["It leaves the lists, its schedule stops and new runs of it are refused.", "Runs already going keep going. Restore it any time under Show archived."],
+        action: "Archive",
+      }))
+    )
+      return;
+    setError(null);
+    const call = archive ? "/api/workflows/{workflow_id}/archive" : "/api/workflows/{workflow_id}/restore";
+    const { data } = await api.POST(call, { params: { path: { workflow_id: w.id } } });
+    if (!data) return setError(`Could not ${archive ? "archive" : "restore"} ${w.name}. Try again.`);
+    setWorkflows((prev) => prev?.map((x) => (x.id === w.id ? { ...x, archived_at: data.archived_at } : x)) ?? prev);
+  }
+
+  const live = workflows?.filter((w) => !w.archived_at) ?? null;
+  const archivedCount = (workflows?.length ?? 0) - (live?.length ?? 0);
+  const shown = showArchived ? workflows : live;
   const mine = (w: Workflow) => (runs ?? []).filter((r) => r.workflow_id === w.id);
   // One trailing play glyph per row: green stays for the data and the one primary, New workflow.
-  const play = (w: Workflow) => (
-    <button
-      type="button"
-      className="icon play"
-      onClick={() => start(w.id)}
-      disabled={starting !== null}
-      aria-label={`Start a run of ${w.name}`}
-      aria-busy={starting === w.id || undefined}
-    >
-      <Icon name="play" size={20} />
-    </button>
-  );
+  // An archived one shows its chip and Restore instead.
+  const actions = (w: Workflow) =>
+    w.archived_at ? (
+      <>
+        <span className="chip">archived</span>
+        <button type="button" onClick={() => setArchived(w, false)} aria-label={`Restore ${w.name}`}>
+          Restore
+        </button>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          className="icon play"
+          onClick={() => start(w.id)}
+          disabled={starting !== null}
+          aria-label={`Start a run of ${w.name}`}
+          aria-busy={starting === w.id || undefined}
+        >
+          <Icon name="play" size={20} />
+        </button>
+        <Menu
+          label={`More for ${w.name}`}
+          className="icon"
+          button={<Icon name="more" size={20} />}
+          items={[{ label: "Archive", note: "Hides it and stops its schedule; restore it any time", onSelect: () => setArchived(w, true) }]}
+          sheet
+        />
+      </>
+    );
 
   return (
     <main>
@@ -90,7 +133,7 @@ export function Workflows() {
         <div>
           <h1>Workflows</h1>
           <p className="sub">
-            {workflows ? `${workflows.length} in this world. ` : ""}
+            {live ? `${live.length} in this world. ` : ""}
             {!phone && "Each save is a new version; a run keeps the version it started on."}
           </p>
         </div>
@@ -100,7 +143,15 @@ export function Workflows() {
           </Link>
         )}
       </header>
+      {dialog}
       {error && <p role="alert">{error}</p>}
+      {archivedCount > 0 && (
+        <div className="row">
+          <button type="button" className="chip-button" aria-pressed={showArchived} onClick={() => setShowArchived(!showArchived)}>
+            Show archived ({archivedCount})
+          </button>
+        </div>
+      )}
       {workflows === null && !error && (
         <Loading className={phone ? "wf-rows" : "wf-loading"}>
           {Array.from({ length: phone ? 4 : 5 }, (_, i) => (
@@ -108,7 +159,7 @@ export function Workflows() {
           ))}
         </Loading>
       )}
-      {workflows?.length === 0 && (
+      {live?.length === 0 && !showArchived && (
         <Empty
           icon="workflows"
           testId="no-workflows"
@@ -121,16 +172,16 @@ export function Workflows() {
           A workflow is a list of steps you write once and run again and again.
         </Empty>
       )}
-      {phone && workflows && workflows.length > 0 && (
+      {phone && shown && shown.length > 0 && (
         <ul className="wf-rows stagger">
-          {workflows.map((w) => (
+          {shown.map((w) => (
             <WorkflowRow key={w.id} worldId={worldId} workflow={w} runs={mine(w)}>
-              {play(w)}
+              {actions(w)}
             </WorkflowRow>
           ))}
         </ul>
       )}
-      {!phone && workflows && workflows.length > 0 && (
+      {!phone && shown && shown.length > 0 && (
         <div className="scroll-x">
           <table className="scores workflows" data-testid="workflows">
             <thead>
@@ -146,7 +197,7 @@ export function Workflows() {
               </tr>
             </thead>
             <tbody className="stagger">
-              {workflows.map((w) => {
+              {shown.map((w) => {
                 const these = mine(w);
                 const cost = these.reduce((sum, r) => sum + r.spent_usd, 0);
                 const last = latest(these);
@@ -167,7 +218,7 @@ export function Workflows() {
                     <td>{last ? <LastRun run={last} /> : <span className="faint">-</span>}</td>
                     <td className="num">{these.length}</td>
                     <td className="num">{these.length ? money(cost / these.length) : "-"}</td>
-                    <td className="action">{play(w)}</td>
+                    <td className="action">{actions(w)}</td>
                   </tr>
                 );
               })}

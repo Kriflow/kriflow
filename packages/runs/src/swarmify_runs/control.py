@@ -1115,6 +1115,21 @@ class RunControl:
             except Illegal:
                 pass  # the child already ended; abort still walked its children
 
+    def archive(self, run_id: str) -> Run:
+        """Archive a finished run and every run below it: left out of the runs list, still
+        served by id. Raises KeyError for an unknown run, Illegal while any of them is live."""
+        self._any(run_id)
+        family = self.family(run_id)
+        for member in family:
+            if (run := self.storage.get_run(member)) is not None and run.status not in TERMINAL:
+                raise Illegal(f"only a finished run is archived; {run.name} is {run.status}")
+        return self.storage.set_archived(family, _now())[0]
+
+    def restore(self, run_id: str) -> Run:
+        """Undo `archive` for the run and every run below it. Raises KeyError."""
+        self._any(run_id)
+        return self.storage.set_archived(self.family(run_id), None)[0]
+
     def family(self, run_id: str) -> list[str]:
         """The run and every run below it: the runs whose spend counts against its Budget, since
         a child run spends its parent's (ADR 0013)."""

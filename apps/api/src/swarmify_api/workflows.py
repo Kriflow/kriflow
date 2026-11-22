@@ -93,10 +93,13 @@ def router(workflows: Workflows, worlds: Worlds) -> APIRouter:
         return STARTERS
 
     @api.get("/worlds/{world_id}/workflows")
-    def list_workflows(world_id: str, check: bool = True) -> list[ListedWorkflow]:
-        """With `check`, each lists the violations a run of it would meet today. A check can
-        start connector processes (about a second or two each), so a page that only needs names
-        asks without, and the checks run side by side."""
+    def list_workflows(
+        world_id: str, check: bool = True, archived: bool = False
+    ) -> list[ListedWorkflow]:
+        """The live workflows, or with `archived` the archived ones too (each with its
+        `archived_at`). With `check`, each lists the violations a run of it would meet today. A
+        check can start connector processes (about a second or two each), so a page that only
+        needs names asks without, and the checks run side by side."""
         world_or_404(world_id)
 
         def listed(w: Workflow) -> ListedWorkflow:
@@ -107,7 +110,7 @@ def router(workflows: Workflows, worlds: Worlds) -> APIRouter:
             draft = workflows.check(w.world_id, yaml, w.id, pins)  # as a run of it is checked
             return ListedWorkflow(**asdict(w), violations=draft.violations)
 
-        all_ = workflows.list_all(world_id)
+        all_ = workflows.list_all(world_id, None if archived else False)
         with ThreadPoolExecutor(max_workers=max(1, min(8, len(all_)))) as pool:
             return list(pool.map(listed, all_))
 
@@ -137,6 +140,19 @@ def router(workflows: Workflows, worlds: Worlds) -> APIRouter:
     @api.get("/workflows/{workflow_id}")
     def get_workflow(workflow_id: str) -> Workflow:
         return workflow_or_404(workflow_id)
+
+    @api.post("/workflows/{workflow_id}/archive", responses={404: {}})
+    def archive_workflow(workflow_id: str) -> Workflow:
+        """Hide the workflow from every list, stop its schedule and refuse new runs of it, until
+        it is restored. Runs already going go on."""
+        workflow_or_404(workflow_id)
+        return workflows.archive(workflow_id)
+
+    @api.post("/workflows/{workflow_id}/restore", responses={404: {}})
+    def restore_workflow(workflow_id: str) -> Workflow:
+        """Undo an archive: listed, scheduled and runnable again."""
+        workflow_or_404(workflow_id)
+        return workflows.restore(workflow_id)
 
     @api.get("/workflows/{workflow_id}/versions")
     def list_versions(workflow_id: str) -> list[WorkflowVersion]:

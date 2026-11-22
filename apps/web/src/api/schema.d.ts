@@ -264,9 +264,10 @@ export interface paths {
         };
         /**
          * List Workflows
-         * @description With `check`, each lists the violations a run of it would meet today. A check can
-         *     start connector processes (about a second or two each), so a page that only needs names
-         *     asks without, and the checks run side by side.
+         * @description The live workflows, or with `archived` the archived ones too (each with its
+         *     `archived_at`). With `check`, each lists the violations a run of it would meet today. A
+         *     check can start connector processes (about a second or two each), so a page that only
+         *     needs names asks without, and the checks run side by side.
          */
         get: operations["list_workflows_api_worlds__world_id__workflows_get"];
         put?: never;
@@ -306,6 +307,47 @@ export interface paths {
         get: operations["get_workflow_api_workflows__workflow_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{workflow_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Workflow
+         * @description Hide the workflow from every list, stop its schedule and refuse new runs of it, until
+         *     it is restored. Runs already going go on.
+         */
+        post: operations["archive_workflow_api_workflows__workflow_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{workflow_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Workflow
+         * @description Undo an archive: listed, scheduled and runnable again.
+         */
+        post: operations["restore_workflow_api_workflows__workflow_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -398,8 +440,9 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description Every run, newest first. With `limit`, one page of them: `X-Next-Before` names the
-         *     last run when more follow, and `?before=<it>` lists the next page.
+         * @description Every run not archived, newest first, or with `archived` the archived ones too. With
+         *     `limit`, one page of them: `X-Next-Before` names the last run when more follow, and
+         *     `?before=<it>` lists the next page.
          */
         get: operations["list_runs_api_worlds__world_id__runs_get"];
         put?: never;
@@ -710,6 +753,47 @@ export interface paths {
          *     it, 404 for an unknown Item, 422 for a send-back without a note.
          */
         post: operations["review_items_api_runs__run_id__items_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive
+         * @description Archive a finished run and its child runs: left out of the runs list and its counts,
+         *     still opened by link. 409 while the run or a child of it is live.
+         */
+        post: operations["archive_api_runs__run_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore
+         * @description Undo an archive, for the run and its child runs.
+         */
+        post: operations["restore_api_runs__run_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3460,6 +3544,8 @@ export interface components {
             current_version: number;
             /** Created At */
             created_at: string;
+            /** Archived At */
+            archived_at?: string | null;
             /** Violations */
             violations?: components["schemas"]["Violation"][];
         };
@@ -4275,6 +4361,8 @@ export interface components {
             budget_warn_usd?: number | null;
             /** Last Run Seconds */
             last_run_seconds?: number | null;
+            /** Archived At */
+            archived_at?: string | null;
         };
         /**
          * RunChange
@@ -5101,6 +5189,8 @@ export interface components {
             current_version: number;
             /** Created At */
             created_at: string;
+            /** Archived At */
+            archived_at?: string | null;
         };
         /**
          * WorkflowDraft
@@ -5789,6 +5879,7 @@ export interface operations {
         parameters: {
             query?: {
                 check?: boolean;
+                archived?: boolean;
             };
             header?: never;
             path: {
@@ -5907,6 +5998,82 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Workflow"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_workflow_api_workflows__workflow_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_workflow_api_workflows__workflow_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6106,6 +6273,7 @@ export interface operations {
             query?: {
                 limit?: number | null;
                 before?: string | null;
+                archived?: boolean;
             };
             header?: never;
             path: {
@@ -6779,6 +6947,96 @@ export interface operations {
                 "application/json": components["schemas"]["ReviewItems"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description No such run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The run is not in a state where this action applies */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_api_runs__run_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description No such run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The run is not in a state where this action applies */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_api_runs__run_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

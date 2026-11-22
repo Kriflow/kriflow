@@ -295,10 +295,10 @@ test("loads the first page, then the next as the end of the list comes into view
   const sub = () => document.querySelector("header .sub")?.textContent;
   await expect.poll(sub).toMatch(/^Latest 30 runs/);
   await expect.element(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
-  expect(runs.asked).toEqual(["limit=30"]); // nothing more until the end comes into view
+  expect(runs.asked).toEqual(["limit=30&archived=true"]); // nothing more until the end comes into view
   seen!([{ isIntersecting: true }]);
   await expect.poll(rows).toBe(35);
-  expect(runs.asked).toEqual(["limit=30", "limit=30&before=run_6"]);
+  expect(runs.asked).toEqual(["limit=30&archived=true", "limit=30&before=run_6&archived=true"]);
   await expect.element(screen.getByRole("button", { name: "Load more" })).not.toBeInTheDocument();
   await expect.poll(sub).toMatch(/^35 runs/);
 });
@@ -319,5 +319,5 @@ test("without scrolling, Load more fetches the next page, and a refresh keeps it
   await refresh();
   await expect.element(screen.getByTestId("run-list")).toMatchTextContent(/^Run.*Run 32\b/);
   await expect.poll(rows).toBe(32);
-  expect(runs.asked.at(-1)).toBe("limit=30");
+  expect(runs.asked.at(-1)).toBe("limit=30&archived=true");
 });

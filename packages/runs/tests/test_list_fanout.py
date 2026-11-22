@@ -343,3 +343,26 @@ def test_an_entry_deleted_while_its_child_ran_settles_the_item_and_frees_nothing
     with pytest.raises(KeyError):
         lists.get(WORLD, "tickets", "t-b")
     assert [e.claimed_by for e in lists.read(WORLD, "tickets")] == [None, None]
+
+
+def test_runs_by_naming_a_workflow_the_pin_refuses_fails_only_that_item(
+    runner: Runner, lists: WorldLists
+) -> None:
+    """An archived workflow's pin refuses it: the Item mapped to it fails with that reason and
+    its siblings run."""
+    library(runner, wf_money=[WORK])
+    allowed = runner.pin
+    assert allowed is not None
+
+    def pin(workflow_id: str, version: int | None = None) -> Pinned:
+        if workflow_id == "wf_access":
+            raise ValueError("Access is archived. Restore it to run it.")
+        return allowed(workflow_id, version)
+
+    runner.pin = pin
+    by = {"field": "kind", "map": {"billing": "wf_money", "login": "wf_access"}}
+    parent = runner.start(WORLD, "wf_p", 1, "Inbox", [fan(take=3, runs_by=by)])
+    waiting = at(runner, parent.id, "waiting_gate")
+    items = {i.key: (i.status, i.error) for i in waiting.stages[0].items}
+    assert items["t-b"] == ("failed", "Access is archived. Restore it to run it.")
+    assert items["t-a"][0] == items["t-c"][0] == "done"

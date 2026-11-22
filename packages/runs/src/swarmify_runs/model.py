@@ -307,6 +307,9 @@ class Run:
     last_run_seconds: float | None = None
     """How long the previous finished run of the same workflow took, first stage start to last
     stage end; None on a first run. Filled only when one run is served, not on events."""
+    archived_at: str | None = None
+    """When the finished run (with its family) was archived: left out of the runs list, still
+    served by id. None while shown."""
 
     def send_back_note(self, stage_name: str) -> str:
         """The note of the send-back, Rerun or Follow-up that caused this visit, when it named
