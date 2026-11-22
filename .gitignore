@@ -4,6 +4,8 @@ node_modules/
 dist/
 .env
 *.db
+# recorded runs the rename must not strand (packages/runs/tests/upgrade_record.py)
+!packages/runs/tests/upgrade_fixture/*.db
 .playwright-mcp/
 .DS_Store
 .pytest_cache/

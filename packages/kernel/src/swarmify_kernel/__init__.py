@@ -7,6 +7,9 @@ from typing import Any
 from swarmify_kernel.events import Event
 from swarmify_kernel.ids import new_id
 from swarmify_kernel.local_time import local_time_problem, next_local
+from swarmify_kernel.rename import install as _install_rename_alias
+
+_install_rename_alias()  # before any DBOS record is read (rename.py)
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 
