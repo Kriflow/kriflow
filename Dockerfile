@@ -62,8 +62,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY packages packages
 COPY apps/api apps/api
-# The default Connector Packages, installed from here into /data/packages on startup (ADR 0023)
-COPY connectors connectors
+# The core's own default package, installed from here into /data/packages on startup (ADR 0023);
+# the other defaults come from Kriflow/packages at the tags of the Default List (issue 585)
+COPY connectors/python_script connectors/python_script
 COPY --from=sandbox-build /src/node_modules node_modules
 COPY --from=sandbox-build /src/packages/connectors/sandbox/node_modules packages/connectors/sandbox/node_modules
 COPY docker/needs.sh docker/claude-in-runner docker/

@@ -1,9 +1,9 @@
 """The curated index (ADR 0019, issue 226): one TOML file in a public repository listing known
 Connector Packages, where each is fetched from and the permissions it declares, so the
 Connectors page can browse them. There is no marketplace: authors add a package by pull
-request (see `docs/index-repo/README.md`). An entry's permissions are a summary for browsing;
-installing it goes through the normal review, whose permissions, read from the clone, are what
-the operator approves.
+request (see the README of Kriflow/packages, which holds the index). An entry's permissions are
+a summary for browsing; installing it goes through the normal review, whose permissions, read
+from the clone, are what the operator approves.
 
 The format, one `[[packages]]` table per package (fields the format does not name are ignored,
 so a newer index still reads):
