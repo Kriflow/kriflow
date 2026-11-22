@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { type FormEvent, type ReactNode, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   blocked,
@@ -155,6 +155,23 @@ export function Gates() {
     if (!d || !card || !phone) return;
     const x = card.offsetLeft - (d.children[0] as HTMLElement).offsetLeft;
     if (Math.abs(d.scrollLeft - x) > 2) d.scrollTo({ left: x, behavior: "instant" });
+  }, [at, phone, shown.length]);
+
+  // A grid row is as tall as its tallest card, so a short card left a screen of empty space
+  // under it. The deck takes the open card's height and follows it as the card grows.
+  useLayoutEffect(() => {
+    const d = deck.current;
+    const card = d?.children[at] as HTMLElement | undefined;
+    if (!d) return;
+    if (!card || !phone) {
+      d.style.height = "";
+      return;
+    }
+    const fit = () => void (d.style.height = `${card.offsetHeight}px`);
+    fit();
+    const seen = new ResizeObserver(fit);
+    seen.observe(card);
+    return () => seen.disconnect();
   }, [at, phone, shown.length]);
 
   const answer: Answer = async (gate, send, said = "You answered it") => {
