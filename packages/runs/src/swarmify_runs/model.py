@@ -1,6 +1,7 @@
 """The Runs language: a Run of a pinned workflow version, its Stages in order, and the
 Decisions people made at its gates."""
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,12 +29,25 @@ class RunLink:
 @dataclass(frozen=True)
 class Item:
     """One Item of a Fan-out Stage (ADR 0031), as its source gives it: a card's `file` (its
-    absolute path) or a JSON list's element `data`. `key` names its folder of gathered files."""
+    absolute path) or a JSON list's element `data`. `key` names its folder of gathered files.
+    `entry` is the key of the World List Entry it came from, for a stage with `from_list`."""
 
     key: str
     title: str
     file: str | None = None
     data: Any = None
+    entry: str | None = None
+
+
+def safe_key(key: str) -> str:
+    """An Item key that names a folder: letters, digits, dot, dash and underscore."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip(".-")[:80] or "item"
+
+
+def fans(config: dict[str, Any]) -> bool:
+    """Whether a workflow stage's config makes it a Fan-out Stage: over `for_each` or a
+    `from_list` query."""
+    return bool(config.get("for_each") or config.get("from_list"))
 
 
 @dataclass(frozen=True)

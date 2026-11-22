@@ -2995,6 +2995,8 @@ export interface components {
              * @default []
              */
             review: string[];
+            /** Published */
+            published?: string | null;
         };
         /**
          * Device
@@ -3182,6 +3184,10 @@ export interface components {
             max_send_backs?: number | null;
             /** Picks */
             picks?: number | null;
+            /** Entry */
+            entry?: {
+                [key: string]: string;
+            };
             /**
              * Type
              * @default gate
@@ -5086,6 +5092,13 @@ export interface components {
          *     Item as file `as_` (`as` in YAML), at most `max_parallel` at once. With `approve` the stage
          *     ends at an items gate once every Item settled: a person approves or sends back each Item
          *     with a note, and the stage finishes only when every Item is approved.
+         *
+         *     With `from_list` its Items are the Entries of a World List query instead (issue 541):
+         *     `list`, `status`, `where` (fields equal), `order`, `take` (how many, one when left out),
+         *     `on_start` and `on_finish` (the status an Entry moves to when its child starts and when it
+         *     finishes). Each Entry is claimed for the child that works on it, and its file is the
+         *     child's given input. `runs_by` then picks each Item's workflow from an Entry field through
+         *     a map (`field`, `map`) instead of one `runs`.
          */
         WorkflowStage: {
             /** Name */
@@ -5107,6 +5120,14 @@ export interface components {
             approve: boolean;
             /** Not Before */
             not_before?: string | null;
+            /** From List */
+            from_list?: {
+                [key: string]: unknown;
+            } | null;
+            /** Runs By */
+            runs_by?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Type
              * @default workflow
@@ -5209,6 +5230,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Published */
+            published?: string | null;
         };
         /** WorldRef */
         WorldRef: {

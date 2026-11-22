@@ -3,7 +3,6 @@ an earlier stage's cards, the cards picked at a pick gate, or the elements of a 
 earlier stage made or took. Runs cannot read Memory; the composition root hands it this."""
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +10,7 @@ from swarmify_api.agents import run_artifacts
 from swarmify_api.remote import offered
 from swarmify_memory import ArtifactFile, Memory
 from swarmify_runs import Item, Run, StageDef
+from swarmify_runs.model import safe_key
 
 
 def items(memory: Memory, run: Run, index: int, stage: StageDef) -> list[Item]:
@@ -55,15 +55,10 @@ def _picked(memory: Memory, run: Run, index: int) -> list[ArtifactFile]:
 def _card(world: Path, card: ArtifactFile) -> Item:
     stem = Path(card.name).stem
     key = stem.removeprefix(f"{card.type}-") or stem
-    return Item(_safe(key), card.title or key, file=str(world / card.path))
+    return Item(safe_key(key), card.title or key, file=str(world / card.path))
 
 
 def _element(index: int, element: Any) -> Item:
     fields = element if isinstance(element, dict) else {}
     key = str(fields.get("id") or index)
-    return Item(_safe(key), str(fields.get("title") or key), data=element)
-
-
-def _safe(key: str) -> str:
-    """A key that names a folder: letters, digits, dot, dash and underscore."""
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip(".-")[:80] or "item"
+    return Item(safe_key(key), str(fields.get("title") or key), data=element)

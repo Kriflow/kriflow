@@ -11,6 +11,7 @@ from typing import Any
 from swarmify_kernel import Event, local_time_problem, new_id, next_local
 from swarmify_kernel.events import append
 from swarmify_kernel.sqlite import connect
+from swarmify_runs.lists import release
 from swarmify_runs.machine import MAX_SEND_BACKS, Illegal, RunState
 from swarmify_runs.model import (
     RERUNS,
@@ -254,6 +255,8 @@ class SqliteStorage:
                     " WHERE run_id = :run AND idx = :i AND status != :s",
                     {"s": status, "now": now, "error": error, "run": run_id, "i": i},
                 )
+            if state.status in ENDED:  # a run that ended holds no Entry (issue 541)
+                release(conn, run_id, done=state.status == "done")
             saved = self._read(conn, run_id)
             assert saved is not None
             append(conn, _updated(saved))
@@ -422,6 +425,7 @@ class SqliteStorage:
             conn.execute("BEGIN IMMEDIATE")
             for position, (item, view) in enumerate(items):
                 source = {"file": item.file} if item.file else {"data": item.data}
+                source |= {"entry": item.entry} if item.entry else {}
                 conn.execute(
                     "INSERT OR IGNORE INTO fanout_items (run_id, stage_index, visit, item_key,"
                     " item_title, position, source, child_run_id, status, error, approved)"
@@ -788,7 +792,10 @@ def _items(
     out = []
     for r in rows:
         source = json.loads(r["source"])
-        item = Item(r["item_key"], r["item_title"], source.get("file"), source.get("data"))
+        item = Item(
+            r["item_key"], r["item_title"], source.get("file"), source.get("data"),
+            source.get("entry"),
+        )  # fmt: skip
         view = ItemView(
             r["item_key"], r["item_title"], r["status"], _link(conn, r["child_run_id"]),
             r["error"], bool(r["approved"]),

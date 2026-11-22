@@ -48,6 +48,8 @@ class WorldList:
     """Statuses whose Entries wait for a person: while any do, Needs you says so."""
     created_at: str
     updated_at: str
+    published: str | None = None
+    """Where an Entry goes when the run holding it publishes; None leaves it where it is."""
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,7 @@ def _list(row: sqlite3.Row) -> WorldList:
         json.loads(row["review"]),
         row["created_at"],
         row["updated_at"],
+        row["published"],
     )
 
 
@@ -194,18 +197,22 @@ class WorldLists:
         rejected: list[str] | None = None,
         by: str = "operator",
         review: list[str] | None = None,
+        published: str | None = None,
     ) -> WorldList:
         """Declare a list, or declare it again with new statuses. Refused when `done`,
-        `rejected` or `review` names an undeclared status, or a status some Entry is in would
-        go."""
+        `rejected`, `review` or `published` names an undeclared status, or a status some Entry
+        is in would go."""
         _names("list", [name])
         statuses, done, rejected = _names("status", statuses), done or [], rejected or []
         review = review or []
         if not statuses:
             raise ValueError("a list declares at least one status")
-        if stray := [s for s in [*done, *rejected, *review] if s not in statuses]:
+        if stray := [
+            s for s in [*done, *rejected, *review, *filter(None, [published])] if s not in statuses
+        ]:
             raise ValueError(
-                f"done, rejected and review must be declared statuses: {', '.join(stray)}"
+                "done, rejected, review and published must be declared statuses: "
+                + ", ".join(stray)
             )
         now = _now()
         with self._conn() as conn:
@@ -222,11 +229,18 @@ class WorldLists:
                 raise ValueError(f"Entries of {name} are in {', '.join(gone)}: keep those statuses")
             conn.execute(
                 "INSERT INTO world_lists (world_id, name, statuses, done, rejected, review,"
-                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                " created_at, updated_at, published) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (world_id, name) DO UPDATE SET statuses = excluded.statuses,"
-                " done = excluded.done, rejected = excluded.rejected,"
-                " review = excluded.review, updated_at = excluded.updated_at",
-                (world_id, name, *map(json.dumps, (statuses, done, rejected, review)), now, now),
+                " done = excluded.done, rejected = excluded.rejected, review = excluded.review,"
+                " published = excluded.published, updated_at = excluded.updated_at",
+                (
+                    world_id,
+                    name,
+                    *map(json.dumps, (statuses, done, rejected, review)),
+                    now,
+                    now,
+                    published,
+                ),
             )
             payload = {
                 "list": name,
@@ -234,6 +248,7 @@ class WorldLists:
                 "done": done,
                 "rejected": rejected,
                 "review": review,
+                "published": published,
             }
             append(
                 conn, Event.new("list.declared", world_id=world_id, payload={**payload, "by": by})
@@ -345,27 +360,180 @@ class WorldLists:
     ) -> list[Entry]:
         """The list's Entries in any of `status` (all when None) whose fields equal `where`, by
         `order` (best score first by default), at most `limit`."""
-        sql, args = "world_id = ? AND list = ?", [world_id, name]
         with self._conn() as conn:
-            declared = self._declared(conn, world_id, name)
-            if status:
-                for s in status:
-                    self._status(declared, s)
-                sql += f" AND status IN ({', '.join('?' * len(status))})"
-                args += status
-            for field, value in (where or {}).items():
-                _field(field)
-                if value is not None and not isinstance(value, str | int | float):
-                    raise ValueError(f"field {field!r}: filter on a text, number or true/false")
-                sql += " AND json_extract(fields, ?) = ?"
-                args += [f"$.{field}", value]
-            ordering, more = order_by(order)
-            limited = " LIMIT ?" if limit is not None else ""
+            return self._query(conn, world_id, name, status, where, order, limit)
+
+    def _query(
+        self,
+        conn: sqlite3.Connection,
+        world_id: str,
+        name: str,
+        status: list[str] | None,
+        where: dict[str, Any] | None,
+        order: str,
+        limit: int | None,
+        free_for: str | None = None,
+    ) -> list[Entry]:
+        """`read` on an open connection. With `free_for`, only the Entries no run holds or that
+        run does, the ones it holds first."""
+        sql, args = "world_id = ? AND list = ?", [world_id, name]
+        declared = self._declared(conn, world_id, name)
+        if status:
+            for s in status:
+                self._status(declared, s)
+            sql += f" AND status IN ({', '.join('?' * len(status))})"
+            args += status
+        for field, value in (where or {}).items():
+            _field(field)
+            if value is not None and not isinstance(value, str | int | float):
+                raise ValueError(f"field {field!r}: filter on a text, number or true/false")
+            sql += " AND json_extract(fields, ?) = ?"
+            args += [f"$.{field}", value]
+        ordering, more = order_by(order)
+        if free_for is not None:
+            sql += " AND (claimed_by IS NULL OR claimed_by = ?)"
+            args.append(free_for)
+            ordering, more = f"claimed_by IS NULL, {ordering}", more
+        limited = " LIMIT ?" if limit is not None else ""
+        rows = conn.execute(
+            f"SELECT * FROM list_entries WHERE {sql} ORDER BY {ordering}{limited}",
+            [*args, *more, *([max(0, limit)] if limit is not None else [])],
+        ).fetchall()
+        return [_entry(r) for r in rows]
+
+    def claim(
+        self,
+        world_id: str,
+        name: str,
+        run_id: str,
+        *,
+        status: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+        order: str = "-score",
+        take: int = 1,
+    ) -> list[Entry]:
+        """Hold for `run_id` the first `take` Entries of the query that no other run holds, in
+        one transaction: two runs claiming at once never get the same Entry. Entries the run
+        already holds there come first, so a claim made again takes the same ones."""
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                found = self._query(conn, world_id, name, status, where, order, take, run_id)
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            for entry in found:
+                if entry.claimed_by is None:
+                    self._hold(conn, world_id, name, entry.key, run_id, None)
+            out = [self._row(conn, world_id, name, e.key) for e in found]
+            conn.execute("COMMIT")
+        return [e for e in out if e is not None]
+
+    def hand(
+        self,
+        world_id: str,
+        name: str,
+        key: str,
+        holder: str,
+        run_id: str,
+        status: str | None = None,
+    ) -> Entry:
+        """Pass the Entry `holder` holds (or nobody does) to `run_id`, moving it to `status`
+        when given. Refused when another run holds it."""
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                if status is not None:
+                    self._status(self._declared(conn, world_id, name), status)
+                entry = self._row(conn, world_id, name, key)
+                if entry is None:
+                    raise KeyError(f"no Entry {key!r} in {name}")
+                if entry.claimed_by not in (None, holder, run_id):
+                    raise ValueError(f"Entry {key!r} of {name} is held by run {entry.claimed_by}")
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            if entry.claimed_by != run_id:
+                self._hold(conn, world_id, name, key, run_id, holder)
+            if status is not None and entry.status != status:
+                conn.execute(
+                    "UPDATE list_entries SET status = ?"
+                    " WHERE world_id = ? AND list = ? AND key = ?",
+                    (status, world_id, name, key),
+                )
+                change = {"from": entry.status, "to": status}
+                self._changed(conn, world_id, name, key, change, "", "run", run_id)
+            handed = self._row(conn, world_id, name, key)
+            conn.execute("COMMIT")
+        assert handed is not None
+        return handed
+
+    def _hold(
+        self,
+        conn: sqlite3.Connection,
+        world_id: str,
+        name: str,
+        key: str,
+        run_id: str,
+        holder: str | None,
+    ) -> None:
+        conn.execute(
+            "UPDATE list_entries SET claimed_by = ?, runs = json_insert(runs, '$[#]', ?),"
+            " updated_at = ? WHERE world_id = ? AND list = ? AND key = ?",
+            (run_id, run_id, _now(), world_id, name, key),
+        )
+        note = f"from run {holder}" if holder else ""
+        self._changed(conn, world_id, name, key, {"claimed_by": run_id}, note, "run", run_id)
+
+    def held(self, world_id: str, run_id: str) -> list[Entry]:
+        """The Entries `run_id` holds, in every list of the world."""
+        with self._conn() as conn:
             rows = conn.execute(
-                f"SELECT * FROM list_entries WHERE {sql} ORDER BY {ordering}{limited}",
-                [*args, *more, *([max(0, limit)] if limit is not None else [])],
+                "SELECT * FROM list_entries WHERE claimed_by = ? AND world_id = ?"
+                " ORDER BY list, key",
+                (run_id, world_id),
             ).fetchall()
         return [_entry(r) for r in rows]
+
+    def move_held(
+        self,
+        world_id: str,
+        run_id: str,
+        status: str,
+        *,
+        by: str,
+        note: str = "",
+        check: bool = False,
+    ) -> None:
+        """Move every Entry `run_id` holds to `status`. Refused, with nothing moved, when one's
+        list does not declare it; with `check` nothing moves either way."""
+        held = self.held(world_id, run_id)
+        for entry in held:
+            self._status(self.get_list(world_id, entry.list), status)
+        if check:
+            return
+        for entry in held:
+            self.set_status(
+                world_id, entry.list, [entry.key], status, note=note, by=by, run_id=run_id
+            )
+
+    def published(self, world_id: str, run_id: str, links: dict[str, str]) -> list[Entry]:
+        """The run posted: each Entry it holds whose list declares a published status moves
+        there, with the post's `links` (platform to URL) added to its `links` field."""
+        out = []
+        for entry in self.held(world_id, run_id):
+            declared = self.get_list(world_id, entry.list)
+            if declared.published is None:
+                continue
+            had = entry.fields.get("links")
+            merged = {**(had if isinstance(had, dict) else {}), **links}
+            self.set_fields(
+                world_id, entry.list, entry.key, {"links": merged}, by="run", run_id=run_id
+            )
+            out += self.set_status(
+                world_id, entry.list, [entry.key], declared.published, by="run", run_id=run_id
+            )
+        return out
 
     def set_status(
         self,
@@ -507,3 +675,55 @@ class WorldLists:
     def delete_world(self, world_id: str) -> None:
         with self._conn() as conn:
             conn.execute("DELETE FROM world_lists WHERE world_id = ?", (world_id,))
+
+
+def release(conn: sqlite3.Connection, run_id: str, done: bool = False) -> None:
+    """Free every Entry `run_id` holds, on the connection of the transaction that ends it. A
+    fan-out child that ended `done` first moves its Entry to the query's `on_finish`, so no
+    other run can claim it in the status it worked in (the parent's settling then finds it
+    there already)."""
+    if done:
+        _finish(conn, run_id)
+    rows = conn.execute(
+        "SELECT world_id, list, key FROM list_entries WHERE claimed_by = ?", (run_id,)
+    ).fetchall()
+    conn.execute(
+        "UPDATE list_entries SET claimed_by = NULL, updated_at = ? WHERE claimed_by = ?",
+        (_now(), run_id),
+    )
+    for r in rows:
+        change = {"claimed_by": None}
+        WorldLists._changed(conn, r[0], r[1], r[2], change, "the run ended", "run", run_id)
+
+
+def _finish(conn: sqlite3.Connection, run_id: str) -> None:
+    row = conn.execute(
+        "SELECT r.world_id, f.run_id, json_extract(f.source, '$.entry'), s.config"
+        " FROM fanout_items f JOIN runs r ON r.id = f.run_id"
+        " JOIN run_stages s ON s.run_id = f.run_id AND s.idx = f.stage_index"
+        " WHERE f.child_run_id = ? ORDER BY f.visit DESC LIMIT 1",
+        (run_id,),
+    ).fetchone()
+    if row is None or row[2] is None:
+        return
+    world_id, parent, key = row[0], row[1], row[2]
+    query = json.loads(row[3]).get("from_list") or {}
+    status, name = query.get("on_finish"), str(query.get("list") or "")
+    declared = conn.execute(
+        "SELECT statuses FROM world_lists WHERE world_id = ? AND name = ?", (world_id, name)
+    ).fetchone()
+    entry = conn.execute(
+        "SELECT status, claimed_by FROM list_entries WHERE world_id = ? AND list = ? AND key = ?",
+        (world_id, name, key),
+    ).fetchone()
+    if not status or declared is None or status not in json.loads(declared[0]):
+        return  # an undeclared on_finish fails the Item when the parent settles it
+    if entry is None or entry[1] != run_id or entry[0] == status:
+        return
+    conn.execute(
+        "UPDATE list_entries SET status = ?, updated_at = ? WHERE world_id = ? AND list = ?"
+        " AND key = ?",
+        (status, _now(), world_id, name, key),
+    )
+    change = {"from": entry[0], "to": status}
+    WorldLists._changed(conn, world_id, name, key, change, "", "run", parent)

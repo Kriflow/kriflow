@@ -17,6 +17,7 @@ from swarmify_workflows.model import (
     Violation,
     WorkflowModel,
     WorkflowStage,
+    children,
 )
 
 MAX_DEPTH = 2
@@ -99,7 +100,7 @@ def validate(
                 )
         elif isinstance(stage, ConnectorStage):
             ref = check_connector(stage.calls, "connector", stage.name)
-            gated = index > 0 and isinstance(model.stages[index - 1], GateStage)
+            gated = _gated(model, index, connectors)
             # A private post (a draft only the operator sees) needs no gate.
             private = ref is not None and posts_privately(ref.private_when, stage.params)
             if ref is not None and ref.kind == "publish" and not gated and not private:
@@ -178,10 +179,11 @@ def validate(
                 produced.add(stage.output)
                 swarm_made.pop(stage.output, None)
         elif isinstance(stage, WorkflowStage):
-            if stage.runs not in references and stage.runs != workflow_id:
-                out.append(
-                    Violation("unknown_workflow", f"no workflow with id '{stage.runs}'", stage.name)
-                )
+            for runs in children(stage):
+                if runs not in references and runs != workflow_id:
+                    out.append(
+                        Violation("unknown_workflow", f"no workflow with id '{runs}'", stage.name)
+                    )
             earlier = {s.name for s in model.stages[:index]}
             source = stage.for_each
             if source is not None and source not in earlier and source not in produced:
@@ -202,7 +204,7 @@ def validate(
                     )
                 )
             produced.update(stage.take)
-            if source is not None:  # the join's index, which a later stage may read
+            if source is not None or stage.from_list:  # the join's index, for a later stage
                 produced.add("items.json")
             for name in stage.take:
                 swarm_made.pop(name, None)
@@ -210,7 +212,7 @@ def validate(
 
     me = workflow_id or ""
     graph: dict[str, Sequence[str]] = dict(references)
-    graph[me] = [s.runs for s in model.stages if isinstance(s, WorkflowStage)]
+    graph[me] = [r for s in model.stages if isinstance(s, WorkflowStage) for r in children(s)]
     if _reaches(graph, me, me):
         out.append(Violation("cycle", "this workflow would run itself through its workflow stages"))
     else:
@@ -262,6 +264,20 @@ def warnings(
                 )
             )
     return out
+
+
+def _gated(model: WorkflowModel, index: int, connectors: Mapping[str, ConnectorRef]) -> bool:
+    """Whether the stage at `index` comes right after a gate, or after publish stages that do
+    (ADR 0007, issue 541): one answer lets every publish stage that follows it run."""
+    while index > 0:
+        index -= 1
+        before = model.stages[index]
+        if isinstance(before, GateStage):
+            return True
+        ref = connectors.get(before.calls) if isinstance(before, ConnectorStage) else None
+        if ref is None or ref.kind != "publish":
+            return False
+    return False
 
 
 def _reaches(graph: Mapping[str, Sequence[str]], start: str, target: str) -> bool:

@@ -24,6 +24,7 @@ from sqlalchemy.exc import OperationalError
 
 from swarmify_kernel import Event, new_id
 from swarmify_runs import budget
+from swarmify_runs.lists import WorldLists
 from swarmify_runs.machine import (
     MAX_SEND_BACKS,
     TERMINAL,
@@ -56,6 +57,7 @@ from swarmify_runs.model import (
     RunLink,
     RunStageView,
     StageDef,
+    fans,
 )
 from swarmify_runs.ports import Notifier, Storage
 
@@ -240,6 +242,9 @@ class RunControl:
         picked, and refuses a card it did not offer."""
         self.stage_spend: StageSpend = lambda _run_id: {}
         """Set by the composition root; a Rerun's proposal estimates its cost with it."""
+        self.lists: WorldLists | None = None
+        """Set by the composition root; a person's gate answer moves the Entries the run holds
+        with it, and a fan-out stage with `from_list` reads and claims its Items there."""
 
     def start(
         self,
@@ -344,7 +349,7 @@ class RunControl:
         run = self._run(run_id)
         index = next((s.index for s in run.stages if s.status in ("running", "waiting")), None)
         config = self.storage.stage_def(run_id, index)[1].config if index is not None else {}
-        if index is None or not config.get("for_each") or not config.get("approve"):
+        if index is None or not fans(config) or not config.get("approve"):
             raise Illegal("no fan-out stage with approve is running or waiting at its gate")
         approve, send_back = approve or [], send_back or {}
         if both := sorted(set(approve) & set(send_back)):
@@ -411,7 +416,7 @@ class RunControl:
         every Item settled, the stage's items gate retries instead)."""
         run = self._run(run_id)
         index = next((s.index for s in run.stages if s.status == "running"), None)
-        if index is None or not self.storage.stage_def(run_id, index)[1].config.get("for_each"):
+        if index is None or not fans(self.storage.stage_def(run_id, index)[1].config):
             raise Illegal("no fan-out stage of this run is running")
         visit = run.send_backs
         view = {v.key: v for _, v in self.storage.items(run_id, index, visit)}.get(key)
@@ -503,6 +508,7 @@ class RunControl:
         by: str | None = None,
         artifacts: list[str] | None = None,
         rejects: list[dict[str, str]] | None = None,
+        person: bool = False,
     ) -> Run:
         """Answer the gate the run waits at. Writes the decision artifact, then resumes the run.
         A skill gate takes only the answer of its proposal (`proposal=True`, from Learning).
@@ -518,7 +524,8 @@ class RunControl:
         A pick gate with `picks` above one takes `artifacts`, up to that many offered cards in
         pick order (the first is `artifact`); any pick gate may take `rejects`, offered cards
         each with an optional `reason`. The cards it offered and nobody picked or rejected are
-        Parked.
+        Parked. A `person`'s answer (from the web or a Remote Approval, never an agent) moves
+        the Entries the run holds to the status the gate's `entry` names for it.
 
         Raises KeyError for an unknown run, Illegal when the run is not at a gate, when the
         send-back target is not an earlier stage, on a send-back past the gate's limit, when someone
@@ -599,6 +606,9 @@ class RunControl:
                     f"{f.label} changed since the gate was shown, to {f.value or 'nothing'}:"
                     " check it and confirm again"
                 )
+        answer = "send_back" if send_back_to else "approve"
+        if person:  # refused here, before anything is written; moved once the answer is sent
+            self._move_entries(run, stage, answer, by, note, check=True)
         decision = Decision(
             new_id("dec"),
             index,
@@ -630,6 +640,8 @@ class RunControl:
             self.storage.remove_decision(decision.id)
             Path(decision.path).unlink(missing_ok=True)
             raise
+        if person:
+            self._move_entries(run, stage, answer, by, note)
         return self._run(run_id)
 
     def propose(self, run_id: str, change: RunChange) -> ChangeProposal:
@@ -1031,8 +1043,9 @@ class RunControl:
             except (Illegal, KeyError):
                 pass
 
-    def abort(self, run_id: str) -> Run:
-        """Abort the run and every child run it started (ADR 0013).
+    def abort(self, run_id: str, person: bool = False) -> Run:
+        """Abort the run and every child run it started (ADR 0013). A `person` aborting it at
+        a gate rejects there: the Entries it holds move to the status its `entry.reject` names.
 
         The run hears its abort before its child's end, so it ends aborted rather than failed.
         """
@@ -1042,6 +1055,12 @@ class RunControl:
             self._abort_children(run_id)  # a finished run's live descendants still stop
             raise
         state, _ = transition(kinds_of(run), state_of(run), Aborted())
+        at = next((s.index for s in run.stages if s.status == "waiting"), None)
+        if person and at is not None and not run.over_budget:
+            try:
+                self._move_entries(run, self.storage.stage_def(run_id, at)[1], "reject", None, "")
+            except (KeyError, ValueError) as exc:  # the abort goes on: it stops spending
+                log.warning("run %s aborted, its Entries stay where they are: %s", run_id, exc)
         if run.status == "queued":
             self.client.cancel_workflow(run_id)
             ended = self.storage.save_state(run_id, state)
@@ -1059,6 +1078,18 @@ class RunControl:
             self.storage.set_stop(run_id, "abort")
         self._abort_children(run_id)
         return run
+
+    def _move_entries(
+        self, run: Run, gate: StageDef, answer: str, by: str | None, note: str, check: bool = False
+    ) -> None:
+        """Move the Entries `run` holds to the status gate `gate` names for `answer`, if any
+        (issue 541), or with `check` only refuse it. Raises ValueError when a list does not
+        declare it, before anything moves."""
+        status = (gate.config.get("entry") or {}).get(answer) if gate.type == "gate" else None
+        if status and self.lists is not None:
+            self.lists.move_held(
+                run.world_id, run.id, status, by=by or "operator", note=note, check=check
+            )
 
     def delete_world(self, world_id: str) -> None:
         """Cancel the world's unfinished runs, then drop its rows and its queue. Through the DBOS

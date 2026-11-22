@@ -24,6 +24,8 @@ class Declared(BaseModel):
     rejected: list[str] = []
     review: list[str] = []
     """Statuses whose Entries wait for a person; Needs you says so while any do."""
+    published: str | None = None
+    """Where an Entry goes when the run holding it publishes; left where it is when None."""
 
 
 class NewEntry(BaseModel):
@@ -94,7 +96,13 @@ def router(lists: WorldLists, world_exists: WorldExists) -> APIRouter:
         return act(
             world_id,
             lambda: lists.declare(
-                world_id, name, body.statuses, body.done, body.rejected, review=body.review
+                world_id,
+                name,
+                body.statuses,
+                body.done,
+                body.rejected,
+                review=body.review,
+                published=body.published,
             ),
         )
 

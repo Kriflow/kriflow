@@ -6,6 +6,7 @@ import yaml
 
 from swarmify_kernel import local_time_problem
 from swarmify_workflows.model import (
+    GATE_ANSWERS,
     GATE_KINDS,
     MAX_PARALLEL,
     PICKS_MAX,
@@ -36,10 +37,14 @@ STAGE_FIELDS: dict[str, set[str]] = {
         "agents",
         "not_before",
     },
-    "gate": {"ask", "kind", "max_send_backs", "picks"},
+    "gate": {"ask", "kind", "max_send_backs", "picks", "entry"},
     "connector": {"calls", "input", "inputs", "output", "params", "not_before"},
-    "workflow": {"runs", "take", "for_each", "as", "max_parallel", "approve", "not_before"},
-}
+    "workflow": {
+        "runs", "take", "for_each", "as", "max_parallel", "approve", "not_before", "from_list",
+        "runs_by",
+    },
+}  # fmt: skip
+LIST_QUERY = {"list", "status", "where", "order", "take", "on_start", "on_finish"}
 
 
 class _Loader(yaml.SafeLoader):
@@ -205,6 +210,11 @@ def _parse_stage(
         gate_kind = f.text("kind") or "approve"
         limit = f.number("max_send_backs", integer=True)
         picks = f.number("picks", integer=True)
+        entry = _texts(raw.get("entry", {}), "entry", f)
+        if stray := sorted(set(entry) - set(GATE_ANSWERS)):
+            f.fail(f"entry names answers {', '.join(GATE_ANSWERS)}, not {', '.join(stray)}")
+        elif "send_back" in entry and gate_kind != "approve":
+            f.fail("entry.send_back needs an approve gate; only it sends back")
         if gate_kind not in GATE_KINDS:
             f.fail(f"kind must be one of {', '.join(GATE_KINDS)}")
         elif limit is not None and gate_kind != "approve":
@@ -220,6 +230,7 @@ def _parse_stage(
                 gate_kind,
                 None if limit is None else int(limit),
                 None if picks is None else int(picks),
+                entry,
             )
     elif kind == "connector":
         calls = f.text("calls") or stage_name
@@ -232,34 +243,45 @@ def _parse_stage(
         else:
             stage = ConnectorStage(stage_name, calls, input_, output, params, inputs, not_before)
     else:
-        runs = f.text("runs", required=True)
+        runs_by = _runs_by(raw.get("runs_by"), f)
+        runs = f.text("runs", required="runs_by" not in raw)
         take = f.names("take")
         for_each, given = f.text("for_each"), f.text("as")
+        from_list = _from_list(raw.get("from_list"), f)
+        fans = for_each is not None or from_list is not None
         most = f.number("max_parallel", integer=True)
         approve = raw.get("approve", False)
-        if for_each is None and (given is not None or most is not None):
-            f.fail("as and max_parallel belong to a fan-out stage: give for_each")
+        if runs is not None and runs_by is not None:
+            f.fail("give runs or runs_by, not both")
+        if runs_by is not None and from_list is None:
+            f.fail("runs_by picks a workflow by an Entry's field: give from_list")
+        if for_each is not None and from_list is not None:
+            f.fail("give for_each or from_list, not both")
+        if not fans and (given is not None or most is not None):
+            f.fail("as and max_parallel belong to a fan-out stage: give for_each or from_list")
         if not isinstance(approve, bool):
             f.fail("approve must be true or false")
-        elif approve and for_each is None:
-            f.fail("approve belongs to a fan-out stage: give for_each")
+        elif approve and not fans:
+            f.fail("approve belongs to a fan-out stage: give for_each or from_list")
         if given is not None and not _plain(given):
             f.fail(f"as names the file each child is given, not a path: '{given}'")
         if most is not None and most > MAX_PARALLEL:
             f.fail(f"max_parallel is 1 to {MAX_PARALLEL}")
-        if for_each is not None:
-            given = given or ("item.json" if for_each.endswith(".json") else "item.md")
+        if fans:
+            given = given or ("item.json" if (for_each or "").endswith(".json") else "item.md")
             most = most or 2
-        if runs:
+        if runs or runs_by:
             stage = WorkflowStage(
                 stage_name,
-                runs,
+                runs or "",
                 take,
                 for_each,
                 given,
                 None if most is None else int(most),
                 approve is True,
                 not_before,
+                from_list,
+                runs_by,
             )
     return stage_name, (stage if len(out) == before else None)
 
@@ -267,3 +289,61 @@ def _parse_stage(
 def _plain(name: str) -> bool:
     """A bare file name, as an input is named: no folder, not `.` or `..`."""
     return "/" not in name and "\\" not in name and name not in (".", "..")
+
+
+def _texts(value: Any, key: str, f: _Fields) -> dict[str, str]:
+    """A mapping of names to non-empty strings, or {} with a violation."""
+    if not isinstance(value, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in value.items()
+    ):
+        f.fail(f"{key} must map names to names")
+        return {}
+    return {k: v.strip() for k, v in value.items()}
+
+
+def _from_list(value: Any, f: _Fields) -> dict[str, Any] | None:
+    """A fan-out stage's list query, every key filled in, or None (with a violation when bad)."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        f.fail("from_list must be a mapping with a list")
+        return None
+    q = _Fields(value, f.out, f.stage)
+    before = len(f.out)
+    q.unknown(LIST_QUERY)
+    name = q.text("list", required=True)
+    status = value.get("status", [])
+    status = [status] if isinstance(status, str) else status
+    if not isinstance(status, list) or not all(isinstance(s, str) and s for s in status):
+        q.fail("from_list.status must name a status or a list of them")
+    where = value.get("where", {})
+    if not isinstance(where, dict) or not all(
+        isinstance(v, str | int | float) for v in where.values()
+    ):
+        q.fail("from_list.where must map Entry fields to a text or number each")
+    take = q.number("take", integer=True) or 1
+    query = {
+        "list": name,
+        "status": status,
+        "where": where,
+        "order": q.text("order") or "-score",
+        "take": int(take),
+        "on_start": q.text("on_start"),
+        "on_finish": q.text("on_finish"),
+    }
+    return query if len(f.out) == before else None
+
+
+def _runs_by(value: Any, f: _Fields) -> dict[str, Any] | None:
+    """`runs_by`: an Entry `field` and a `map` from its values to workflow ids, or None."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"field", "map"}:
+        f.fail("runs_by must give a field and a map from its values to workflows")
+        return None
+    before = len(f.out)
+    field = _Fields(value, f.out, f.stage).text("field", required=True)
+    mapping = _texts(value["map"], "runs_by.map", f)
+    if not mapping and len(f.out) == before:
+        f.fail("runs_by.map must map at least one value to a workflow")
+    return {"field": field, "map": mapping} if len(f.out) == before else None

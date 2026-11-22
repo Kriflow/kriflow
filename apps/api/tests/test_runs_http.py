@@ -118,7 +118,9 @@ def test_stage_def_keeps_every_stage_field() -> None:
     from swarmify_workflows import GateStage
 
     assert stage_def(GateStage("pick", "Pick one.", "pick")) == StageDef(
-        "pick", "gate", {"ask": "Pick one.", "kind": "pick", "max_send_backs": None, "picks": None}
+        "pick",
+        "gate",
+        {"ask": "Pick one.", "kind": "pick", "max_send_backs": None, "picks": None, "entry": {}},
     )
 
 
@@ -148,6 +150,7 @@ def test_a_done_run_is_saved_as_a_workflow_from_the_stages_it_ran(running: TestC
             "kind": "confirm",
             "max_send_backs": None,
             "picks": None,
+            "entry": {},
         }
     ]
     assert (
