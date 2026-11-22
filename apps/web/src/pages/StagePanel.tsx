@@ -18,6 +18,7 @@ import { SaveAsTemplate, StageOutput } from "./StageOutput";
 import { Whiteboard } from "./Whiteboard";
 import { StageLook } from "./RunHero";
 import { ActivityViews } from "./Transcript";
+import { MessageBox, messageable } from "./Message";
 import { cap } from "../skin";
 
 type Stage = Run["stages"][number];
@@ -724,6 +725,7 @@ export function StagePanel(p: PanelProps) {
   // A build step's panel shows its builder's steps; anything else logged there (the sandbox
   // blocking its render) still gets the live log.
   const shownLog = kind === "build" ? p.log.filter((e) => e.agent !== "builder") : p.log;
+  const working = p.agents.filter((a) => a.status === "working");
   const prev = run.stages[stage.index - 1];
   const next = run.stages[stage.index + 1];
   const files = (
@@ -927,6 +929,7 @@ export function StagePanel(p: PanelProps) {
       )}
       {stage.status === "failed" && stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}
       <Tabs key={stage.id} tabs={tabs} label={`${stage.name} views`} />
+      {messageable(stage, working) && <MessageBox run={run} stage={stage} working={working} />}
     </section>
   );
 }

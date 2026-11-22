@@ -340,3 +340,34 @@ a.made-file:hover { background: var(--raised); }
   .toolrow, .tx-note { margin-left: 0; }
   .seg button { min-height: 44px; }
 }
+
+/* A Message to a running stage (issue 534): your words on the right with their receipt, and the
+   message box, Chat v1's composer: who it goes to, the field, Send, Stop and do this instead */
+.tx > li:has(> .you) { display: grid; }
+.you { justify-self: end; display: grid; justify-items: end; gap: 4px; max-width: min(80%, 520px); min-width: 0; }
+.you .to { font-size: 0.75rem; color: var(--faint); }
+.you .bubble { padding: 8px 12px; border: 1px solid #2c5a43; border-radius: 14px 14px 4px 14px; background: #1d3a2c; color: #e9fff4; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.receipt { font-size: 0.75rem; color: var(--accent); text-align: right; }
+.receipt svg { margin-right: 5px; vertical-align: -3px; }
+.receipt.queued { color: var(--warning); }
+.stage-card .msg-box { margin: 0 -16px; padding: 12px 16px 0; background: none; }
+.msg-to { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.75rem; }
+.msg-to button.chipbtn { display: inline-flex; gap: 6px; align-items: center; border-radius: 99px; white-space: nowrap; color: var(--muted); }
+.msg-to button.chipbtn[aria-pressed="true"] { border-color: var(--text); color: var(--text); }
+.msg-to .face { margin: 0; width: 18px; height: 18px; border: 0; font-size: 0.5rem; }
+.msg-box .field textarea { max-height: calc(6 * 1.45em + 10px); }
+.msg-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 0.75rem; }
+.msg-row button.stop { min-height: 32px; gap: 6px; }
+.msg-error { margin: 0; color: var(--warning); font-size: 0.8125rem; }
+@media (max-width: 48rem) {
+  /* Docked on the tab bar, the gate answer bar's place: the To chips scroll sideways above a
+     rounded field with Stop and Send, every tap 44 px */
+  .canvas main .msg-box.action-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 8px 12px; }
+  .msg-to { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .msg-to button.chipbtn { flex: none; min-height: 44px; padding: 0 14px; }
+  .msg-box .field { align-items: center; padding: 3px 3px 3px 14px; border-radius: 24px; }
+  .msg-box .field button.icon { width: 44px; min-width: 44px; height: 44px; }
+  .msg-box .field textarea { max-height: 96px; }
+  .you { max-width: 88%; }
+  main:has(.msg-box) { padding-bottom: 150px; }
+}

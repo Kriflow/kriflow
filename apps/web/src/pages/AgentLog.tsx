@@ -125,7 +125,7 @@ export function describe(e: LogEntry, tasks: Map<string, string> = new Map()): s
 }
 
 /** The log as the Summary reads it: without the Transcript's words and tool results. */
-export const summaryOf = (log: LogEntry[]) => log.filter((e) => e.kind !== "text" && e.kind !== "output");
+export const summaryOf = (log: LogEntry[]) => log.filter((e) => e.kind !== "text" && e.kind !== "output" && e.kind !== "message");
 
 const titles = (tasks: Task[]) => new Map(tasks.map((t) => [t.id, t.title]));
 

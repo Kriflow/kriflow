@@ -4,6 +4,7 @@ import type { LogEntry } from "../api/events";
 import { who } from "../api/tasks";
 import { usePhone } from "../usePhone";
 import { describe, path, payload, short } from "./AgentLog";
+import { MessageLine } from "./Message";
 import { faceOf } from "./RunHero";
 
 const lines = (v: unknown) => (typeof v === "string" && v ? v.replace(/\n$/, "").split("\n") : []);
@@ -123,7 +124,12 @@ export function Transcript({ log }: { log: LogEntry[] }) {
   const agents = [...new Set(log.map((e) => e.agent))];
   const outputs = new Map(log.filter((e) => e.kind === "output" && e.ref).map((e) => [e.ref!, e]));
   const start = log.length ? Date.parse(log[0]!.ts) : 0;
-  const shown = log.filter((e) => e.kind !== "output" && (!only || e.agent === only));
+  // A Message shows once, at its first line (the filtered agent's), with every agent's lines
+  // for its receipt.
+  const messages = new Map<string, LogEntry[]>();
+  for (const e of log) if (e.kind === "message") messages.set(e.ref ?? "", [...(messages.get(e.ref ?? "") ?? []), e]);
+  const firsts = new Set([...messages.values()].map((lines) => lines.find((m) => !only || m.agent === only)?.seq));
+  const shown = log.filter((e) => e.kind !== "output" && (e.kind === "message" ? firsts.has(e.seq) : !only || e.agent === only));
   return (
     <section className="transcript" aria-label="Transcript">
       {agents.length > 1 && (
@@ -145,7 +151,9 @@ export function Transcript({ log }: { log: LogEntry[] }) {
         <ol className="tx" data-testid="transcript">
           {shown.map((e) => {
             let line: ReactNode;
-            if (e.kind === "text") {
+            if (e.kind === "message") {
+              line = <MessageLine lines={messages.get(e.ref ?? "")!} />;
+            } else if (e.kind === "text") {
               const f = faceOf(e.agent);
               line = (
                 <div className="say">

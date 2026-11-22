@@ -181,3 +181,52 @@ test("the Transcript shows each agent's words, tool calls that open, edits as di
   await expect.element(screen.getByTestId("log")).not.toMatchTextContent(/Both agree|Free: up to/);
   await expect.element(screen.getByTestId("agent").first().getByTestId("doing")).toHaveTextContent("Edited s/report.md");
 });
+
+test("a running stage takes a message to everyone or one agent, and the Transcript shows its receipt", async () => {
+  const sent: unknown[] = [];
+  const queued = (seq: number, who: string, over: Record<string, unknown> = {}) =>
+    entry(seq, { agent: who, kind: "message", tool: null, detail: "Skip anything older than 30 days.", ref: "change_1", input: { state: "queued", to: null, interrupt: false, why: "mid-turn and gets this at its next turn.", ...over } });
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(researching),
+    "GET /api/runs/run_1/agents": () => Response.json([agent(), agent({ id: "agent_2", name: "worker-2" }), agent({ id: "agent_3", name: "planner", role: "planner", status: "done" })]),
+    "GET /api/runs/run_1/stages/stage_0/log": () => Response.json([queued(1, "worker-1"), queued(2, "worker-2"), queued(3, "worker-1", { state: "delivered", why: null })]),
+    "GET /api/runs/run_1/stages/stage_0/tasks": () => Response.json([]),
+    "POST /api/runs/run_1/messages": async (req) => {
+      sent.push(await req.json());
+      return Response.json({}, { status: 201 });
+    },
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  const message = screen.getByTestId("message");
+  await expect.element(message).toMatchTextContent(/You to everyone still working\s*Skip anything older than 30 days\./);
+  await expect.element(message.getByTestId("receipt")).toHaveTextContent("Delivered to 1 agent. Queued: Worker 2 is mid-turn and gets this at its next turn.");
+  FakeEventSource.emit("agent.logged", { payload: queued(4, "worker-2", { state: "delivered", why: null }) });
+  await expect.element(message.getByTestId("receipt")).toHaveTextContent("Delivered to 2 agents, saved as a run change");
+  await summary(screen);
+  await expect.element(screen.getByRole("region", { name: "Live log" })).toMatchTextContent(/Nothing yet/);
+
+  const box = screen.getByTestId("message-box");
+  await expect.element(box.getByRole("button", { name: "Everyone working (2)" })).toHaveAttribute("aria-pressed", "true");
+  await expect.element(box.getByRole("button", { name: /Planner/ })).not.toBeInTheDocument();
+  await expect.element(box.getByRole("button", { name: "Send" })).toBeDisabled();
+  await box.getByRole("textbox").fill("Use the filing, not the blog post.");
+  await box.getByRole("button", { name: /Worker 2/ }).click();
+  await box.getByRole("button", { name: "Stop and do this instead" }).click();
+  await expect.poll(() => sent).toEqual([{ stage: "stage_0", text: "Use the filing, not the blog post.", to: "worker-2", interrupt: true }]);
+  await expect.element(box.getByRole("textbox")).toHaveValue("");
+  await box.getByRole("textbox").fill("And keep it short.");
+  await box.getByRole("button", { name: "Send" }).click();
+  await expect.poll(() => sent.at(-1)).toEqual({ stage: "stage_0", text: "And keep it short.", to: "worker-2", interrupt: false });
+});
+
+test("no message box once no agent of the stage is working", async () => {
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(researching),
+    "GET /api/runs/run_1/agents": () => Response.json([agent({ status: "done" })]),
+    "GET /api/runs/run_1/stages/stage_0/log": () => Response.json([entry(1)]),
+    "GET /api/runs/run_1/stages/stage_0/tasks": () => Response.json([]),
+  });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await expect.element(screen.getByTestId("transcript")).toBeVisible();
+  await expect.element(screen.getByTestId("message-box")).not.toBeInTheDocument();
+});

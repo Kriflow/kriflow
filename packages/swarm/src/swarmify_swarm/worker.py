@@ -1247,8 +1247,9 @@ class Swarm:
 FROM_PERSON = "A message from the person running this stage: "
 """How a Message reads to the agent it reaches."""
 NONE_WORKING = "No agent is working in this stage now"
-MID_TURN = "It is mid-turn and reads this at its next turn."
-BETWEEN = "It is between sessions and reads this first when its session resumes."
+MID_TURN = "mid-turn and gets this at its next turn."
+BETWEEN = "between sessions and gets this first when its session resumes."
+"""Why a message waits, said of the agent: "<agent> is <why>"."""
 EXCERPT = 2000
 """The most of a tool result the log keeps, in characters."""
 
