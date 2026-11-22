@@ -505,7 +505,7 @@ permissions are only a summary, and the operator approves what the clone declare
 Default packages (ADR 0023, issues 213 and 585): `python_script`, the core's own, installed from
 `connectors/python_script`, and the packages the Default List names. The Default List
 (`packages/connectors/src/swarmify_connectors/defaults.toml`) is the packages repository's git
-URL, Kriflow/packages, and one release tag per package (`youtube-v1.6.0`, as
+URL, Kriflow/packages, and one release tag per package (`youtube-v1.6.1`, as
 `<name>-v<version>`). On startup each listed version not installed yet is installed from git at
 its tag, from its folder, trusted as the core's own (no permission review) and sharing uv's and
 npm's caches; a version already installed is never fetched, so a start with every listed version

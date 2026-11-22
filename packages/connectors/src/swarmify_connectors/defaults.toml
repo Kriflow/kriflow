@@ -6,15 +6,15 @@
 # here: it stays a folder of the core (connectors/python_script) and installs from it.
 git = "https://github.com/Kriflow/packages.git"
 packages = [
-  { name = "blender_build", ref = "blender_build-v1.1.2" },
-  { name = "blender_render", ref = "blender_render-v1.0.7" },
-  { name = "hyperframes_build", ref = "hyperframes_build-v1.0.2" },
-  { name = "hyperframes_render", ref = "hyperframes_render-v1.0.2" },
-  { name = "meta", ref = "meta-v1.3.0" },
-  { name = "remotion_build", ref = "remotion_build-v1.0.4" },
-  { name = "remotion_render", ref = "remotion_render-v1.0.9" },
-  { name = "slack", ref = "slack-v1.1.2" },
-  { name = "speech", ref = "speech-v1.3.1" },
-  { name = "upload_post", ref = "upload_post-v1.0.1" },
-  { name = "youtube", ref = "youtube-v1.6.0" },
+  { name = "blender_build", ref = "blender_build-v1.1.3" },
+  { name = "blender_render", ref = "blender_render-v1.0.8" },
+  { name = "hyperframes_build", ref = "hyperframes_build-v1.0.3" },
+  { name = "hyperframes_render", ref = "hyperframes_render-v1.0.3" },
+  { name = "meta", ref = "meta-v1.3.1" },
+  { name = "remotion_build", ref = "remotion_build-v1.0.5" },
+  { name = "remotion_render", ref = "remotion_render-v1.0.10" },
+  { name = "slack", ref = "slack-v1.1.3" },
+  { name = "speech", ref = "speech-v1.3.2" },
+  { name = "upload_post", ref = "upload_post-v1.0.2" },
+  { name = "youtube", ref = "youtube-v1.6.1" },
 ]

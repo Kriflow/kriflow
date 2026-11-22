@@ -143,17 +143,17 @@ def test_the_shipped_list_pins_each_default_package_at_its_release_tag() -> None
     assert shipped["git"] == "https://github.com/Kriflow/packages.git"
     pins = {p["name"]: p["ref"] for p in shipped["packages"]}
     assert pins == {
-        "blender_build": "blender_build-v1.1.2",
-        "blender_render": "blender_render-v1.0.7",
-        "hyperframes_build": "hyperframes_build-v1.0.2",
-        "hyperframes_render": "hyperframes_render-v1.0.2",
-        "meta": "meta-v1.3.0",
-        "remotion_build": "remotion_build-v1.0.4",
-        "remotion_render": "remotion_render-v1.0.9",
-        "slack": "slack-v1.1.2",
-        "speech": "speech-v1.3.1",
-        "upload_post": "upload_post-v1.0.1",
-        "youtube": "youtube-v1.6.0",
+        "blender_build": "blender_build-v1.1.3",
+        "blender_render": "blender_render-v1.0.8",
+        "hyperframes_build": "hyperframes_build-v1.0.3",
+        "hyperframes_render": "hyperframes_render-v1.0.3",
+        "meta": "meta-v1.3.1",
+        "remotion_build": "remotion_build-v1.0.5",
+        "remotion_render": "remotion_render-v1.0.10",
+        "slack": "slack-v1.1.3",
+        "speech": "speech-v1.3.2",
+        "upload_post": "upload_post-v1.0.2",
+        "youtube": "youtube-v1.6.1",
     }
 
 
