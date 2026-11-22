@@ -16,6 +16,7 @@ from swarmify_runs.control import (
     run_folder,
     stage_folder,
 )
+from swarmify_runs.lists import Entry, WorldList, WorldLists
 from swarmify_runs.machine import (
     MAX_SEND_BACKS,
     RUN_STATUSES,
@@ -75,6 +76,7 @@ __all__ = [
     "Check",
     "Connector",
     "Decision",
+    "Entry",
     "Gate",
     "Item",
     "ItemView",
@@ -107,6 +109,8 @@ __all__ = [
     "Storage",
     "Swarm",
     "Take",
+    "WorldList",
+    "WorldLists",
     "queue_name",
     "slot_queue",
     "artifact_type",

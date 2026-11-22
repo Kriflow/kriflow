@@ -390,6 +390,25 @@ def test_a_claim_before_any_graph_query_is_denied(board: SqliteStorage, tmp_path
     assert script.outcomes[0].text == denied[0].detail
 
 
+def test_the_lists_tools_come_only_with_the_lists_agent_tool(
+    board: SqliteStorage, tmp_path: Path
+) -> None:
+    _seed(board)
+    read = Call(tool_id("read_list"), {"list": "things"})
+    script = Script([GRAPH, read, CLAIM, FINISH], PASS)
+    _run(_swarm(board, tmp_path, script), tmp_path)  # a stage without `lists`
+    assert _tools(board, "denied") == [tool_id("read_list")]
+    assert tool_id("read_list") not in script.sessions[0].allowed_tools
+
+    script = Script([GRAPH, read, CLAIM, FINISH], PASS)
+    swarm = _swarm(board, tmp_path, script)
+    board.add_task(W, R, "stage_2", "Pitch", added_by=OPERATOR)
+    swarm.run_stage(W, R, "stage_2", "pitch", {**STAGE, "tools": ["lists"]}, _world(tmp_path))
+    assert tool_id("read_list") in script.sessions[0].allowed_tools
+    # No World Lists handed in: the call is allowed and answered with why it cannot be served.
+    assert script.outcomes[1].is_error and "no World Lists" in script.outcomes[1].text
+
+
 def test_tools_outside_the_stage_allowlist_are_denied(board: SqliteStorage, tmp_path: Path) -> None:
     _seed(board)
     world = _world(tmp_path)
