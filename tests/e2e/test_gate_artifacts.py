@@ -73,7 +73,7 @@ def test_pick_a_card_then_review_the_video_in_place(
         assert src.endswith("/artifacts/short.mp4")
         assert httpx.get(f"{base_url}{src}").content == b"not really an mp4"
         _fits(screen)
-        card.get_by_role("button", name="Approve").click()
+        card.get_by_role("button", name="Approve", exact=True).click()
         expect(card).to_contain_text("Post it?", timeout=20_000)
 
         folder = data_dir / "worlds" / world / "runs" / run["id"]

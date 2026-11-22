@@ -21,7 +21,7 @@ type PublishField = components["schemas"]["PublishField"];
 
 /** The kind of decision, as the queue names it. */
 export const GATE_KIND: Record<Gate["kind"], string> = {
-  pick: "Pick an idea",
+  pick: "Pick one",
   approve: "Review and approve",
   confirm: "Confirm before it goes out",
   budget: "Budget ran out",

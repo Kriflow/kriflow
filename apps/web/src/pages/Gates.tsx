@@ -799,7 +799,7 @@ export function GateCard({
               <>
                 <label>
                   Your pick
-                  <input name="choice" required autoComplete="off" placeholder="idea 1" />
+                  <input name="choice" required autoComplete="off" placeholder="item 1" />
                 </label>
                 <span className="faint">
                   No cards reached this gate, so name your pick; it is kept word for word.

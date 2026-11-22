@@ -60,6 +60,40 @@ export function summary(body: string): string {
   return (para ?? "").replace(/\s+/g, " ").slice(0, 200);
 }
 
+/** A card's one line: the line its maker gave it (a `hook`, `line`, `summary` or `description`
+ * field), else the first paragraph of its body. */
+export function cardLine(a: ArtifactFile): string {
+  const given = ["hook", "line", "summary", "description"].map((k) => a.fields[k]).find((v) => typeof v === "string" && v);
+  return (given as string | undefined) ?? summary(a.body);
+}
+
+/** The fields a card was scored or counted on, as chips: a number as "Score 92", a list as
+ * "3 sources". Its rank is shown apart. Works for any item type: nothing here names one. */
+export function scored(a: ArtifactFile): string[] {
+  return Object.entries(a.fields).flatMap(([k, v]) => {
+    const word = k.replace(/_/g, " ");
+    if (k === "rank" || k === "size") return [];
+    if (typeof v === "number" && Number.isFinite(v)) return [`${cap(word)} ${v}`];
+    if (Array.isArray(v) && v.length) return [`${v.length} ${v.length === 1 ? word.replace(/s$/, "") : word}`];
+    return [];
+  });
+}
+
+/** A card's scored fields as chips, the first one, its lead score, picked out. */
+export function Chips({ a }: { a: ArtifactFile }) {
+  const chips = scored(a);
+  if (!chips.length) return null;
+  return (
+    <span className="chips" data-testid="card-chips">
+      {chips.map((c, i) => (
+        <span key={c} className={i ? "chip" : "chip ok"}>
+          {c}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** Choosable cards for a pick gate as a ranked radio list (story 32): rank, title and hook or
  * summary, with the judge's reason and the note paragraphs it came from folded away (story 33). */
 /** A pick gate that takes several cards: the paths picked in order, the rejected ones with the
@@ -82,7 +116,7 @@ export function ArtifactCards({ cards, worldId, multi }: { cards: ArtifactFile[]
       </legend>
       {cards.map((a) => {
         const sources = (a.fields.sources as string[] | undefined) ?? [];
-        const hook = typeof a.fields.hook === "string" ? a.fields.hook : summary(a.body);
+        const hook = cardLine(a);
         const why = [a.fields.reason, a.fields.why].find((w) => typeof w === "string" && w) as string | undefined;
         const order = multi ? multi.picked.indexOf(a.path) : -1;
         const out = multi ? a.path in multi.rejected : false;
@@ -112,6 +146,7 @@ export function ArtifactCards({ cards, worldId, multi }: { cards: ArtifactFile[]
               <Icon name="check" size={20} className="pick-check" />
             )}
             {hook && <span className="hook">{hook}</span>}
+            <Chips a={a} />
             <details>
               <summary>Why</summary>
               {why && <p>Why: {why}</p>}

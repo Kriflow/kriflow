@@ -91,7 +91,14 @@ class _Hooks:
     def started(self, init: SessionInit) -> None:
         self.ids.append(init.session_id)
 
-    def before_tool(self, tool: str, input: dict) -> str | None:
+    def said(self, text: str) -> None: ...
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None: ...
+
+    def inbox(self) -> list[tuple[str, bool]]:
+        return []
+
+    def before_tool(self, tool: str, input: dict, ref: str | None = None) -> str | None:
         return None
 
     def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:

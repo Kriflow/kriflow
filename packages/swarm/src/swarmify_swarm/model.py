@@ -43,7 +43,7 @@ class Refused(ValueError):
 
 AgentRole = Literal["planner", "worker", "judge"]
 AgentStatus = Literal["working", "done", "failed"]
-LogKind = Literal["session", "tool", "denied", "result", "error"]
+LogKind = Literal["session", "tool", "denied", "result", "error", "text", "output", "message"]
 
 
 TOKENS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
@@ -78,8 +78,11 @@ class Agent:
 
 @dataclass(frozen=True)
 class LogEntry:
-    """One line of a stage's live log: a session starting or ending, or one tool call the hooks
-    saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`)."""
+    """One line of a stage's live log: a session starting or ending, one tool call the hooks
+    saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`), what the agent
+    said (`text`), or an allowed call's result (`output`: a capped excerpt in `detail`, its
+    full size and error flag in `input`). `ref` is the tool use id pairing a call with its
+    output."""
 
     seq: int
     agent: str
@@ -89,6 +92,24 @@ class LogEntry:
     tool: str | None = None
     input: dict[str, Any] | None = None
     detail: str = ""
+    ref: str | None = None
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """One execution of a swarm stage, numbered per stage from 1 (issue 535). The first visit is
+    Attempt 1; each send-back, Rerun or Follow-up that runs the stage again starts the next.
+    `cause` is what started it, `{kind, note, by, at}`, None for the first or when an earlier
+    stage was sent back. `spent_usd` is what its agents spent during it; `ended_at` is None
+    while it runs. Its log lines are those from `started_at` to the next Attempt's start, and
+    the artifacts it left are kept in the stage's `attempts/<number>` folder once another
+    starts."""
+
+    number: int
+    started_at: str
+    ended_at: str | None = None
+    spent_usd: float = 0.0
+    cause: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -164,12 +164,14 @@ def test_pulling_down_runs_refetches_them_without_a_reload(
 
         pull(page, 195, 300, 60)  # short of the threshold: springs back, nothing fetched
         page.wait_for_timeout(500)
-        assert not [u for u in asked if u.endswith(listing)]
+        assert not [u for u in asked if u.split("?")[0].endswith(listing)]
 
         asked.clear()
         pull(page, 195, 300, 260)
         expect(page.get_by_role("status").filter(has_text="Updated just now")).to_be_attached()
-        assert [u for u in asked if u.endswith(listing)], "the pull did not refetch the runs"
+        assert [u for u in asked if u.split("?")[0].endswith(listing)], (
+            "the pull did not refetch the runs"
+        )
         assert [u for u in asked if "/worlds/" in u and "/events?since=" in u], (
             "the pull did not reopen the event stream"
         )

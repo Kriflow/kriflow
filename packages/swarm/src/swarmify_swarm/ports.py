@@ -14,7 +14,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from swarmify_swarm.model import Agent, AgentRole, AgentStatus, LogEntry, LogKind, Task, Verdict
+from swarmify_swarm.model import (
+    Agent,
+    AgentRole,
+    AgentStatus,
+    Attempt,
+    LogEntry,
+    LogKind,
+    Task,
+    Verdict,
+)
 
 
 class Storage(Protocol):
@@ -130,12 +139,39 @@ class Storage(Protocol):
         detail: str = "",
         tool: str | None = None,
         input: dict[str, Any] | None = None,
+        ref: str | None = None,
     ) -> LogEntry:
         """Append one line to the stage's live log for `agent`, which must exist."""
         ...
 
     def list_log(self, stage_id: str) -> list[LogEntry]:
         """Oldest first."""
+        ...
+
+    def start_attempt(
+        self, world_id: str, run_id: str, stage_id: str, visit: int, cause: dict[str, Any] | None
+    ) -> tuple[Attempt, bool]:
+        """The stage's Attempt for its `visit` (the run's send-back count): the latest one again
+        when it has that visit (a retried or resumed stage), else the next one. True when it is
+        new."""
+        ...
+
+    def end_attempt(self, stage_id: str) -> None:
+        """Mark the stage's latest Attempt ended now."""
+        ...
+
+    def list_attempts(self, stage_id: str) -> list[Attempt]:
+        """Oldest first, each with what its agents spent."""
+        ...
+
+    def take(self, stage_id: str, agent: str) -> list[LogEntry]:
+        """The agent's inbox: its queued `message` lines no `delivered` line answers yet, oldest
+        first, each now answered by one, in one transaction, so a message is delivered once."""
+        ...
+
+    def drop(self, stage_id: str, why: str) -> list[LogEntry]:
+        """Answer every queued `message` line of the stage with a `dropped` one saying `why`:
+        the Attempt it was sent in ended before its agent took it."""
         ...
 
 
@@ -226,8 +262,22 @@ class SessionHooks(Protocol):
 
     def started(self, init: SessionInit) -> None: ...
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
-        """Every tool call, before it runs. A returned reason denies the call."""
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
+        """Every tool call, before it runs. A returned reason denies the call. `ref` is the
+        call's tool use id, which its `tool_result` names."""
+        ...
+
+    def said(self, text: str) -> None:
+        """A text block the agent wrote."""
+        ...
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None:
+        """What a call answered: the text of its result, images left out."""
+        ...
+
+    def inbox(self) -> list[tuple[str, bool]]:
+        """What people sent the session since it last asked, each (text, interrupt), now
+        delivered. Asked while the session runs; a message with interrupt stops the turn first."""
         ...
 
     def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:

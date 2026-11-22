@@ -135,11 +135,14 @@ class Change(BaseModel):
     its `payload` is the stage's whole new config. An `artifact_edit` targets a finished stage
     and its `payload` is `{"path": <a text file in its artifacts folder>, "text": <new text>}`.
     A `rerun` targets a finished or failed stage and its `payload` holds the `note` the stage
-    reruns with; a `skip` targets a stage that has not started and has none. A `restructure`'s
+    reruns with, its agents starting afresh. A `follow_up` targets a finished or failed swarm
+    stage and its `payload`'s `note` is the change asked: the agents continue their sessions
+    with it as a new Attempt, and later stages run again as for a Rerun. A `skip` targets a
+    stage that has not started and has none. A `restructure`'s
     `payload` is `stages`, the new list from the target stage on, each a stage's `name`, `type`
     and config fields."""
 
-    kind: Literal["stage_edit", "artifact_edit", "rerun", "skip", "restructure"]
+    kind: Literal["stage_edit", "artifact_edit", "rerun", "follow_up", "skip", "restructure"]
     stage: str
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -151,6 +154,17 @@ class Change(BaseModel):
 
     def value(self) -> RunChange:
         return RunChange(self.kind, self.stage, self.payload)
+
+
+class StageMessage(BaseModel):
+    """A Message to the running stage's agents (a Run Change a person applies as they send
+    it): to everyone still working, or to the agent named `to`; with `interrupt` the agent
+    stops its turn and does this instead."""
+
+    stage: str
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=8000)]
+    to: str | None = None
+    interrupt: bool = False
 
 
 class ApplyChange(Change):
@@ -360,12 +374,14 @@ def router(
     tasks_of: TasksOf = lambda _stage_id: [],
     waiting: Callable[[], list[Waiting]] = lambda: [],
     resource_waits: Callable[[], list[dict[str, Any]]] = lambda: [],
+    message: Callable[[str, RunChange, str], AppliedChange] | None = None,
 ) -> APIRouter:
     """`tools_for` names the world's connectors an Ad Hoc Run's stage gets as its tools. With
     `retro`, every run but a baseline ends with the Retro stage. `tasks_of` reads a swarm
     stage's whiteboard, whose hand-added tasks a run saved as a workflow keeps. `waiting` names
     the agents waiting for the network and `resource_waits` the processes waiting for a
-    Resource (resources.waits), which a run's running stage then says."""
+    Resource (resources.waits), which a run's running stage then says. `message` records a
+    Message and delivers it to the stage's agents; by default it is only recorded."""
     api = APIRouter(prefix="/api", tags=["runs"])
     pin = pinner(workflows)
 
@@ -543,6 +559,7 @@ def router(
             for w in resource_waits()
             if w.get("run") == run_id and w.get("stage") in running
         }
+        run = replace(run, last_run_seconds=runner.storage.last_run_seconds(run))
         if not notes and not waits:
             return run
         stages = [replace(s, network=notes.get(s.id), waiting=waits.get(s.id)) for s in run.stages]
@@ -598,6 +615,18 @@ def router(
         since the proposal's revision, naming what moved, or the stage has started; 422 with the
         check's violations."""
         return act(lambda: runner.apply(run_id, body.value(), body.revision, OPERATOR))
+
+    @api.post("/runs/{run_id}/messages", status_code=201, responses={**ACTION_ERRORS, 422: {}})
+    def send_message(run_id: str, body: StageMessage) -> AppliedChange:
+        """Send a Message to the running stage's agents, recorded as a Run Change of kind
+        `message`. Each agent's live session reads it as its next turn, or the session it starts
+        or resumes reads it first; the stage log says which (`message` lines, queued then
+        delivered). 409 when the stage is not running or no agent it names is working, 422 for
+        an empty text."""
+        payload = {"text": body.text, "to": body.to, "interrupt": body.interrupt}
+        change = RunChange("message", body.stage, payload)
+        send = message or runner.message
+        return act(lambda: send(run_id, change, OPERATOR))
 
     @api.get("/runs/{run_id}/changes", responses={404: {}})
     def list_changes(run_id: str) -> list[AppliedChange]:

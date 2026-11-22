@@ -161,7 +161,14 @@ class _Hooks:
     def started(self, init: SessionInit) -> None:
         self.session_id = init.session_id
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
+    def said(self, text: str) -> None: ...
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None: ...
+
+    def inbox(self) -> list[tuple[str, bool]]:
+        return []
+
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
         return None if tool in self.allowed else f"{tool} is not allowed in the planner chat."
 
     def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:

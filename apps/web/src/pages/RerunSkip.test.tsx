@@ -62,7 +62,7 @@ test("Re-run from here shows what it resets and costs against the budget left, a
   await expect.element(card).toMatchTextContent(/applied by you, \d\d:\d\d/);
 
   FakeEventSource.emit("run.updated", { payload: { ...waiting, revision: 4, changes: [applied("rerun", 0, "script")], updated_at: "2026-10-26T10:04:00+00:00" } });
-  await expect.element(screen.getByTestId("timeline")).toMatchTextContent(/script.*Re-run by you \d\d:\d\d/);
+  await expect.element(screen.getByTestId("timeline").getByRole("button", { name: /^Step \d+, script, .*, Re-run by you \d\d:\d\d$/ })).toBeVisible();
   await screen.getByRole("button", { name: "Run actions" }).click();
   await screen.getByRole("menuitem", { name: /^Changes \(1\)/ }).click();
   await expect.element(screen.getByTestId("changes")).toMatchTextContent(/Re-run from script · by you at \d\d:\d\d/);

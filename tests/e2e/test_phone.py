@@ -251,9 +251,9 @@ def test_the_answer_is_on_screen_above_the_tab_bar(phone: Page, ids: dict, where
     if where == "gates":  # several wait: the kinds as chips with counts, and where this one sits
         expect(phone.get_by_test_id("kinds")).to_contain_text("All")
         expect(phone.get_by_test_id("place")).to_contain_text(re.compile(r"\d of \d"))
-    else:  # seven steps not started still fit the strip (issue 175)
-        expect(phone.get_by_test_id("strip")).to_be_visible()
-        assert phone.get_by_test_id("strip").bounding_box()["width"] <= PHONE["width"]  # type: ignore[index]
+    else:  # seven steps not started still fit the rail (issue 175)
+        expect(phone.get_by_test_id("timeline")).to_be_visible()
+        assert phone.get_by_test_id("timeline").bounding_box()["width"] <= PHONE["width"]  # type: ignore[index]
     _fits(phone)
 
 
@@ -289,9 +289,7 @@ def test_a_running_run_and_a_done_run_with_its_video(phone: Page, ids: dict) -> 
     player = phone.get_by_test_id("result").get_by_test_id("player")
     expect(player).to_be_visible()
     assert player.bounding_box()["height"] <= 300  # type: ignore[index]
-    phone.get_by_role("button", name="All steps").click()
-    sheet = phone.get_by_role("dialog", name="All steps")
-    expect(sheet.get_by_test_id("timeline").locator("li")).to_have_count(3)  # and the retro
+    expect(phone.get_by_test_id("timeline").locator("li")).to_have_count(3)  # and the retro
     _fits(phone)
 
 
@@ -299,6 +297,7 @@ def test_a_document_opens_from_its_run_into_the_reader(phone: Page, ids: dict) -
     research = ids["doc"].split("/")[2]
     phone.goto(f"/worlds/{ids['world']}/runs/{ids['done']}?stage={research}")
     panel = phone.get_by_test_id("stage-panel")
+    panel.get_by_role("tab", name=re.compile("^Files")).click()
     panel.get_by_test_id("all-files").locator("summary").click()
     panel.get_by_test_id("all-files").get_by_role("link", name="ideas.md").click()
     expect(phone).to_have_url(re.compile(r"/read\?path=.*ideas\.md"))
@@ -306,8 +305,14 @@ def test_a_document_opens_from_its_run_into_the_reader(phone: Page, ids: dict) -
     expect(doc.locator("pre")).to_contain_text("ffmpeg")
     _fits(phone)
     # The code block and the table scroll inside themselves; the page stays put.
+    # The document can render again right after the route change; re-measure until it settles.
     for wide in (doc.locator("pre"), doc.locator(".scroll-x")):
-        sizes = wide.evaluate("e => [e.scrollWidth, e.clientWidth]")
+        sizes = [0, 0]
+        for _ in range(50):
+            sizes = wide.evaluate("e => [e.scrollWidth, e.clientWidth]")
+            if sizes[0] > sizes[1]:
+                break
+            phone.wait_for_timeout(100)
         assert sizes[0] > sizes[1], f"{wide} is not wider than its box: {sizes}"
     raw = phone.get_by_role("link", name="Raw file").get_attribute("href")
     response = phone.request.get(raw)  # type: ignore[arg-type]
@@ -321,7 +326,7 @@ def test_a_gate_is_answered_from_a_phone_as_the_stream_moves(phone: Page, ids: d
     phone.goto(f"/gates?gate={ids['run_gate']}")
     card = phone.get_by_test_id(f"gate-{ids['run']}")
     expect(card).to_contain_text("Which idea do we shoot?")
-    card.get_by_role("button", name="Approve").click()
+    card.get_by_role("button", name="Approve", exact=True).click()
     expect(phone.locator(".toasts")).to_contain_text("You approved it", timeout=15_000)
     expect(card).to_have_count(0)  # the next decision opens in its place
 

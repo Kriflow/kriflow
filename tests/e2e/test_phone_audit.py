@@ -116,7 +116,10 @@ CHECKS = """W => {
     const b = bar.getBoundingClientRect();
     for (const e of document.querySelectorAll('body *')) {
       if (bar.contains(e) || e.contains(bar) || e.closest('dialog[open]') || !shown(e)) continue;
-      if (!['fixed', 'sticky'].includes(getComputedStyle(e).position)) continue;
+      const p = getComputedStyle(e);
+      if (!['fixed', 'sticky'].includes(p.position)) continue;
+      // Only sticky sideways (a table's first column): it scrolls with the page, docks nothing.
+      if (p.position === 'sticky' && p.top === 'auto' && p.bottom === 'auto') continue;
       const r = e.getBoundingClientRect();
       const hit = r.bottom > b.top + 1 && r.top < b.bottom && r.right > b.left && r.left < b.right;
       if (r.width && r.height && hit) add('over the tab bar', e, `bottom ${Math.round(r.bottom)}`);
@@ -346,7 +349,7 @@ def test_each_run_state_reads_from_the_first_screen_and_no_markdown_is_raw(
             expect(failure).to_be_in_viewport()
             expect(failure.get_by_role("button", name="Retry from this stage")).to_be_visible()
         if key == "done":
-            expect(page.get_by_test_id("done-row")).to_be_in_viewport()
+            expect(page.get_by_test_id("hero")).to_be_in_viewport()
     # The waiting run opens on its gate, which shows the ideas.md its research made in place.
     for route in (
         f"/worlds/{every['world']}/runs/{every['run']}",

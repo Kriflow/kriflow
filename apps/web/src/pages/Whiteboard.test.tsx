@@ -65,6 +65,7 @@ test("add a task by hand from the run page", async () => {
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
   await expect.element(screen.getByTestId("whiteboard-summary")).toHaveTextContent("No tasks yet.");
+  await screen.getByRole("tab", { name: /^Items/ }).click();
   await expect.element(screen.getByTestId("col-open")).toHaveTextContent("Open 0Nothing waiting. Add a task to steer the swarm.");
   const add = screen.getByRole("button", { name: "Add task" });
   await expect.element(add).toBeDisabled();
@@ -87,6 +88,7 @@ test("a refused task shows why", async () => {
       Response.json({ detail: "research has ended (done); its whiteboard is read-only" }, { status: 409 }),
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await screen.getByRole("tab", { name: /^Items/ }).click();
   await screen.getByRole("textbox", { name: "New task" }).fill("Late idea");
   await screen.getByRole("button", { name: "Add task" }).click();
   await expect.element(screen.getByRole("alert")).toHaveTextContent("research has ended (done); its whiteboard is read-only");
@@ -132,6 +134,7 @@ test("done cards with long notes never push the page sideways on a desktop", asy
   const done = longNotes.map((t) => task(t.id, "done", { title: t.title, notes: t.notes }));
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(researching), [TASKS]: () => Response.json(done) });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await screen.getByRole("tab", { name: /^Items/ }).click();
   await expect.element(screen.getByTestId("col-done")).toMatchTextContent(new RegExp(`Done ${done.length}`));
   await expect.element(screen.getByTestId("col-done").getByText(done[0]!.title)).toBeVisible();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1000);

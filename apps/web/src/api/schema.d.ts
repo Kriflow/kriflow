@@ -646,6 +646,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Message
+         * @description Send a Message to the running stage's agents, recorded as a Run Change of kind
+         *     `message`. Each agent's live session reads it as its next turn, or the session it starts
+         *     or resumes reads it first; the stage log says which (`message` lines, queued then
+         *     delivered). 409 when the stage is not running or no agent it names is working, 422 for
+         *     an empty text.
+         */
+        post: operations["send_message_api_runs__run_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/items/{key}/retry": {
         parameters: {
             query?: never;
@@ -1266,6 +1290,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/stages/{stage_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attempts
+         * @description Each execution of the swarm stage, oldest first (issue 535): when it started and
+         *     ended, what its agents spent, and what started it (a send-back, Rerun or Follow-up,
+         *     with its note). Its log lines are those from its start to the next one's.
+         */
+        get: operations["get_attempts_api_runs__run_id__stages__stage_id__attempts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/stages/{stage_id}/verdicts": {
         parameters: {
             query?: never;
@@ -1319,7 +1365,8 @@ export interface paths {
          * Get Artifacts
          * @description The stage's artifact files as they are on disk: projected ones carry their type and
          *     fields (an idea's rank and source references) in `fields`. With `folder`, those of
-         *     that subfolder: a fan-out stage gathers each Item's files under its key. 422 for a
+         *     that subfolder: a fan-out stage gathers each Item's files under its key. With
+         *     `attempt`, those an earlier Attempt left, kept when the next one started. 422 for a
          *     folder that is not a plain name.
          */
         get: operations["get_artifacts_api_runs__run_id__stages__stage_id__artifacts_get"];
@@ -2230,7 +2277,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "stage_edit" | "artifact_edit" | "rerun" | "skip" | "restructure";
+            kind: "stage_edit" | "artifact_edit" | "rerun" | "follow_up" | "skip" | "restructure";
             /** Stage */
             stage: string;
             /** Payload */
@@ -2336,6 +2383,33 @@ export interface components {
             name: string;
             /** Bytes */
             bytes: number;
+        };
+        /**
+         * Attempt
+         * @description One execution of a swarm stage, numbered per stage from 1 (issue 535). The first visit is
+         *     Attempt 1; each send-back, Rerun or Follow-up that runs the stage again starts the next.
+         *     `cause` is what started it, `{kind, note, by, at}`, None for the first or when an earlier
+         *     stage was sent back. `spent_usd` is what its agents spent during it; `ended_at` is None
+         *     while it runs. Its log lines are those from `started_at` to the next Attempt's start, and
+         *     the artifacts it left are kept in the stage's `attempts/<number>` folder once another
+         *     starts.
+         */
+        Attempt: {
+            /** Number */
+            number: number;
+            /** Started At */
+            started_at: string;
+            /** Ended At */
+            ended_at?: string | null;
+            /**
+             * Spent Usd
+             * @default 0
+             */
+            spent_usd: number;
+            /** Cause */
+            cause?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * Call
@@ -2494,7 +2568,10 @@ export interface components {
          *     its `payload` is the stage's whole new config. An `artifact_edit` targets a finished stage
          *     and its `payload` is `{"path": <a text file in its artifacts folder>, "text": <new text>}`.
          *     A `rerun` targets a finished or failed stage and its `payload` holds the `note` the stage
-         *     reruns with; a `skip` targets a stage that has not started and has none. A `restructure`'s
+         *     reruns with, its agents starting afresh. A `follow_up` targets a finished or failed swarm
+         *     stage and its `payload`'s `note` is the change asked: the agents continue their sessions
+         *     with it as a new Attempt, and later stages run again as for a Rerun. A `skip` targets a
+         *     stage that has not started and has none. A `restructure`'s
          *     `payload` is `stages`, the new list from the target stage on, each a stage's `name`, `type`
          *     and config fields.
          */
@@ -2503,7 +2580,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "stage_edit" | "artifact_edit" | "rerun" | "skip" | "restructure";
+            kind: "stage_edit" | "artifact_edit" | "rerun" | "follow_up" | "skip" | "restructure";
             /** Stage */
             stage: string;
             /** Payload */
@@ -3158,8 +3235,11 @@ export interface components {
         };
         /**
          * LogEntry
-         * @description One line of a stage's live log: a session starting or ending, or one tool call the hooks
-         *     saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`).
+         * @description One line of a stage's live log: a session starting or ending, one tool call the hooks
+         *     saw, allowed (`tool`) or refused (`denied`, with the reason in `detail`), what the agent
+         *     said (`text`), or an allowed call's result (`output`: a capped excerpt in `detail`, its
+         *     full size and error flag in `input`). `ref` is the tool use id pairing a call with its
+         *     output.
          */
         LogEntry: {
             /** Seq */
@@ -3172,7 +3252,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "session" | "tool" | "denied" | "result" | "error";
+            kind: "session" | "tool" | "denied" | "result" | "error" | "text" | "output" | "message";
             /** Ts */
             ts: string;
             /** Tool */
@@ -3186,6 +3266,8 @@ export interface components {
              * @default
              */
             detail: string;
+            /** Ref */
+            ref?: string | null;
         };
         /**
          * LookSetting
@@ -3941,14 +4023,19 @@ export interface components {
             forked_by?: components["schemas"]["AppliedChange"] | null;
             /** Budget Warn Usd */
             budget_warn_usd?: number | null;
+            /** Last Run Seconds */
+            last_run_seconds?: number | null;
         };
         /**
          * RunChange
          * @description One edit to a live run, as proposed (ADR 0027). `stage` is the target stage's id; a
          *     `stage_edit`'s `payload` is the stage's new config, an `artifact_edit`'s the `path` of a file
-         *     in the stage's artifacts folder and its new `text`, a `rerun`'s its `note`, a `skip` has
-         *     none and a `restructure`'s is `stages`, the new list from that stage on, each a workflow
-         *     stage's fields (`name`, `type` and its config).
+         *     in the stage's artifacts folder and its new `text`, a `rerun`'s its `note` (a
+         *     `follow_up`'s too: the change asked of a finished swarm stage, whose agents continue their
+         *     sessions), a `skip` has none and a `restructure`'s is `stages`, the new list from that
+         *     stage on, each a workflow stage's fields (`name`, `type` and its config). A `message`'s is
+         *     the `text` a person sends the running stage's agents, `to` (one agent, or None for everyone
+         *     still working) and `interrupt`.
          */
         RunChange: {
             /** Kind */
@@ -4396,6 +4483,25 @@ export interface components {
             room?: components["schemas"]["Room"];
             /** Problems */
             problems?: string[];
+        };
+        /**
+         * StageMessage
+         * @description A Message to the running stage's agents (a Run Change a person applies as they send
+         *     it): to everyone still working, or to the agent named `to`; with `interrupt` the agent
+         *     stops its turn and does this instead.
+         */
+        StageMessage: {
+            /** Stage */
+            stage: string;
+            /** Text */
+            text: string;
+            /** To */
+            to?: string | null;
+            /**
+             * Interrupt
+             * @default false
+             */
+            interrupt: boolean;
         };
         /**
          * StalledMemory
@@ -6251,6 +6357,53 @@ export interface operations {
             };
         };
     };
+    send_message_api_runs__run_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppliedChange"];
+                };
+            };
+            /** @description No such run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The run is not in a state where this action applies */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     retry_item_api_runs__run_id__items__key__retry_post: {
         parameters: {
             query?: never;
@@ -7398,6 +7551,38 @@ export interface operations {
             };
         };
     };
+    get_attempts_api_runs__run_id__stages__stage_id__attempts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                stage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attempt"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_verdicts_api_runs__run_id__stages__stage_id__verdicts_get: {
         parameters: {
             query?: never;
@@ -7467,6 +7652,7 @@ export interface operations {
         parameters: {
             query?: {
                 folder?: string;
+                attempt?: number | null;
             };
             header?: never;
             path: {

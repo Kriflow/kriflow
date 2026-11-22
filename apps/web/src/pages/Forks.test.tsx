@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 
 import { FakeEventSource, fakeFetch, run, stage } from "../test/fakes";
 import { mountAt } from "../test/mount";
@@ -63,9 +63,11 @@ test("only stages that finished, after finished stages, can be forked from", asy
   let menu = await runMenu(screen);
   await expect.element(menu.getByRole("menuitem", { name: /^Pause/ })).toBeVisible();
   expect(menu.getByRole("menuitem", { name: /^Fork from/ }).elements()).toHaveLength(0);
+  await userEvent.keyboard("{Escape}"); // the open menu lies over the rail
   await screen.getByRole("button", { name: /^Step 1, research/ }).click();
   menu = await runMenu(screen);
   await expect.element(menu.getByRole("menuitem", { name: /^Fork from research/ })).toBeVisible();
+  await userEvent.keyboard("{Escape}"); // the open menu lies over the rail
   await screen.getByRole("button", { name: /^Step 3, render/ }).click();
   await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^render/);
   menu = await runMenu(screen);

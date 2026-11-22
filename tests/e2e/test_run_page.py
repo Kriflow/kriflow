@@ -70,6 +70,7 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
         expect(build).to_contain_text("Wrote src/Main.tsx")
         expect(page.get_by_test_id("render-progress")).to_contain_text("Rendered every frame")
         expect(page.get_by_test_id("project")).to_contain_text("/build")
+        page.get_by_role("tab", name="Details").click()
         page.get_by_text("Technical details").click()
         expect(page.get_by_test_id("call-request")).to_contain_text('"composition": "Main"')
 
@@ -78,8 +79,10 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
         expect(page.get_by_test_id("build-log")).to_contain_text("Installed packages")
 
         page.get_by_role("button", name="Answer review").click()
-        page.get_by_role("button", name="Approve").click()
-        expect(status).to_have_text(re.compile(r"^Done in \d+ s\.$"), timeout=20_000)
+        page.get_by_role("button", name="Approve", exact=True).click()
+        expect(status).to_have_text(
+            re.compile(r"^Done in \d+ s\. Made video\.mp4\.$"), timeout=20_000
+        )
         rail.get_by_role("button", name=re.compile("^Step 4, review")).click()
         expect(page.get_by_test_id("decision")).to_have_text('You approved "video.mp4".')
     finally:

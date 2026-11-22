@@ -351,3 +351,33 @@ def test_a_restructure_never_touches_the_running_stage_and_needs_a_stage(
     calls.release.set()
     at(runner, run.id, "done")
     assert calls.ran == ["slow", "render"] and runner.list_all("world_1") == [fetch(runner, run.id)]
+
+
+def test_a_message_to_the_running_stage_applies_at_once_and_is_recorded(
+    runner: Runner, storage: SqliteStorage, calls: Calls
+) -> None:
+    """Issue 534: a Message is a Run Change a person applies as they send it, with no proposal,
+    only to a running agent stage."""
+    slow = StageDef("slow", "swarm", {"goal": "Find 5 ideas.", "done_when": "5 ranked"})
+    run = runner.start("world_1", "wf_1", 1, "Short", [slow, PICK])
+    calls.started.wait(10)
+    run = at(runner, run.id, "running")
+    to_slow, to_pick = (
+        RunChange("message", s.id, {"text": " Skip old ones. "}) for s in run.stages
+    )
+
+    with pytest.raises(ValueError, match="needs text"):
+        runner.message(run.id, RunChange("message", run.stages[0].id, {"text": " "}), "operator")
+    with pytest.raises(Illegal, match="pick has no agents"):
+        runner.message(run.id, to_pick, "operator")
+    applied = runner.message(run.id, to_slow, "operator")
+    assert (applied.kind, applied.stage_name, applied.by) == ("message", "slow", "operator")
+    assert applied.payload == {"text": "Skip old ones.", "to": None, "interrupt": False}
+    after = fetch(runner, run.id)
+    assert after.changes == [applied] and after.revision == run.revision + 1
+    assert [c["payload"] for c in events(storage, "run.changed")] == [applied.payload]
+
+    calls.release.set()
+    run = at(runner, run.id, "waiting_gate")
+    with pytest.raises(Illegal, match="slow is not running"):
+        runner.message(run.id, to_slow, "operator")

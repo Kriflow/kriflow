@@ -20,7 +20,7 @@ import shutil
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, closing, suppress
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -98,14 +98,17 @@ from swarmify_notifications import SqliteStorage as ChannelStorage
 from swarmify_runs import (
     DEFAULT_CAP,
     UNSPOILED,
+    AppliedChange,
     Connector,
     Gate,
+    Illegal,
     Notifier,
     OverBudget,
     Previews,
     PublishField,
     PublishPreview,
     Run,
+    RunChange,
     RunControl,
     Runner,
     StageDef,
@@ -113,7 +116,7 @@ from swarmify_runs import (
 from swarmify_runs import MIGRATIONS as RUNS_MIGRATIONS
 from swarmify_runs import SqliteStorage as RunStorage
 from swarmify_swarm import MIGRATIONS as SWARM_MIGRATIONS
-from swarmify_swarm import AgentRuntime, CastEntry, SdkRuntime, Stopped, Swarm, build
+from swarmify_swarm import AgentRuntime, CastEntry, Refused, SdkRuntime, Stopped, Swarm, build
 from swarmify_swarm import SqliteStorage as TaskStorage
 from swarmify_swarm.network import ASKED, NetworkWait, Patient
 from swarmify_swarm.sdk import PRICES, default_model
@@ -874,7 +877,8 @@ def create_app(
     def run_swarm(run: Run, stage_id: str, stage: StageDef) -> None:
         folder = world_svc.folder(run.world_id)
         learning_svc.sync(run.world_id)  # shared skills the world lacks load from its folder
-        note = run.send_back_note(stage.name)  # an older send-back's note no longer applies
+        cause = run.visit_cause(stage.name)  # an older send-back's note no longer applies
+        note = cause.note if cause else ""
         # The Cast as it stands when the stage starts: an edit reaches every later stage.
         # The stage's worker count (its `agents` or the start's), one when it has none (ADR 0020).
         members = world_svc.cast(run.world_id, stage.config.get("agents") or 1) or []
@@ -911,6 +915,7 @@ def create_app(
                 run.send_backs,
                 baseline=run.baseline,
                 cast=cast,
+                cause=None if cause is None else asdict(cause),
             )
         except Stopped as exc:
             raise OverBudget(str(exc)) from exc
@@ -1121,6 +1126,22 @@ def create_app(
     app.include_router(worlds.events_router(world_svc))
     app.include_router(worlds.packs_router(SpritePacks(BUNDLED, root / "sprite-packs")))
     app.include_router(workflows.router(workflow_svc, world_svc))
+
+    def send_message(run_id: str, change: RunChange, by: str) -> AppliedChange:
+        """A Message: who gets it is checked first, then it is recorded as a Run Change, then
+        it lands in each agent's inbox (the swarm's)."""
+        to = change.payload.get("to") or None
+        try:
+            names = swarm.recipients(run_id, change.stage, to)
+        except Refused as exc:
+            raise Illegal(str(exc)) from exc
+        applied = runner.message(run_id, change, by)
+        p = applied.payload
+        # The names checked above, not a second check: an agent that finished meanwhile still
+        # gets it queued, so the recorded change and the log agree.
+        swarm.message(run_id, change.stage, applied.id, p["text"], p["to"], p["interrupt"], names)
+        return applied
+
     app.include_router(
         runs.router(
             runner,
@@ -1131,6 +1152,7 @@ def create_app(
             whiteboard.list_tasks,
             swarm.waiting,
             lambda: resources.waits(registry.packages.sandbox.resources),
+            send_message,
         )  # fmt: skip
     )
 

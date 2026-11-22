@@ -315,7 +315,7 @@ function Ask({
           {gate.kind === "pick" && artifacts && cards.length === 0 && (
             <label>
               Your pick
-              <input name="choice" autoComplete="off" placeholder="idea 1" />
+              <input name="choice" autoComplete="off" placeholder="item 1" />
             </label>
           )}
           {gate.kind === "budget" ? (

@@ -80,7 +80,7 @@ from swarmify_runs.machine import (
     Started,
     transition,
 )
-from swarmify_runs.model import Item, ItemView, Pinned, Run, StageDef, items_gate
+from swarmify_runs.model import RERUNS, Item, ItemView, Pinned, Run, StageDef, items_gate
 from swarmify_runs.ports import Notifier, Storage
 
 CHILD_QUEUE = "child-runs"
@@ -993,7 +993,7 @@ def gate_closed(before: Run, after: Run) -> Event | None:
     if same == ("waiting", before.send_backs, before.over_budget):
         return None
     decision = next((d for d in reversed(after.decisions) if d.stage_index == index), None)
-    rerun = next((c for c in reversed(after.changes) if c.kind == "rerun"), None)
+    rerun = next((c for c in reversed(after.changes) if c.kind in RERUNS), None)
     resolution: dict[str, Any] = {"outcome": "aborted"}
     again = after.stages[index].status == "running" and after.send_backs == before.send_backs
     if after.status != "aborted" and before.over_budget:

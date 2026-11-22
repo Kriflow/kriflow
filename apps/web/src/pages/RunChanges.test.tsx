@@ -77,7 +77,7 @@ test("a Stage Edit is proposed, shows what the check refuses, goes stale when th
   // The run's own update carries the change: the Timeline marks the stage, the menu counts it.
   const change = { id: "change_1", run_id: "run_1", kind: "stage_edit", stage_id: "stage_1", stage_index: 1, stage_name: "render", payload: {}, before: {}, by: "operator", at: ts, revision: 5 };
   FakeEventSource.emit("run.updated", { payload: { ...waiting, revision: 5, changes: [change], updated_at: "2026-10-26T10:04:00+00:00" } });
-  await expect.element(screen.getByTestId("timeline")).toMatchTextContent(/render\s*video · Edited by you \d\d:\d\d/);
+  await expect.element(screen.getByTestId("timeline").getByRole("button", { name: /^Step \d+, render, .*, Edited by you \d\d:\d\d$/ })).toMatchTextContent(/render\s*Edited$/);
   await screen.getByRole("button", { name: "Run actions" }).click();
   await screen.getByRole("menuitem", { name: /^Changes \(1\)/ }).click();
   await expect.element(screen.getByTestId("changes")).toMatchTextContent(/Edited render · by you at \d\d:\d\d/);
@@ -133,6 +133,7 @@ test("an Artifact Edit of a finished step's text file shows the line diff and wh
     },
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByRole("tab", { name: "Details" }).click();
   await screen.getByTestId("all-files").getByText("All files (2)").click();
   expect(screen.getByRole("button", { name: "Edit file short.mp4" }).elements()).toHaveLength(0);
   await screen.getByRole("button", { name: "Edit file metadata.md" }).click();

@@ -6,6 +6,7 @@ asks SessionHooks about every call, the world folder as a local plugin and no ho
 that returns a scripted transport, which the SDK drives exactly like the CLI.
 """
 
+import asyncio
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -18,6 +19,9 @@ from claude_agent_sdk import (
     HookMatcher,
     ResultMessage,
     SystemMessage,
+    TextBlock,
+    ToolResultBlock,
+    UserMessage,
     create_sdk_mcp_server,
     tool,
 )
@@ -35,6 +39,8 @@ from swarmify_swarm.ports import (
     ToolError,
 )
 
+INBOX_POLL = 0.5
+"""How often, in seconds, a live session asks its hooks for messages people sent it."""
 DEFAULT_MODEL = "claude-opus-5-5"
 """The model a session runs on when nothing more specific chose one. `SWARMIFY_MODEL` overrides
 it."""
@@ -122,6 +128,15 @@ def _sdk_tool(spec: AgentTool) -> Any:
     return tool(spec.name, spec.description, spec.schema)(handler)
 
 
+def result_text(content: str | list[dict[str, Any]] | None) -> str:
+    """A tool result's text; an image or other non-text part shows as its type in brackets."""
+    if not isinstance(content, list):
+        return content or ""
+    return "\n".join(
+        str(c.get("text", "")) if c.get("type") == "text" else f"[{c.get('type')}]" for c in content
+    )
+
+
 def offered_tools(allowed: list[str]) -> list[str]:
     """The built-in tool names in an allowlist (not MCP tools or patterns), plus the harness."""
     named = [t for t in allowed if t.isalnum()]
@@ -134,10 +149,11 @@ def options(
     model: str | None = None,
     sandboxed_cli: str | None = None,
 ) -> ClaudeAgentOptions:
-    async def pre_tool(data: Any, _tool_use_id: str | None, _context: Any) -> Any:
+    async def pre_tool(data: Any, tool_use_id: str | None, _context: Any) -> Any:
         if data["tool_name"] in HARNESS:
             return {}
-        reason = hooks.before_tool(data["tool_name"], data.get("tool_input") or {})
+        ref = tool_use_id or data.get("tool_use_id")
+        reason = hooks.before_tool(data["tool_name"], data.get("tool_input") or {}, ref)
         if reason is None:
             return {}
         return {
@@ -206,55 +222,101 @@ class SdkRuntime:
         opts = options(spec, hooks, spec.model or self.model, self.sandboxed_cli)
         custom = self.transport(opts) if self.transport else None
         spent, steps, session = 0.0, set[str](), spec.resume or ""
+        turns, output = 1, None  # turns sent and not answered: the prompt, each message after
         async with ClaudeSDKClient(opts, transport=custom) as client:
+
+            async def deliver(sent: list[tuple[str, bool]]) -> None:
+                """Send people's messages as the next user turns, stopping the turn first when
+                one asks to. `turns` counts them before any await, so the session cannot end
+                between taking them from the inbox and sending them."""
+                nonlocal turns
+                turns += len(sent)
+                if any(interrupt for _, interrupt in sent):
+                    await client.interrupt()
+                for text, _ in sent:
+                    await client.query(text)
+
+            async def poll() -> None:
+                while True:
+                    await asyncio.sleep(INBOX_POLL)
+                    if sent := hooks.inbox():
+                        await deliver(sent)
+
             await client.query(spec.prompt)
-            async for msg in client.receive_response():
-                if isinstance(msg, AssistantMessage):
-                    # One model step arrives as one message per content block, each carrying the
-                    # step's usage, so a step is charged once, by its message id.
-                    step = msg.message_id or msg.uuid or str(len(steps))
-                    if step in steps or not msg.usage:
-                        continue
-                    steps.add(step)
-                    usd = step_cost(msg.usage, msg.model or opts.model)
-                    spent += usd
-                    if stop := hooks.cost(usd, step_tokens(msg.usage)):
-                        # Leaving the client ends the CLI; the session id stays resumable.
+            poller = asyncio.create_task(poll())
+            try:
+                async for msg in client.receive_messages():
+                    if isinstance(msg, AssistantMessage | UserMessage) and isinstance(
+                        msg.content, list
+                    ):
+                        for block in msg.content:
+                            if isinstance(block, TextBlock) and block.text.strip():
+                                hooks.said(block.text)
+                            elif isinstance(block, ToolResultBlock):
+                                hooks.tool_result(
+                                    block.tool_use_id,
+                                    result_text(block.content),
+                                    bool(block.is_error),
+                                )
+                    if isinstance(msg, AssistantMessage):
+                        # One model step arrives as one message per content block, each carrying
+                        # the step's usage, so a step is charged once, by its message id.
+                        step = msg.message_id or msg.uuid or str(len(steps))
+                        if step in steps or not msg.usage:
+                            continue
+                        steps.add(step)
+                        usd = step_cost(msg.usage, msg.model or opts.model)
+                        spent += usd
+                        if stop := hooks.cost(usd, step_tokens(msg.usage)):
+                            # Leaving the client ends the CLI; the session id stays resumable.
+                            return SessionEnd(
+                                msg.session_id or session, spent, True, stop, stopped=stop
+                            )
+                    elif isinstance(msg, SystemMessage) and msg.subtype == "init":
+                        session = msg.data["session_id"]
+                        errors = msg.data.get("plugin_errors") or []
+                        failed = {
+                            s["name"]: _stderr(spec.servers.get(s["name"], {}))
+                            for s in msg.data.get("mcp_servers") or []
+                            if s.get("status") == "failed"
+                        }
+                        hooks.started(
+                            SessionInit(
+                                msg.data["session_id"],
+                                list(msg.data.get("skills") or []),
+                                [f"{e.get('plugin')}: {e.get('message')}" for e in errors],
+                                msg.data.get("model") or opts.model or "",
+                                failed,
+                            )
+                        )
+                    elif isinstance(msg, ResultMessage):
+                        # The newest structured answer wins (a message's reply may correct it);
+                        # it outlives a later turn that gives none.
+                        if msg.structured_output is not None:
+                            output = msg.structured_output
+                        turns -= 1
+                        if turns > 0:
+                            continue  # an interrupted turn, or one answered before a message's
+                        if sent := hooks.inbox():  # sent as the turn ended
+                            await deliver(sent)
+                            continue
+                        poller.cancel()
+                        total, before = msg.total_cost_usd, spec.resumed_total
+                        if total is None:
+                            cost = spent
+                        elif before is None:
+                            cost = total
+                        else:  # never below its own steps, should the remembered total be off
+                            cost = max(total - before, spent)
+                        hooks.cost(cost - spent)
                         return SessionEnd(
-                            msg.session_id or session, spent, True, stop, stopped=stop
+                            msg.session_id,
+                            cost,
+                            msg.is_error,
+                            msg.result or "",
+                            output,
+                            total_usd=total,
                         )
-                elif isinstance(msg, SystemMessage) and msg.subtype == "init":
-                    session = msg.data["session_id"]
-                    errors = msg.data.get("plugin_errors") or []
-                    failed = {
-                        s["name"]: _stderr(spec.servers.get(s["name"], {}))
-                        for s in msg.data.get("mcp_servers") or []
-                        if s.get("status") == "failed"
-                    }
-                    hooks.started(
-                        SessionInit(
-                            msg.data["session_id"],
-                            list(msg.data.get("skills") or []),
-                            [f"{e.get('plugin')}: {e.get('message')}" for e in errors],
-                            msg.data.get("model") or opts.model or "",
-                            failed,
-                        )
-                    )
-                elif isinstance(msg, ResultMessage):
-                    total, before = msg.total_cost_usd, spec.resumed_total
-                    if total is None:
-                        cost = spent
-                    elif before is None:
-                        cost = total
-                    else:  # never below its own steps, should the remembered total be off
-                        cost = max(total - before, spent)
-                    hooks.cost(cost - spent)
-                    return SessionEnd(
-                        msg.session_id,
-                        cost,
-                        msg.is_error,
-                        msg.result or "",
-                        msg.structured_output,
-                        total_usd=total,
-                    )
+            finally:
+                poller.cancel()
         raise RuntimeError("the agent session ended without a result")

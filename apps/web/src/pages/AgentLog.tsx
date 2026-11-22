@@ -6,10 +6,10 @@ import { type Task, who } from "../api/tasks";
 export const usd = (n: number) => `$${n.toFixed(4)}`;
 
 /** Tool names as the agent sees them, without the in-process server prefix. */
-const short = (tool: string | null | undefined) => (tool ?? "").replace(/^mcp__swarmify__/, "");
+export const short = (tool: string | null | undefined) => (tool ?? "").replace(/^mcp__swarmify__/, "");
 
 /** A path as a person reads it: inside a build folder from its root, else its last two parts. */
-function path(p: unknown): string {
+export function path(p: unknown): string {
   const s = String(p ?? "");
   const build = s.split("/build/");
   if (build.length > 1) return build.at(-1)!;
@@ -124,13 +124,16 @@ export function describe(e: LogEntry, tasks: Map<string, string> = new Map()): s
   }
 }
 
+/** The log as the Summary reads it: without the Transcript's words and tool results. */
+export const summaryOf = (log: LogEntry[]) => log.filter((e) => e.kind !== "text" && e.kind !== "output" && e.kind !== "message");
+
 const titles = (tasks: Task[]) => new Map(tasks.map((t) => [t.id, t.title]));
 
 /** What an agent is doing now: its latest log entry, in words. */
 function doing(agent: Agent, log: LogEntry[], tasks: Map<string, string>): string {
   if (agent.status === "done") return "Finished";
   if (agent.status === "failed") return "Stopped";
-  const last = log.filter((e) => e.agent === agent.name).at(-1);
+  const last = summaryOf(log).filter((e) => e.agent === agent.name).at(-1);
   return last ? describe(last, tasks) : "Starting";
 }
 
@@ -177,7 +180,8 @@ export function AgentCards({ agents, log, tasks }: { agents: Agent[]; log: LogEn
 }
 
 /** The selected stage's live log, in words. A JSON answer collapses to one line that opens. */
-export function LiveLog({ log, tasks = [], title = "Live log" }: { log: LogEntry[]; tasks?: Task[]; title?: string }) {
+export function LiveLog({ log: all, tasks = [], title = "Live log" }: { log: LogEntry[]; tasks?: Task[]; title?: string }) {
+  const log = summaryOf(all);
   const named = titles(tasks);
   // The last line of the first paint: lines after it arrived live and fade up; an emptied log
   // (another step picked) starts over.

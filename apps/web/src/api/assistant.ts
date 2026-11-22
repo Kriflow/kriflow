@@ -101,6 +101,7 @@ export function cardTitle(card: Card): string {
   const { change, stage_name } = card.proposal;
   if (change.kind === "artifact_edit") return `Edit ${String(change.payload?.path ?? stage_name)}`;
   if (change.kind === "rerun") return `Re-run from ${stage_name}`;
+  if (change.kind === "follow_up") return `Ask ${stage_name} for a change`;
   if (change.kind === "skip") return `Skip ${stage_name}`;
   if (change.kind === "restructure") return `Change the stages from ${stage_name} on`;
   return `Edit ${stage_name}`;

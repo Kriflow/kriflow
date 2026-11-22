@@ -42,7 +42,8 @@ test("a workflow stage links to its child run and the child links back to its pa
     "GET /api/runs/run_top/agents": () => Response.json(agents),
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_top");
-  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Trends waits on its child run Trends · step 1 of 2");
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Trends waits on its child run Trends.");
+  await expect.element(screen.getByTestId("hero-sub")).toHaveTextContent("trends, step 1 of 2. Nothing needs you yet.");
   await expect.element(screen.getByTestId("child-run")).toMatchTextContent("Child run: Trends");
   await expect.element(screen.getByRole("link", { name: "Trends" })).toHaveAttribute("href", "/worlds/world_2/runs/run_mid");
 });

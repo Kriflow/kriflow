@@ -58,7 +58,6 @@ export function statusLine(run: Run, ask?: string | null, connectors: Connectors
 
 function sentence(run: Run, ask: string | null | undefined, connectors: Connectors, now: number): string {
   const at = current(run);
-  const total = run.stages.length;
   const seconds = duration(run, now);
   const kept = " Finished stages keep their artifacts.";
   // A run that has a step that posts and did not reach it says nothing went out.
@@ -69,10 +68,12 @@ function sentence(run: Run, ask: string | null | undefined, connectors: Connecto
       return "Queued. It starts as soon as one of this world's two run slots is free.";
     case "running": {
       if (!at) return "Running.";
-      // The time so far ticks under the strip (Elapsed), so the sentence leaves it out.
-      const step = ` · step ${at.index + 1} of ${total}`;
-      if (at.child) return `${at.name} waits on its child run ${at.child.name}${step}`;
-      return `${at.name} is working${step}`;
+      // The time so far ticks under the strip (Elapsed), and the step is the hero's sub line.
+      const items = at.items ?? [];
+      const settled = items.filter((i) => ["done", "failed", "aborted"].includes(i.status)).length;
+      if (items.length) return `${at.name} is working: ${settled} of ${items.length} done.`;
+      if (at.child) return `${at.name} waits on its child run ${at.child.name}.`;
+      return `${at.name} is working.`;
     }
     case "waiting_gate":
       return `Waiting for you: ${ask ?? at?.ask ?? (at ? `${at.name} needs an answer.` : "a gate needs an answer.")}`;

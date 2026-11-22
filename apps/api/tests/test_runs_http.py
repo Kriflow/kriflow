@@ -181,3 +181,21 @@ def test_runs_list_in_pages_that_hold_still_as_new_runs_start(running: TestClien
     assert "x-next-before" not in last.headers
     assert [r["id"] for r in running.get(url, params={"limit": 1}).json()] == [newer]
     assert running.get(url, params={"limit": 0}).status_code == 422
+
+
+def test_a_run_is_served_with_how_long_the_last_finished_run_of_its_workflow_took(
+    running: TestClient,
+) -> None:
+    world = running.post("/api/worlds", json={"name": "Video"}).json()["id"]
+    wf = running.post(f"/api/worlds/{world}/workflows", json={"yaml": ONE_GATE}).json()
+    first = running.post(f"/api/workflows/{wf['workflow_id']}/runs", json={}).json()
+    url = f"/api/runs/{first['id']}"
+    until(lambda: running.get(url).json()["status"] == "waiting_gate")
+    assert running.get(url).json()["last_run_seconds"] is None  # a first run has nothing to beat
+    assert running.post(f"{url}/decision", json={}).status_code == 200
+    until(lambda: running.get(url).json()["status"] == "done")
+    assert running.get(url).json()["last_run_seconds"] is None  # it is not its own last run
+
+    second = running.post(f"/api/workflows/{wf['workflow_id']}/runs", json={}).json()
+    took = running.get(f"/api/runs/{second['id']}").json()["last_run_seconds"]
+    assert isinstance(took, float) and took >= 0

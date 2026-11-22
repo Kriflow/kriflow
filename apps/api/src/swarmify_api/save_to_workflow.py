@@ -150,8 +150,8 @@ def router(
         change = next((c for c in run.changes if c.id == change_id), None) if run else None
         if run is None or change is None:
             raise HTTPException(404, "change not found")
-        if change.kind == "rerun":
-            raise HTTPException(409, "a Rerun changes nothing a workflow holds")
+        if change.kind in ("rerun", "follow_up"):
+            raise HTTPException(409, "a Rerun or Follow-up changes nothing a workflow holds")
         if run.workflow_id is None or run.workflow_version is None:
             raise HTTPException(409, "an Ad Hoc Run has no workflow to save to")
         config = body.config if change.kind == "artifact_edit" else None

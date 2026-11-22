@@ -35,9 +35,7 @@ def test_pause_resume_the_cap_and_abort_reaching_the_child(
         run = api.post(f"/workflows/{wf}/runs", json={}).json()["id"]
         page.goto(f"{base_url}/worlds/{world}/runs/{run}")
         status = page.get_by_test_id("status-line")
-        expect(status).to_have_text(
-            "Child waits on its child run Brief · step 1 of 2", timeout=20_000
-        )
+        expect(status).to_have_text("Child waits on its child run Brief.", timeout=20_000)
         page.get_by_test_id("child-run").get_by_role("link", name="Brief").click()
         expect(page.get_by_test_id("child-of")).to_contain_text("child of Parent")
         expect(status).to_have_text("Waiting for you: Go?")
@@ -97,7 +95,8 @@ def test_a_baseline_beside_the_swarm_and_an_ad_hoc_run_saved_as_a_workflow(
         page.goto(f"{base_url}/worlds/{world}")
         page.get_by_role("button", name="Start a run of Research").click()
         expect(status).to_have_text(re.compile(r"^Done in "), timeout=20_000)
-        page.get_by_text("Compare with one agent").click()
+        page.get_by_role("button", name="Run actions").click()
+        page.get_by_role("menuitem", name=re.compile(r"^Compare with one agent")).click()
         expect(page.get_by_test_id("baseline")).to_contain_text("One agent with no graph did this")
         page.get_by_role("navigation", name="Main").get_by_role("link", name="Runs").click()
         expect(page.get_by_test_id("run-list")).to_contain_text("baseline")

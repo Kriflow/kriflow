@@ -24,10 +24,11 @@ with the world it came from.
 import asyncio
 import json
 import re
+import shutil
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
@@ -225,6 +226,12 @@ class _At:
     """The note of the send-back that caused this visit, when it named this stage."""
     baseline: bool = False
     cast: tuple[CastEntry, ...] = tuple(DEFAULT_CAST)
+    cause: str | None = None
+    """What started this Attempt when a person sent the run back to this stage: `rerun`,
+    `follow_up` or `send_back`; None otherwise."""
+    opening: set[str] = field(default_factory=set, compare=False)
+    """The workers whose first session of a new Attempt has not started yet: a Rerun starts
+    them afresh, a Follow-up continues their sessions with the person's words first."""
 
     def entry(self, name: str, role: AgentRole) -> CastEntry:
         return next((c for c in self.cast if c.name == name), CastEntry(name, role))
@@ -449,6 +456,8 @@ class Swarm:
         self.budget = budget
         self.network = network or NetworkWait()
         self._waiting: dict[tuple[str, str, str], Waiting] = {}
+        self._live: set[tuple[str, str]] = set()
+        """The (stage id, agent) of every session running in this process now."""
         self.board = board
         self.runtime = runtime
         self.files = files
@@ -468,6 +477,49 @@ class Swarm:
         visit: int = 0,
         baseline: bool = False,
         cast: list[CastEntry] | None = None,
+        cause: dict[str, Any] | None = None,
+    ) -> None:
+        """Run the stage as one Attempt (issue 535), then end it, whatever happened: `visit`
+        names it, so a retried or resumed stage goes on with the same Attempt. `cause` is what
+        sent the run back to this stage (`kind`, `note`, `by`, `at`), None otherwise. A new
+        Attempt after the first keeps the artifacts the last one left in `attempts/<n>`. A
+        Rerun's workers start afresh; a Follow-up's continue their sessions, the person's words
+        their next turn. Raises as `_run_stage` does."""
+        attempt, new = self.board.start_attempt(world_id, run_id, stage_id, visit, cause)
+        if new:  # what the last Attempt's agents never took is not this one's to read
+            self.board.drop(stage_id, DROPPED)
+        opening: set[str] = set()
+        if new and attempt.number > 1:
+            folder = self.files.stage_folder(world_id, run_id, stage_id)
+            if (folder / "artifacts").is_dir():
+                kept = folder / "attempts" / str(attempt.number - 1)
+                shutil.copytree(folder / "artifacts", kept, dirs_exist_ok=True)
+            opening = {c.name for c in (cast or DEFAULT_CAST) if c.role == "worker"} or {WORKER}
+        try:
+            self._run_stage(
+                world_id, run_id, stage_id, stage_name, config, world_folder, notes, visit,
+                baseline, cast, (cause or {}).get("kind"), opening,
+            )  # fmt: skip
+            # Done: none of its agents takes another message. A failed or stopped stage keeps
+            # them queued for its retry or resume, which goes on with the same Attempt.
+            self.board.drop(stage_id, DROPPED)
+        finally:
+            self.board.end_attempt(stage_id)
+
+    def _run_stage(
+        self,
+        world_id: str,
+        run_id: str,
+        stage_id: str,
+        stage_name: str,
+        config: dict[str, Any],
+        world_folder: Path,
+        notes: list[str] | None,
+        visit: int,
+        baseline: bool,
+        cast: list[CastEntry] | None,
+        cause: str | None,
+        opening: set[str],
     ) -> None:
         """Plan an empty whiteboard, work it until no task is left, then judge it: a pass
         projects the stage's typed artifacts, a fail adds gap tasks and loops, at most
@@ -497,6 +549,8 @@ class Swarm:
             tuple(notes or ()),
             baseline,
             tuple(cast) if cast else tuple(DEFAULT_CAST),
+            cause,
+            opening,
         )
         if baseline:
             # ponytail: no judge, so a baseline stage projects no typed artifacts; later stages
@@ -603,10 +657,19 @@ class Swarm:
         if entry.tools is not None:
             servers = [t for t in servers if t in entry.tools]
 
+        # The first session of a new Attempt: a Rerun starts it afresh, a Follow-up gives the
+        # person's words first to the session it continues.
+        # ponytail: a crash before that session starts resumes the last Attempt's session on retry.
+        opening = entry.name in at.opening
+        at.opening.discard(entry.name)
+        follow = opening and at.cause == "follow_up" and at.notes
+        asked = f"{FROM_PERSON}{at.notes[-1]}\n\n" if follow else ""
+        work = f"Work the whiteboard of stage {at.stage_name} until no task is ready."
+
         def spec(resume: str | None) -> SessionSpec:
             return SessionSpec(
                 system_prompt=self._system_prompt(at, entry),
-                prompt=f"Work the whiteboard of stage {at.stage_name} until no task is ready.",
+                prompt=asked + work,
                 cwd=self.files.stage_folder(at.world_id, at.run_id, at.stage_id),
                 plugin=at.world_folder,
                 tools=self._tools(
@@ -629,7 +692,8 @@ class Swarm:
                 model=entry.model,
             )
 
-        self._session(at, entry.name, "worker", spec, allowed, lambda _: None)
+        fresh = opening and at.cause == "rerun"
+        self._session(at, entry.name, "worker", spec, allowed, lambda _: None, fresh=fresh)
 
     def _judge(self, at: "_At", kind: OutputType | None) -> None:
         board, files = self.board, self.files
@@ -904,6 +968,9 @@ class Swarm:
         )
         deadline = None if timeout is None else time.monotonic() + timeout
         failed, lost, offline = 0, False, 0.0
+        # Messages taken from the inbox stay here until a session really ran with them, so one
+        # that never started (lost, died, offline) hands them to the next.
+        pending: list[str] = []
         while failed < SESSIONS:
             agent = board.agent(at.world_id, at.run_id, at.stage_id, name, role)
             stored = agent.session_id
@@ -912,11 +979,16 @@ class Swarm:
                 said = "A replacement resumes" if failed else "Continuing"
                 board.log(at.stage_id, name, "session", f"{said} session {resume}.")
             session = spec(resume)
+            hooks.secrets |= secret_values(session)
             if resume:
                 session = replace(session, resumed_total=agent.session_total_usd)
             if lost:
                 session = replace(session, prompt=f"{session.prompt}\n\n{self._progress(at, name)}")
+            pending += [t for t, _ in hooks.inbox()]  # sent while no session ran: it comes first
+            if pending:
+                session = replace(session, prompt="\n\n".join([*pending, session.prompt]))
             left = None if deadline is None else max(deadline - time.monotonic(), 0)
+            self._live.add((at.stage_id, name))
             try:
                 end = asyncio.run(asyncio.wait_for(self.runtime.run(session, hooks), left))
             except SessionLost:
@@ -944,6 +1016,9 @@ class Swarm:
                 board.log(at.stage_id, name, "error", f"The session died: {exc}")
                 failed += 1
                 continue
+            finally:
+                self._live.discard((at.stage_id, name))
+            pending = []  # the session ran, so its transcript holds them
             if end.total_usd is not None:
                 board.update_agent(at.stage_id, name, session_total_usd=end.total_usd)
             if end.stopped:
@@ -974,6 +1049,43 @@ class Swarm:
             return answer
         board.update_agent(at.stage_id, name, status="failed")
         raise StageError(f"{name} failed {SESSIONS} sessions in a row; see the stage log")
+
+    def recipients(self, run_id: str, stage_id: str, to: str | None = None) -> list[str]:
+        """Who a message to the stage gets to: its workers still working, or the one named `to`.
+        While the stage runs but none of its workers does (its judge scoring, say), each of its
+        workers gets it queued, so its next session takes it first. Refused when no agent of the
+        stage is working, or `to` is not one of its workers."""
+        agents = [a for a in self.board.list_agents(run_id) if a.stage_id == stage_id]
+        workers = [a for a in agents if a.role == "worker"]
+        if not workers or not any(a.status == "working" for a in agents):
+            raise Refused(NONE_WORKING)
+        if to:
+            if not any(a.name == to for a in workers):
+                raise Refused(f"{to} is not a worker in this stage")
+            return [to]
+        working = [a.name for a in workers if a.status == "working"]
+        return working or [a.name for a in workers]
+
+    def message(
+        self,
+        run_id: str,
+        stage_id: str,
+        change: str,
+        text: str,
+        to: str | None = None,
+        interrupt: bool = False,
+        names: list[str] | None = None,
+    ) -> list[str]:
+        """A person's Message, the Run Change `change`, to `names` (else `recipients`): each
+        gets a queued `message` line, which its live session takes as its next user turn
+        (stopping the turn first with `interrupt`), else the session it starts or resumes takes
+        first. The agents it went to; refused as `recipients` is."""
+        names = names if names is not None else self.recipients(run_id, stage_id, to)
+        for name in names:
+            why = MID_TURN if (stage_id, name) in self._live else BETWEEN
+            state = {"state": "queued", "to": to, "interrupt": interrupt, "why": why}
+            self.board.log(stage_id, name, "message", text, input=state, ref=change)
+        return names
 
     def waiting(self) -> list[Waiting]:
         """The agents waiting for the network right now, the longest waiting first."""
@@ -1207,6 +1319,41 @@ class Swarm:
         ]
 
 
+FROM_PERSON = "A message from the person running this stage: "
+"""How a Message reads to the agent it reaches."""
+NONE_WORKING = "No agent is working in this stage now"
+MID_TURN = "mid-turn and gets this at its next turn."
+BETWEEN = "between sessions and gets this first when its session resumes."
+"""Why a message waits, said of the agent: "<agent> is <why>"."""
+DROPPED = "the stage ended first"
+"""Why a message was never delivered: its Attempt ended before its agent took it."""
+EXCERPT = 2000
+"""The most of a tool result the log keeps, in characters."""
+SAID = 8000
+"""The most of one thing an agent said that the log keeps, in characters."""
+SECRET = re.compile(
+    r"(Bearer\s+|\b[A-Z0-9_]*_(?:KEY|SECRET|TOKEN|PASSWORD)\s*=\s*[\"']?)[^\s\"']{4,}"
+    r"|\b(?:sk-|gh[pousr]_|github_pat_|xox[abpr]-)[A-Za-z0-9_-]{12,}"
+)
+"""Common token shapes: a Bearer header, a `*_KEY=`-style assignment, a known key prefix."""
+
+
+def scrub(text: str, secrets: Collection[str] = ()) -> str:
+    """`text` with `secrets` (the values the session was given) and common token shapes masked
+    as [secret], for a log every open page streams."""
+    for value in sorted(secrets, key=len, reverse=True):
+        if len(value) >= 6:  # a short value is no secret, and masking it mangles the text
+            text = text.replace(value, "[secret]")
+    return SECRET.sub(lambda m: f"{m.group(1) or ''}[secret]", text)
+
+
+def secret_values(spec: SessionSpec) -> set[str]:
+    """The values a session holds that must not reach the log: its environment and its
+    connectors' environments, where their Credentials go."""
+    envs = [spec.env, *(c.get("env") or {} for c in spec.servers.values())]
+    return {str(v) for env in envs for v in env.values() if v}
+
+
 class _Hooks:
     """The SessionHooks of one agent: the live log, the allowlist, the graph-first rule and the
     renewal of its claims on every tool call and model step, so a working agent keeps them
@@ -1235,6 +1382,10 @@ class _Hooks:
         self.budget = budget
         self.graph_first = graph_first
         self.stopped: str | None = None
+        self.calls: dict[str, str] = {}
+        """The tool of each allowed call by its tool use id, for pairing its result."""
+        self.secrets: set[str] = set()
+        """The values the session was given (its Credentials), masked in what it logs."""
 
     def started(self, init: SessionInit) -> None:
         self.board.update_agent(
@@ -1259,12 +1410,42 @@ class _Hooks:
                 self.stage_id, self.agent, "error", f"Tool server {server} failed to start: {said}"
             )
 
-    def before_tool(self, tool: str, input: dict[str, Any]) -> str | None:
+    def before_tool(self, tool: str, input: dict[str, Any], ref: str | None = None) -> str | None:
         self.renew()
         reason = self._refusal(tool, input)
         kind = "denied" if reason else "tool"
-        self.board.log(self.stage_id, self.agent, kind, reason or "", tool=tool, input=input)
+        self.board.log(
+            self.stage_id, self.agent, kind, reason or "", tool=tool, input=input, ref=ref
+        )
+        if ref and not reason:
+            self.calls[ref] = tool
         return reason
+
+    def said(self, text: str) -> None:
+        self.board.log(self.stage_id, self.agent, "text", scrub(text, self.secrets)[:SAID])
+
+    def tool_result(self, ref: str, text: str, is_error: bool) -> None:
+        """Log an allowed call's result as a capped excerpt; a refused or harness call's result
+        is left out, its refusal already logged or nothing to show."""
+        tool = self.calls.pop(ref, None)
+        if tool is None:
+            return
+        self.board.log(
+            self.stage_id,
+            self.agent,
+            "output",
+            scrub(text, self.secrets)[:EXCERPT],
+            tool=tool,
+            input={"chars": len(text), "error": is_error},
+            ref=ref,
+        )
+
+    def inbox(self) -> list[tuple[str, bool]]:
+        """The agent's queued messages, now delivered, each worded as from a person."""
+        return [
+            (f"{FROM_PERSON}{e.detail}", bool((e.input or {}).get("interrupt")))
+            for e in self.board.take(self.stage_id, self.agent)
+        ]
 
     def cost(self, usd: float, tokens: dict[str, int] | None = None) -> str | None:
         """Add the estimate to the agent, then ask the Budget whether the session goes on."""

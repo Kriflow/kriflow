@@ -31,8 +31,9 @@ test("the run page shows the spend against the budget, and the one-agent compari
   await expect.element(screen.getByTestId("budget")).toHaveTextContent("$1.84 of $5.00");
   await expect.element(screen.getByTestId("budget-line")).toHaveTextContent("$3.16 left before the budget pauses the run.");
   await expect.element(screen.getByRole("meter", { name: "Budget spent" })).toHaveAttribute("value", "1.84");
-  await expect.element(screen.getByTestId("baseline")).not.toBeVisible();
-  await screen.getByText("Compare with one agent").click();
+  expect(screen.getByTestId("baseline").query()).toBeNull();
+  await screen.getByRole("button", { name: "Run actions" }).first().click();
+  await screen.getByRole("menuitem", { name: /^Compare with one agent/ }).click();
   await expect
     .element(screen.getByTestId("baseline"))
     .toMatchTextContent(/^One agent with no graph did this for \$2\.60 in 54 min; this run \$1\.84/);
@@ -61,6 +62,8 @@ test("with no baseline yet the comparison says how to get one, and a baseline na
     "GET /api/runs/run_0/baseline": () => Response.json(hooli),
   });
   const { screen, router } = await mountAt("/worlds/world_1/runs/run_1");
+  await screen.getByRole("button", { name: "Run actions" }).first().click();
+  await screen.getByRole("menuitem", { name: /^Compare with one agent/ }).click();
   await expect.element(screen.getByTestId("baseline")).toMatchTextContent(/^No one-agent run of this yet/);
   await expect.element(screen.getByTestId("budget")).toHaveTextContent("$0.00 spent, no budget set");
   await router.navigate({ to: "/worlds/$worldId/runs/$runId", params: { worldId: "world_1", runId: "run_0" } });

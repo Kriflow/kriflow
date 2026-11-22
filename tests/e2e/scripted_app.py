@@ -3,7 +3,8 @@
 Every swarm stage takes three sessions through the real SDK client, hooks and in-process
 tools, each scripted by its role, told apart by its system prompt: the planner seeds one task;
 the worker queries the graph, claims it, writes a note and an artifact and finishes it; the
-judge passes with two ranked ideas. Every run's retro session proposes nothing, or, with
+judge passes with two ranked ideas. A stage named `steer` has a worker that waits mid-turn for
+a person's message. Every run's retro session proposes nothing, or, with
 `SWARMIFY_E2E_RETRO=propose` in the app's environment, one new skill. A `remotion_build` stage's
 builder session installs packages and writes src/Main.tsx.
 
@@ -38,7 +39,7 @@ from swarmify_connectors.mcp_transport import Caller
 from swarmify_learning import SYSTEM as RETRO_SYSTEM
 from swarmify_memory import GRAPH_OUT
 from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script, ScriptedTransport
+from swarmify_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedTransport
 from swarmify_worlds import World, Worlds
 
 BUILDER_SYSTEM = (Path(__file__).parents[2] / "connectors/remotion_build/system.md").read_text()
@@ -57,6 +58,7 @@ ffmpeg -i take.mp4 -vf scale=1080:1920,setsar=1 -c:v libx264 -preset slow -crf 1
 """The worker's ideas.md: a wide code block and a wide table for the phone reader, then the list."""
 PLANNER = [Answer({"tasks": [{"title": "Pull this week's top shorts"}]})]
 WORKER = [
+    Say("I'll check what the world already knows, then claim the task."),
     Call(tool_id("query_graph"), {"question": "What do we know already?"}),
     Call(tool_id("claim_task")),
     Call("Bash", {"command": "ls"}),
@@ -65,6 +67,21 @@ WORKER = [
     Call(tool_id("finish_task"), {"task_id": LAST, "note": "Found two."}),
     Say("Done."),
 ]
+STEER = [
+    Say("I'll start once you say which sources to trust."),
+    Hold(120),
+    *WORKER[1:],
+]
+"""A worker of a stage named `steer`: mid-turn until a person messages it (or two minutes pass),
+so a test can message a live session (issue 534)."""
+STEERED = [
+    Call(tool_id("query_graph"), {"question": "What does the filing say?"}),
+    Call(tool_id("claim_task")),
+    Call(tool_id("write_artifact"), {"name": "ideas.md", "content": IDEAS_MD}),
+    Call(tool_id("finish_task"), {"task_id": LAST, "note": "Done your way."}),
+    Say("Got it. Using the filing, not the blog post."),
+]
+"""Its reply to a message: the work again, so a message that stopped the turn still finishes."""
 IDEAS = [
     {
         "title": "Hook first",
@@ -282,6 +299,7 @@ def create_app() -> FastAPI:
         BUILDER_SYSTEM: Script(BUILDER, cost=0.0042),
         "You are the planner of a swarm": Script(PLANNER, cost=0.0042),
         "You are the judge of a swarm": Script(JUDGE, cost=0.0042),
+        "a worker in a swarm. Stage: steer": Script(STEER, cost=0.0042, replies=STEERED),
         "a worker in a swarm": Script(WORKER, cost=0.0042),
     }
 

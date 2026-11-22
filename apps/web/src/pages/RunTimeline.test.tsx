@@ -133,10 +133,10 @@ test("running: the status line says which stage works, the step and the time, an
 
   const running = run("running", [research("done"), voice("done"), video("running", timed(3, null))], { updated_at: at(4) });
   FakeEventSource.emit("run.updated", { payload: running });
-  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Video is working · step 3 of 3");
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Video is working.");
   await expect.element(screen.getByTestId("elapsed")).toHaveTextContent("4m 0s");
   const rail = screen.getByTestId("timeline");
-  await expect.element(rail).toMatchTextContent(/research\s*swarm\s*2m 14s\s*voice\s*audio\s*1m 14s\s*video\s*build\s*running/);
+  await expect.element(rail).toMatchTextContent(/research\s*2m 14s\s*voice\s*1m 14s\s*video\s*running/);
   // The run moved on; the step you are on stays, its log is not fetched again, and Go there follows.
   await expect.element(screen.getByTestId("follow")).toHaveTextContent("Now at video · Go there");
   await expect.element(screen.getByRole("button", { name: /^Step 1, research/ })).toHaveAttribute("aria-pressed", "true");
@@ -172,7 +172,7 @@ test("at a gate: the status line asks the gate's question, and the gate's panel 
   await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Waiting for you: Watch it. Approve or send back.");
   // The thing under review and the answer lead the step's panel; no run link, the page names it.
   const panel = screen.getByTestId("stage-panel");
-  await expect.element(panel).toMatchTextContent(/^review\s*gate · step 4 of 4 · waiting\s*Watch it\. Approve or send back\./);
+  await expect.element(panel).toMatchTextContent(/^review\s*Gate\s*step 4 of 4\s*waiting\s*Decision.*Ask\s*Watch it\. Approve or send back\./);
   await expect.element(panel.getByTestId("player")).toHaveAttribute("src", "/api/worlds/world_1/files/runs/run_1/stage_2/artifacts/video.mp4");
   await expect.element(panel.getByRole("button", { name: "Approve" })).toBeVisible();
   expect(panel.getByRole("link", { name: "Weekly short" }).query()).toBeNull();
@@ -205,7 +205,6 @@ test("answered on the run page: you stay on the step, see what you decided, and 
   });
   const { screen, router } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_3");
   const panel = screen.getByTestId("stage-panel");
-  const scrolled = window.scrollY;
   await panel.getByText("Add a note", { exact: true }).click();
   await panel.getByLabelText(/^Note/).fill("Good pace.");
   await panel.getByRole("button", { name: "Approve" }).click();
@@ -218,6 +217,7 @@ test("answered on the run page: you stay on the step, see what you decided, and 
   expect(panel.getByRole("button", { name: "Approve" }).query()).toBeNull();
 
   // The run moves on; the page does not.
+  const scrolled = window.scrollY;
   FakeEventSource.emit("run.updated", {
     payload: run("running", [research("done"), voice("done"), video("done"), review("done"), publish("running", timed(9, null))], {
       updated_at: at(30),
@@ -294,7 +294,7 @@ test("done with a video: the run's time, where it was posted, and the video in p
   await expect.element(screen.getByTestId("follow")).not.toBeInTheDocument();
   await expect.element(screen.getByRole("link", { name: "Open the post" }).first()).toHaveAttribute("href", "https://youtu.be/abc");
   const panel = screen.getByTestId("stage-panel");
-  await expect.element(panel).toMatchTextContent(/^video\s*build · step 3 of 5 · 4m 14s/);
+  await expect.element(panel).toMatchTextContent(/^video\s*Build\s*step 3 of 5\s*4m 14s/);
   await expect.element(panel.getByTestId("result")).toMatchTextContent(/What\s*video\.mp4\s*Made by\s*video, step 3 of 5/);
   await expect.element(screen.getByTestId("budget")).toHaveTextContent("$5.06 of $40.00");
   await expect.element(screen.getByTestId("budget-line")).toHaveTextContent("$34.94 left before the budget pauses the run.");
@@ -310,6 +310,7 @@ test("done with a video: the run's time, where it was posted, and the video in p
   const out = screen.getByTestId("publish");
   await expect.element(out).toMatchTextContent(/Where\s*YouTube\s*Title\s*Kids short\s*Visibility\s*private\s*When\s*Right after confirming\.\s*Outcome\s*1,234 views, 12 clicks as of 2026-10-27/);
   await expect.element(out.getByRole("link", { name: "Open the post" })).toHaveAttribute("href", "https://youtu.be/abc");
+  await screen.getByRole("tab", { name: "Details" }).click();
   await expect.element(screen.getByText("Technical details")).toBeVisible();
   await expect.element(screen.getByTestId("call-request")).not.toBeVisible();
 });
@@ -383,7 +384,7 @@ test("paused and aborted say where, and an abort names what was kept", async () 
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
   await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Paused at voice.");
   let menu = await runMenu(screen);
-  await expect.element(menu).toMatchTextContent(/^Resume\s*Agents pick up where they stopped; you stay here.*Abort run\s*Stops every agent; finished steps keep their artifacts$/);
+  await expect.element(menu).toMatchTextContent(/^Resume\s*Agents pick up where they stopped; you stay here.*Copy run id\s*run_1\s*Abort run\s*Stops every agent; finished steps keep their artifacts$/);
   await menu.getByRole("menuitem", { name: /^Resume/ }).click();
   await vi.waitFor(() => expect(posted).toEqual(["resume"]));
   await (await runMenu(screen)).getByRole("menuitem", { name: /^Abort run/ }).click();
@@ -400,9 +401,9 @@ test("paused and aborted say where, and an abort names what was kept", async () 
 test("clicking a step selects it and keeps it in the URL, and a link opens the same step", async () => {
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(run("done", [research("done"), voice("done"), video("done")])) });
   const { screen, router } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
-  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^research\s*swarm/);
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^research\s*Agents/);
   await screen.getByRole("button", { name: /^Step 2, voice/ }).click();
-  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^voice\s*audio · step 2 of 3 · 1m 14s/);
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^voice\s*Audio\s*step 2 of 3\s*1m 14s/);
   expect(router.state.location.search).toEqual({ stage: "stage_1" });
 });
 
@@ -512,9 +513,10 @@ test("a package's step gets its panel from the media it makes, never from its na
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
   // by what it made, and before it made anything by what its Manifest says it makes
-  await expect.element(screen.getByTestId("timeline")).toMatchTextContent(/say\s*audio.*say again\s*audio/);
-  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^say\s*audio · step 1 of 2/);
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^say\s*Audio\s*step 1 of 2/);
   await expect.element(screen.getByTestId("audio").first()).toHaveAttribute("src", "/api/worlds/world_1/files/runs/run_1/stage_0/artifacts/said.wav");
+  await screen.getByRole("button", { name: /^Step 2, say again/ }).click();
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^say again\s*Audio\s*step 2 of 2/);
 });
 
 test("retro panel: the proposal and whether it was approved", async () => {
@@ -545,6 +547,7 @@ test("a connector stage keeps its raw call under a closed Technical details, and
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
   await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/Working: 40%/);
+  await screen.getByRole("tab", { name: "Details" }).click();
   await screen.getByText("Technical details").click();
   await expect.element(screen.getByTestId("call")).toMatchTextContent(/fal_video · fal_video · polling · attempt 1 · polled 3 times/);
   await expect.element(screen.getByTestId("call-request")).toMatchTextContent(/"output": "clip\.mp4"/);
@@ -602,71 +605,99 @@ test("a done run can be saved as a workflow; you stay on the run and a link open
   expect(router.state.location.pathname).toBe("/worlds/world_1/workflows/wf_7");
 });
 
-test("the time strip: widths follow step times, a long wait on a person is capped with its real time, and a segment selects its step", async () => {
-  // research 2m 14s, the review waited 50m 14s, video 4m 14s, publish not started.
-  const strip = run("running", [research("done"), review("done", timed(2, 52)), video("running", timed(52, 56)), { ...publish("pending"), started_at: null, ended_at: null }]);
-  fakeFetch({ "GET /api/runs/run_1": () => Response.json(strip) });
+test("the stage rail: each stage wears its kind's glyph or its package's icon, marks its state twice, and a tap selects it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(at(10)));
+  const items = ["a", "b", "c", "d", "e"].map((key, i) => ({ key, title: key, status: i < 3 ? "done" : "running", approved: false }));
+  const steps = [
+    research("done"),
+    stage(1, "fan", "workflow", "running", { ...timed(2, null), items }),
+    stage(2, "pick", "gate", "pending"),
+    stage(3, "nested", "workflow", "pending"),
+    stage(4, "post", "connector", "pending", { calls: "youtube" }),
+    stage(5, "render", "connector", "pending", { calls: "remotion_render" }),
+    stage(6, "retro", "retro", "pending"),
+  ].map((s) => (s.status === "pending" ? { ...s, started_at: null, ended_at: null } : s));
+  const youtube = { ...CONNECTORS.find((c) => c.name === "youtube")!, icon: "icon.svg" };
+  fakeFetch({
+    "GET /api/worlds/world_1/connectors": () => Response.json([...CONNECTORS.filter((c) => c.name !== "youtube"), youtube]),
+    "GET /api/runs/run_1": () => Response.json(run("running", steps)),
+  });
   const { screen, router } = await mountAt("/worlds/world_1/runs/run_1");
-  const seg = (name: RegExp) => screen.getByTestId("strip").getByRole("button", { name });
-  await expect.element(seg(/^review/)).toHaveTextContent("review · 50m 14s");
-  await expect.element(seg(/^review/)).toHaveAttribute("title", "review · 50m 14s");
-  const width = (name: RegExp) => seg(name).element().getBoundingClientRect().width;
-  // The wait shows as 1.5 times the longest working step, not 12 times it.
-  expect(width(/^review/) / width(/^video/)).toBeCloseTo(1.5, 1);
-  expect(width(/^video/) / width(/^research/)).toBeCloseTo(254 / 134, 1);
-  expect(width(/^publish · not started/)).toBeCloseTo(56, 0);
-
-  await expect.element(seg(/^video/)).toHaveAttribute("aria-pressed", "true");
-  await seg(/^research/).click();
+  const rail = screen.getByTestId("timeline");
+  const node = (n: number) => rail.element().querySelectorAll("li")[n]!;
+  await expect.element(rail.getByTestId("package-icon")).toHaveAttribute("src", "/api/packages/youtube/1.0.0/icon");
+  const kinds = [...rail.element().querySelectorAll("li")].map((li) => li.querySelector("svg[class*='kind-']")?.getAttribute("class")?.match(/kind-(\S+)/)?.[1] ?? "package");
+  expect(kinds).toEqual(["swarm", "fan-out", "gate", "workflow", "package", "connector", "retro"]);
+  // Done: a tick. Running: its own class, its progress under it. Not started: no mark, no time.
+  expect(node(0).querySelector(".mark-done")).not.toBeNull();
+  expect(node(1).className).toContain("node-running");
+  expect(node(1).querySelector(".count")?.textContent).toBe("×5");
+  expect(node(1).querySelector(".dt")?.textContent).toBe("3 of 5");
+  expect(getComputedStyle(node(1).querySelector(".tile")!).borderTopColor).not.toBe(getComputedStyle(node(2).querySelector(".tile")!).borderTopColor);
+  expect(getComputedStyle(node(2).querySelector(".tile")!).borderTopStyle).toBe("dashed");
+  // The hero says the fan-out's progress and when it should be done at this pace.
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Fan is working: 3 of 5 done.");
+  await expect.element(screen.getByTestId("hero-sub")).toHaveTextContent("fan, step 2 of 7. About 5 min left at this pace. Nothing needs you yet.");
+  // Arriving pins the live stage; a tap selects another and pins it, and nothing moves it after.
+  await vi.waitFor(() => expect(router.state.location.search).toEqual({ stage: "stage_1" }));
+  await rail.getByRole("button", { name: /^Step 1, research/ }).click();
   expect(router.state.location.search).toEqual({ stage: "stage_0" });
-  await expect.element(seg(/^research/)).toHaveAttribute("aria-pressed", "true");
-  await expect.element(screen.getByRole("button", { name: /^Step 1, research/ })).toHaveAttribute("aria-pressed", "true");
+  await expect.element(rail.getByRole("button", { name: /^Step 1, research/ })).toHaveAttribute("aria-pressed", "true");
   await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^research/);
+  vi.useRealTimers();
 });
 
-test("on a phone the run opens on a status line, the strip with its spend, and the step button before the step", async () => {
+test("on a phone the run opens on the hero with its numbers, then the rail, then the step", async () => {
   await page.viewport(390, 844);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(at(21)));
-  const running = run("running", [research("done"), voice("done"), video("running", timed(3, null))], { budget_usd: 10, spent_usd: 5.01 });
+  const running = run("running", [research("done"), voice("done"), video("running", timed(3, null))], { budget_usd: 10, spent_usd: 5.01, last_run_seconds: 1500 });
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(running) });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
   await expect.element(screen.getByTestId("run-pill")).toHaveTextContent("running");
-  await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/^Video is working · step 3 of 3$/);
-  await expect.element(screen.getByTestId("strip-spend")).toHaveTextContent("$5.01 of $10.00");
+  await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/^Video is working\.$/);
+  await expect.element(screen.getByTestId("spend-stat")).toMatchTextContent(/\$5\.01 of \$10\.00$/);
+  await expect.element(screen.getByTestId("steps-stat")).toMatchTextContent(/^2 of 3/);
+  await expect.element(screen.getByTestId("last-run")).toHaveTextContent("so far, last run 25 min");
+  // The stream's snapshots carry no last run; the one served with the run stays.
+  FakeEventSource.emit("run.updated", { payload: { ...running, last_run_seconds: undefined, spent_usd: 5.5, updated_at: at(21) } });
+  await expect.element(screen.getByTestId("spend-stat")).toMatchTextContent(/^\$5\.50 of/);
+  await expect.element(screen.getByTestId("last-run")).toHaveTextContent("so far, last run 25 min");
+  await expect.element(screen.getByRole("button", { name: "Pause" })).toBeVisible();
   // The top bar trades the world chip for the way back and the run menu.
   await expect.element(screen.getByRole("banner").getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/worlds/world_1/runs");
   expect(screen.getByRole("button", { name: "Run actions" }).elements().filter((b) => b.checkVisibility())).toHaveLength(1);
-  const button = screen.getByRole("button", { name: /^Step 3 of 3/ });
-  await expect.element(button).toMatchTextContent(/^Step 3 of 3 · build\s*video\s*All steps$/);
-  // The step list and spend wait in the sheet; the selected step comes right under the button.
-  expect(screen.getByRole("navigation", { name: "Steps" }).query()).toBeNull();
-  expect(screen.getByRole("region", { name: "Spend" }).query()).toBeNull();
   const top = (el: Element) => el.getBoundingClientRect().top;
-  expect(top(button.element())).toBeLessThan(top(screen.getByTestId("stage-panel").element()));
+  const rail = screen.getByTestId("timeline").element();
+  expect(top(screen.getByTestId("hero").element())).toBeLessThan(top(rail));
+  expect(top(rail)).toBeLessThan(top(screen.getByTestId("stage-panel").element()));
   expect(top(screen.getByTestId("stage-panel").element())).toBeLessThan(844);
   vi.useRealTimers();
 });
 
-test("on a phone the step button opens the steps and spend in a sheet; picking a step closes it and keeps it in the URL", async () => {
+test("on a phone the rail scrolls sideways, centres the selected step, and a tap pins another in the URL", async () => {
   await page.viewport(390, 844);
-  fakeFetch({ "GET /api/runs/run_1": () => Response.json(run("done", [research("done"), voice("done"), video("done")], { budget_usd: 10, spent_usd: 5.01 })) });
-  const { screen, router } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_2");
-  await screen.getByRole("button", { name: /^Step 3 of 3/ }).click();
-  const sheet = screen.getByRole("dialog", { name: "All steps" });
-  await expect.element(sheet.getByRole("navigation", { name: "Steps" })).toBeVisible();
-  await expect.element(sheet.getByTestId("budget")).toHaveTextContent("$5.01 of $10.00");
-  await sheet.getByRole("button", { name: /^Step 2, voice/ }).click();
-  await expect.element(sheet).not.toBeInTheDocument();
-  expect(router.state.location.search).toEqual({ stage: "stage_1" });
-  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^voice\s*audio · step 2 of 3/);
-  await expect.element(screen.getByRole("button", { name: /^Step 2 of 3/ })).toMatchTextContent(/^Step 2 of 3 · audio\s*voice/);
-  // Escape closes it too, with the step unchanged.
-  await screen.getByRole("button", { name: /^Step 2 of 3/ }).click();
-  await expect.element(screen.getByRole("dialog", { name: "All steps" })).toBeVisible();
-  await userEvent.keyboard("{Escape}");
-  await expect.element(screen.getByRole("dialog", { name: "All steps" })).not.toBeInTheDocument();
-  expect(router.state.location.search).toEqual({ stage: "stage_1" });
+  const steps = Array.from({ length: 9 }, (_, i) => stage(i, `step ${i + 1}`, i % 3 ? "swarm" : "gate", "done", timed(i, i + 1)));
+  fakeFetch({ "GET /api/runs/run_1": () => Response.json(run("done", steps, { budget_usd: 10, spent_usd: 5.01 })) });
+  const { screen, router } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_6");
+  const rail = screen.getByTestId("timeline");
+  const picked = rail.getByRole("button", { name: /^Step 7,/ });
+  await expect.element(picked).toHaveAttribute("aria-pressed", "true");
+  const box = rail.element().getBoundingClientRect();
+  const tile = picked.element().getBoundingClientRect();
+  expect(rail.element().scrollLeft).toBeGreaterThan(0);
+  expect(Math.abs(tile.left + tile.width / 2 - (box.left + box.width / 2))).toBeLessThan(2);
+  for (const b of rail.getByRole("button").elements()) {
+    const r = b.getBoundingClientRect();
+    expect(Math.min(r.width, r.height)).toBeGreaterThanOrEqual(44);
+  }
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  await rail.getByRole("button", { name: /^Step 6,/ }).click();
+  expect(router.state.location.search).toEqual({ stage: "stage_5" });
+  await expect.element(screen.getByTestId("stage-panel")).toMatchTextContent(/^step 6\s*Agents\s*step 6 of 9/);
+  // The spend panel follows the step on a phone.
+  await expect.element(screen.getByTestId("budget")).toHaveTextContent("$5.01 of $10.00");
 });
 
 test("on a phone the result video is capped with its facts under it", async () => {
@@ -703,7 +734,8 @@ test("on a phone runs waiting, running and done never scroll sideways", async ()
     });
     const { screen } = await mountAt("/worlds/world_1/runs/run_1");
     await expect.element(screen.getByTestId("stage-panel")).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: /^Step \d of \d/ })).toBeVisible();
+    await expect.element(screen.getByTestId("timeline")).toBeVisible();
+    await expect.element(screen.getByTestId("hero")).toBeVisible();
     expect(document.documentElement.scrollWidth, r.status).toBeLessThanOrEqual(390);
     await screen.unmount();
   }
@@ -711,14 +743,13 @@ test("on a phone runs waiting, running and done never scroll sideways", async ()
 
 test("on a phone a run with many steps still to come never scrolls sideways", async () => {
   await page.viewport(390, 844);
-  // Waiting at step 2 of 9: seven steps not started, each a slot the strip must fit.
+  // Waiting at step 2 of 9: seven steps not started, each a tile the rail must hold.
   const later = Array.from({ length: 7 }, (_, i) => ({ ...stage(i + 2, `step ${i + 3}`, "connector", "pending"), started_at: null, ended_at: null }));
   const waiting = run("waiting_gate", [research("done"), stage(1, "pick", "gate", "waiting", { ...timed(2, null), ask: "Pick one." }), ...later]);
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(waiting), "GET /api/gates": () => Response.json([]) });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
-  await expect.element(screen.getByTestId("strip")).toBeVisible();
-  const strip = screen.getByTestId("strip").element();
-  expect(strip.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+  await expect.element(screen.getByTestId("timeline")).toBeVisible();
+  expect(screen.getByTestId("timeline").element().getBoundingClientRect().right).toBeLessThanOrEqual(390);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });
 
@@ -738,11 +769,13 @@ test("a step lists what went in, linked to the step that made it, and every file
     "GET /api/runs/run_1/artifacts": () => Response.json([script, timings, mp4, note, later]),
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_2");
+  await screen.getByRole("tab", { name: /^Inputs/ }).click();
   const ins = screen.getByTestId("inputs");
   await expect.element(ins.getByTestId("input").first()).toMatchTextContent(/^timings\.json from step 2, voice$/);
   await expect.element(ins.getByRole("link", { name: "step 2, voice" })).toHaveAttribute("href", "/worlds/world_1/runs/run_1?stage=stage_1");
   await expect.element(ins.getByRole("link", { name: "timings.json" })).toHaveAttribute("href", "/api/worlds/world_1/files/runs/run_1/stage_1/artifacts/timings.json");
   await expect.element(ins.getByTestId("input").nth(1)).toMatchTextContent(/missing\.md not made by an earlier step yet/);
+  await screen.getByRole("tab", { name: "Details" }).click();
   await screen.getByText("All files (2)").click();
   const files = screen.getByTestId("all-files");
   await expect.element(files.getByRole("link", { name: "video.mp4" })).toHaveAttribute("href", "/api/worlds/world_1/files/runs/run_1/stage_2/artifacts/video.mp4");
@@ -773,30 +806,32 @@ test("on a phone a run still loading shows its skeleton under the way back, neve
   await expect.element(screen.getByRole("banner").getByRole("link", { name: "Runs" })).toBeVisible();
   const busy = document.querySelector("main [aria-busy='true']")!;
   expect(busy).not.toBeNull();
-  // The title, the status line, the strip, the step button and the panel each hold their place.
-  for (const part of [".sk-title", ".sk-status", ".sk-strip", ".sk-step", ".sk-panel"]) {
+  // The title, the hero, the rail and the panel each hold their place.
+  for (const part of [".sk-title", ".sk-hero", ".sk-rail", ".sk-panel"]) {
     const box = busy.querySelector(part)!.getBoundingClientRect();
     expect(box.height, part).toBeGreaterThan(0);
   }
-  expect(busy.querySelector(".sk-step")!.getBoundingClientRect().height).toBe(52);
   expect(screen.getByText("Loading...").query()).toBeNull();
   release();
-  await expect.element(screen.getByRole("button", { name: /^Step 4 of 4/ })).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: /^Step 4, review/ })).toBeVisible();
   expect(document.querySelector("[aria-busy='true']")).toBeNull();
 });
 
-test("on a phone an 11-step run's strip gives every step a 24px tap and stays inside the screen", async () => {
+test("on a phone an 11-step run's rail gives every step a 44px tap and stays inside the screen", async () => {
   await page.viewport(390, 844);
-  // One long first step squeezes the rest.
   const steps = Array.from({ length: 11 }, (_, i) => stage(i, `step ${i + 1}`, "connector", i < 10 ? "done" : "running", i === 0 ? timed(0, 40) : timed(40 + i, i < 10 ? 41 + i : null)));
   fakeFetch({ "GET /api/runs/run_1": () => Response.json(run("running", steps)) });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
-  await expect.element(screen.getByTestId("strip")).toBeVisible();
-  const widths = screen.getByTestId("strip").getByRole("button").elements().map((b) => b.getBoundingClientRect().width);
-  expect(widths).toHaveLength(11);
-  for (const w of widths) expect(w).toBeGreaterThanOrEqual(24);
-  expect(screen.getByTestId("strip").element().getBoundingClientRect().right).toBeLessThanOrEqual(390);
+  const rail = screen.getByTestId("timeline");
+  await expect.element(rail).toBeVisible();
+  const boxes = rail.getByRole("button").elements().map((b) => b.getBoundingClientRect());
+  expect(boxes).toHaveLength(11);
+  for (const b of boxes) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(44);
+  expect(rail.element().getBoundingClientRect().right).toBeLessThanOrEqual(390);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  // The live step, the last, is scrolled into the middle of view on arrival.
+  const live = rail.getByRole("button", { name: /^Step 11,/ }).element().getBoundingClientRect();
+  expect(live.right).toBeLessThanOrEqual(390);
   // Ask this run is a thumb tap too.
   expect(screen.getByRole("button", { name: "Ask this run" }).element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 });
@@ -883,8 +918,8 @@ test("live: the clock ticks each second while it runs and holds once it ends; th
 
   FakeEventSource.emit("run.updated", { payload: run("running", stages, { spent_usd: 1.25, updated_at: at(22) }) });
   // The old figure slides out and the new one in.
-  await vi.waitFor(() => expect(screen.getByTestId("strip-spend").element().querySelector(".tick-in")?.textContent).toBe("$1.25"));
-  expect(screen.getByTestId("strip-spend").element().querySelector(".tick")?.getAttribute("data-dir")).toBe("up");
+  await vi.waitFor(() => expect(screen.getByTestId("spend-stat").element().querySelector(".tick-in")?.textContent).toBe("$1.25"), { interval: 1 });
+  expect(screen.getByTestId("spend-stat").element().querySelector(".tick")?.getAttribute("data-dir")).toBe("up");
 
   const ended = run("done", [research("done"), voice("done"), video("done", timed(3, 21))], { spent_usd: 1.25, updated_at: at(23) });
   FakeEventSource.emit("run.updated", { payload: ended });
@@ -892,25 +927,73 @@ test("live: the clock ticks each second while it runs and holds once it ends; th
   // A done run's pill pops once, as it lands, and a notice says so.
   await expect.element(screen.getByTestId("run-pill")).toHaveClass("pop");
   await expect.element(screen.getByText(`${ended.name} is done.`)).toBeVisible();
-  const took = screen.getByTestId("strip-spend").element().parentElement!.textContent;
+  const took = screen.getByTestId("hero").element().textContent;
   vi.advanceTimersByTime(3000);
-  expect(screen.getByTestId("strip-spend").element().parentElement!.textContent).toBe(took);
+  expect(screen.getByTestId("hero").element().textContent).toBe(took);
   vi.useRealTimers();
 });
 
-test("done: a summary row says how long it took, what it spent and made, and opens the main file; arriving at it does not pop", async () => {
+test("done: the hero says what it made and how long against the last run, and opens the main file; arriving at it does not pop", async () => {
   fakeFetch({
-    "GET /api/runs/run_1": () => Response.json(run("done", [research("done"), voice("done"), video("done")], { spent_usd: 0.42 })),
+    "GET /api/runs/run_1": () => Response.json(run("done", [research("done"), voice("done"), video("done")], { spent_usd: 0.42, last_run_seconds: 600 })),
     "GET /api/runs/run_1/artifacts": () => Response.json([timings, mp4]),
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
-  const row = screen.getByTestId("done-row");
-  await expect.element(row).toMatchTextContent(/^Took 7 min · Spent \$0\.42 · Made video\.mp4\s*Open video\.mp4$/);
-  await expect.element(row.getByRole("link", { name: "Open video.mp4" })).toBeVisible();
+  const hero = screen.getByTestId("hero");
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Done in 7 min. Made video.mp4.");
+  await expect.element(hero.getByTestId("hero-sub")).toHaveTextContent("3 min faster than last time.");
+  await expect.element(hero.getByTestId("last-run")).toHaveTextContent("took, last run 10 min");
+  await expect.element(hero.getByTestId("spend-stat")).toHaveTextContent("$0.42 spent");
+  await expect.element(hero.getByTestId("steps-stat")).toMatchTextContent(/^3 of 3/);
+  await expect.element(hero.getByRole("link", { name: "Open video.mp4" })).toBeVisible();
   await expect.element(screen.getByTestId("run-pill")).not.toHaveClass("pop");
 });
 
-test("on a phone the strip names the step that is now and marks it, the others as dots, and the run menu is a sheet", async () => {
+test("a first run has no last run to measure against, and the hero says nothing about one", async () => {
+  fakeFetch({ "GET /api/runs/run_1": () => Response.json(run("done", [research("done")], { last_run_seconds: null })) });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await expect.element(screen.getByTestId("last-run")).toMatchTextContent(/^took$/);
+  expect(screen.getByTestId("hero-sub").query()).toBeNull();
+});
+
+test("the hero's one action follows the run: answer the gate, pause, resume, retry the failed step", async () => {
+  const waiting = run("waiting_gate", [research("done"), { ...review("waiting", timed(2, null)), index: 1, id: "stage_1" }]);
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(waiting),
+    "GET /api/gates": () => Response.json([gate("approve", { stage_index: 1, stage_id: "stage_1" })]),
+  });
+  let { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByTestId("hero").getByRole("button", { name: "Answer review" }).click();
+  await expect.element(screen.getByRole("button", { name: /^Step 2, review/ })).toHaveAttribute("aria-pressed", "true");
+  // On the gate itself its card is the action.
+  expect(screen.getByTestId("hero").getByRole("button").query()).toBeNull();
+  await screen.unmount();
+
+  const posted: string[] = [];
+  for (const [status, name] of [["running", "Pause"], ["paused", "Resume"]] as const) {
+    fakeFetch({
+      "GET /api/runs/run_1": () => Response.json(run(status, [research("running", timed(0, null))])),
+      [`POST /api/runs/run_1/${name.toLowerCase()}`]: () => (posted.push(name), Response.json(run(status, []))),
+    });
+    ({ screen } = await mountAt("/worlds/world_1/runs/run_1"));
+    await screen.getByTestId("hero").getByRole("button", { name }).click();
+    await vi.waitFor(() => expect(posted.at(-1)).toBe(name));
+    await screen.unmount();
+  }
+
+  const failed = run("failed", [research("done"), { ...video("failed"), index: 1, id: "stage_1", error: "it broke" }], { revision: 2 });
+  fakeFetch({
+    "GET /api/runs/run_1": () => Response.json(failed),
+    "POST /api/runs/run_1/changes/propose": async (req) =>
+      Response.json({ change: await req.json(), stage_name: "video", before: { video: "failed" }, after: { video: "pending" }, violations: [], revision: 2, in_place: true, fork_from: null, cost_usd: 0, budget_left_usd: null }),
+  });
+  ({ screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0"));
+  await screen.getByTestId("hero").getByRole("button", { name: "Retry video" }).click();
+  await expect.element(screen.getByTestId("change-card")).toBeVisible();
+  await expect.element(screen.getByRole("button", { name: /^Step 2, video/ })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("on a phone the step waiting for you is amber with its wait under it, the hero asks the question, and the run menu is a sheet", async () => {
   await page.viewport(390, 844);
   const waiting = run("waiting_gate", [research("done"), voice("done"), video("done"), review("waiting", timed(7, null))]);
   fakeFetch({
@@ -918,12 +1001,13 @@ test("on a phone the strip names the step that is now and marks it, the others a
     "GET /api/gates": () => Response.json([gate("approve", { stage_index: 3, stage_id: "stage_3" })]),
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1");
-  await expect.element(screen.getByTestId("strip-key")).toHaveTextContent("review, waiting for you");
-  expect(screen.getByTestId("strip-key").element().querySelectorAll("i")).toHaveLength(3);
-  await expect.element(screen.getByTestId("strip").getByRole("button", { name: /^review/ })).toHaveClass("seg-now");
+  const now = screen.getByRole("button", { name: /^Step 4, review/ });
+  await expect.element(now).toHaveAttribute("aria-current", "step");
+  expect(now.element().closest("li")!.className).toContain("node-waiting");
+  expect(now.element().querySelector(".dt")!.textContent).toMatch(/^waiting \d/);
   await expect.element(screen.getByTestId("run-pill")).toHaveTextContent("needs you");
-  // The question is asked once, by the gate below, not again in the status line.
-  await expect.element(screen.getByTestId("status-line")).not.toBeVisible();
+  await expect.element(screen.getByTestId("status-line")).toHaveTextContent("Waiting for you: Watch it. Approve or send back.");
+  await expect.element(screen.getByTestId("hero-sub")).toMatchTextContent(/^review, step 4 of 4\. Waiting \d+/);
 
   const opener = screen.getByRole("button", { name: "Run actions" }).elements().find((b) => b.checkVisibility()) as HTMLElement;
   opener.click();
@@ -941,4 +1025,15 @@ test("a rerun stage that runs again shows no failure from its previous attempt (
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_1");
   await expect.element(screen.getByTestId("stage-panel")).toBeVisible();
   expect(screen.getByTestId("failure").query()).toBeNull();
+});
+
+test("only a gate's send-backs read as Sent back: a Follow-up or Rerun is no send-back", async () => {
+  const change = (kind: string, id: string) => ({ id, run_id: "run_1", kind, stage_id: "stage_0", stage_index: 0, stage_name: "research", payload: { note: "Cut it." }, before: {}, by: "operator", at: "2026-10-26T10:03:00+00:00", revision: 3 });
+  const followed = run("waiting_gate", [research("done"), review("waiting", timed(7, null))], { send_backs: 1, changes: [change("follow_up", "change_1")] });
+  fakeFetch({ "GET /api/runs/run_1": () => Response.json(followed), "GET /api/gates": () => Response.json([]) });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_1");
+  await expect.element(screen.getByTestId("status-line")).toBeVisible();
+  expect(screen.getByTestId("status-line").element().textContent).not.toContain("Sent back");
+  FakeEventSource.emit("run.updated", { payload: { ...followed, send_backs: 2, revision: 9, updated_at: "2026-10-26T10:09:00+00:00" } });
+  await expect.element(screen.getByTestId("status-line")).toMatchTextContent(/Sent back once\.\s*$/);
 });
