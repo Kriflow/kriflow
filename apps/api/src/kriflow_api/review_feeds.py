@@ -7,7 +7,7 @@ its Connectors page. The core GETs it once a minute with a short timeout and exp
      "items": [{"id": "d1",                          # required, stable: pushed once per id
                 "kind": "move",                      # grouped by in the notice
                 "title": "Tail swish",               # named in a push for one new item
-                "run_id": "run_01..."}]}             # a Swarmify run (or the family's first)
+                "run_id": "run_01..."}]}             # a Kriflow run (or the family's first)
 
 Other fields are ignored. An empty `items` is nothing waiting. A feed that is down, slow or
 answers anything else is logged once and shows nothing; Needs you reads the last answers held

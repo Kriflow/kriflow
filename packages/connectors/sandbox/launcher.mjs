@@ -2,15 +2,15 @@
 //
 //   node launcher.mjs <plan.json> -- <command> [args...]
 //
-// The plan is what Swarmify wrote for this process (kriflow_connectors/sandbox.py): `sandbox`,
+// The plan is what Kriflow wrote for this process (kriflow_connectors/sandbox.py): `sandbox`,
 // the sandbox-runtime config; `cwd`, the folder it runs in; `env`, variables set for the command
 // (its own HOME and TMPDIR); `pass`, the names of the variables of ours it may have (its own
 // Setup values), besides a few every process needs; `blocked`, the file each attempt the sandbox
-// blocks is appended to as one JSON line, for Swarmify to log; `observe`, on Linux, the read
+// blocks is appended to as one JSON line, for Kriflow to log; `observe`, on Linux, the read
 // tripwire the command runs under (observe.py), whose reports arrive on stderr after `nonce`;
 // `session`, true for an MCP server over stdio; and `stderr`, the file the command's last stderr
 // lines are kept in (its scratch folder's), which the Agent SDK's CLI drops for an MCP server, for
-// Swarmify to show when one fails to start.
+// Kriflow to show when one fails to start.
 //
 // The command's stdin and stdout are relayed and its exit code is ours. With `session` the
 // launcher also ends once its stdin and the command's stdout have both closed: the MCP session is
@@ -44,7 +44,7 @@ process.env.CLAUDE_CODE_TMPDIR = plan.env.TMPDIR;
 // there, granted again, keeps them in sight (and under the 108 bytes a socket path may have).
 let sockets;
 if (process.platform === "linux") {
-  sockets = mkdtempSync("/tmp/swarmify-sandbox-");
+  sockets = mkdtempSync("/tmp/kriflow-sandbox-");
   process.env.TMPDIR = sockets;
   plan.sandbox.filesystem.allowRead.push(sockets);
 }

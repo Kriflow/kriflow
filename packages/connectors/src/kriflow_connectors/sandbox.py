@@ -22,7 +22,7 @@ the layer the Agent SDK puts a Build Session's Bash in (ADR 0018).
 Its last stderr lines land in `stderr.log` beside it (`STDERR`). Every attempt the sandbox blocks
 lands in the launcher's `blocked.jsonl`, which `Confined.blocked`
 reads: proxy denials everywhere, Seatbelt's file denials on macOS, and on Linux the reads and
-writes `observe.py` sees. With `SWARMIFY_SANDBOX_RUNNER` set to a socket, the launcher runs in the
+writes `observe.py` sees. With `KRIFLOW_SANDBOX_RUNNER` set to a socket, the launcher runs in the
 sandbox runner container instead (`runner.py`), so the API container keeps Docker's default
 seccomp and AppArmor profiles (issue 109).
 """
@@ -302,8 +302,8 @@ class Sandbox:
 
     def _readable(self, grants: list[Path], path: str, cwd: Path) -> list[Path]:
         """The grants plus the runtimes a package's command needs (the Python its `.venv` was
-        made from, uv, Node, the folders on its PATH) and what Swarmify's own install lends the
-        sandbox (the read tripwire, the Python that runs it, Swarmify's environment, whose Python
+        made from, uv, Node, the folders on its PATH) and what Kriflow's own install lends the
+        sandbox (the read tripwire, the Python that runs it, Kriflow's environment, whose Python
         a local package's command may name, with the source folders its `.pth` files add for an
         editable install, and on Linux sandbox-runtime's seccomp helper) where they live inside a
         denied folder, as in a home folder. Each is located directly, never from `sys.path`,

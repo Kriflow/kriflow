@@ -70,9 +70,9 @@ def generate_keys() -> tuple[str, str]:
 
 
 def load_keys(data_dir: Path, env: dict[str, str], base_url: str) -> Keys:
-    """SWARMIFY_VAPID_PUBLIC_KEY and SWARMIFY_VAPID_PRIVATE_KEY when both are set, else the pair
+    """KRIFLOW_VAPID_PUBLIC_KEY and KRIFLOW_VAPID_PRIVATE_KEY when both are set, else the pair
     in `<data_dir>/vapid.json` (mode 600), made on first use. The subject is
-    SWARMIFY_VAPID_SUBJECT, else the base URL's origin when it is https without a port, else a
+    KRIFLOW_VAPID_SUBJECT, else the base URL's origin when it is https without a port, else a
     mailto placeholder (Apple may refuse that one: set the subject for iPhones)."""
     url = urlparse(base_url)
     https = url.scheme == "https" and url.hostname and url.port is None

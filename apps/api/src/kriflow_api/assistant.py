@@ -87,7 +87,7 @@ ANSWER_SCHEMA: dict[str, Any] = {
     },
     "required": ["reply"],
 }
-SYSTEM = """You are the Run Assistant of swarmify, on the page of one run. The operator asks about
+SYSTEM = """You are the Run Assistant of Kriflow, on the page of one run. The operator asks about
 the run and asks for changes to it. Answer only with the JSON the schema asks for.
 
 Read the run before you answer: get_run (its stages, their status and config, the Template a

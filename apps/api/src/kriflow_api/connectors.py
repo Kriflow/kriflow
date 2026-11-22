@@ -196,7 +196,7 @@ class IndexEntry(BaseModel):
 
 class PackageIndex(BaseModel):
     url: str
-    """Where the index was read from: the `SWARMIFY_CONNECTOR_INDEX` setting."""
+    """Where the index was read from: the `KRIFLOW_CONNECTOR_INDEX` setting."""
     packages: list[IndexEntry]
     oldest_contract: int
     newest_contract: int
@@ -241,14 +241,14 @@ class SetupField(BaseModel):
     type: Literal[
         "string", "text", "number", "integer", "boolean", "choice", "url", "path", "oauth"
     ]
-    """`oauth`: a sign-in Swarmify runs (`POST .../setup/oauth/{key}`), never typed."""
+    """`oauth`: a sign-in Kriflow runs (`POST .../setup/oauth/{key}`), never typed."""
     secret: bool
     required: bool
     scope: Literal["shared", "world"]
     """`shared`: one value for every world, which a world may override; `world`: per world."""
     env: str | None
     """The variable it reaches the process as; null for an OAuth app's client ID and secret,
-    which only Swarmify uses."""
+    which only Kriflow uses."""
     help: str | None
     options: list[str] | None
     default: SetupValue
@@ -270,7 +270,7 @@ class SetupView(BaseModel):
     version: str
     help_url: str | None
     test: str | None
-    """The tool Swarmify runs with the candidate values before saving; null for none."""
+    """The tool Kriflow runs with the candidate values before saving; null for none."""
     fields: list[SetupField]
     missing: list[str]
     """Keys of required fields with no value for this world."""
@@ -406,7 +406,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
 
     @api.get("/packages/index")
     def package_index() -> PackageIndex:
-        """The curated index of known packages, read from `SWARMIFY_CONNECTOR_INDEX` (an https
+        """The curated index of known packages, read from `KRIFLOW_CONNECTOR_INDEX` (an https
         URL or a local file; by default Kriflow/packages' `index.toml`). 502
         saying why when it cannot be fetched or read."""
         url = setting("CONNECTOR_INDEX", INDEX_URL)

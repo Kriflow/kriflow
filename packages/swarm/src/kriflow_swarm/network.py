@@ -1,7 +1,7 @@
 """A session that died because the model API was unreachable (Wi-Fi down, DNS gone) is not a
 failed attempt: whoever ran it waits for the network and resumes the same session. `transient`
 tells such an error from an agent or task failure; `NetworkWait` waits, with backoff, until a
-cheap probe reaches the API again, for at most `SWARMIFY_NETWORK_WAIT_HOURS` (6 by default)."""
+cheap probe reaches the API again, for at most `KRIFLOW_NETWORK_WAIT_HOURS` (6 by default)."""
 
 import asyncio
 import os
@@ -38,7 +38,7 @@ TYPES = {"APIConnectionError", "APITimeoutError", "ConnectError", "ConnectTimeou
 """Connection error classes of the Anthropic and httpx clients, by name: neither is our import.
 The Agent SDK's CLIConnectionError is not one: it means the local CLI, not the network."""
 HOURS = 6.0
-"""How long a session waits for the network by default; `SWARMIFY_NETWORK_WAIT_HOURS` sets it."""
+"""How long a session waits for the network by default; `KRIFLOW_NETWORK_WAIT_HOURS` sets it."""
 NOTICE_AFTER = 600.0
 """Seconds of waiting after which the Needs-you page says so."""
 ASKED = 120.0

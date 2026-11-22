@@ -1,7 +1,7 @@
 [project]
 name = "kriflow-api"
 version = "0.1.0"
-description = "Swarmify HTTP API"
+description = "Kriflow HTTP API"
 requires-python = ">=3.12"
 license = "AGPL-3.0-only"
 dependencies = [

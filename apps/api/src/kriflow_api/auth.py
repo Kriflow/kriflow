@@ -1,6 +1,6 @@
 """Operator sign-in (spec V2, Sign-in): one operator account per install, replacing basic auth.
 
-The password is `SWARMIFY_PASSWORD`. Each start stores a fresh scrypt hash of it (a salt of its
+The password is `KRIFLOW_PASSWORD`. Each start stores a fresh scrypt hash of it (a salt of its
 own) when it does not match the stored one, so an install upgraded from basic auth signs in with
 the password already in its `.env`, and changing it there signs every browser out. With no
 password set or stored nothing is checked, which is right only on 127.0.0.1.
@@ -74,7 +74,7 @@ class Token(BaseModel):
     name: str
     created_at: str
     scope: str = FULL
-    """`mcp` for the whole MCP server; `remote_approvals` for a connector's, which Swarmify made."""
+    """`mcp` for the whole MCP server; `remote_approvals` for a connector's, which Kriflow made."""
     world_id: str | None = None
     """The one world the token reaches; None for every world."""
 

@@ -34,7 +34,7 @@ DRAFT_SCHEMA: dict[str, Any] = {
     },
     "required": ["reply", "config"],
 }
-SYSTEM = """You are the Run Assistant of swarmify. The operator fixed a file a stage of this run
+SYSTEM = """You are the Run Assistant of Kriflow. The operator fixed a file a stage of this run
 made and wants the workflow to make it right the first time from now on. Read the run if you need
 to (get_run, read_run_file, tail_stage_log, list_run_events, list_workflow_runs, query_graph),
 then draft a Stage Edit to the stage that made the file: for a swarm stage its `goal` or

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>swarmify · Pied Piper</title>
+<title>kriflow · Pied Piper</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -167,7 +167,7 @@ pre .k{color:#9ad8ff}pre .s{color:#c9f29b}pre .c{color:var(--ink3)}
 <body>
 <div class="app">
 <aside class="side">
-  <div class="logo"><div class="mark">pp</div><div><b>swarmify</b><small>middle-out, since 2026</small></div></div>
+  <div class="logo"><div class="mark">pp</div><div><b>kriflow</b><small>middle-out, since 2026</small></div></div>
   <div class="world" onclick="go('projects')"><span class="dot"></span><div><span>Video</span><small>world · 14 runs · 1,284 nodes</small></div></div>
   <nav class="nav">
     <a data-s="project" class="on" onclick="go('project')"><i style="--ico:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M3 4h18v4H3zm0 6h18v10H3z%22/></svg>')"></i>Overview</a>
@@ -186,7 +186,7 @@ pre .k{color:#9ad8ff}pre .s{color:#c9f29b}pre .c{color:var(--ink3)}
 
 <!-- PROJECTS -->
 <section class="screen" id="s-projects">
-  <div class="hdr"><div><div class="crumb">swarmify</div><h1>Your <em>worlds</em></h1><p class="sub">A world is one long memory and the connectors it may use. Runs come and go. The world remembers.</p></div><button class="btn p" onclick="go('richard')">New world with Richard</button></div>
+  <div class="hdr"><div><div class="crumb">kriflow</div><h1>Your <em>worlds</em></h1><p class="sub">A world is one long memory and the connectors it may use. Runs come and go. The world remembers.</p></div><button class="btn p" onclick="go('richard')">New world with Richard</button></div>
   <div class="grid g3">
     <div class="card h" onclick="go('project')"><span class="pill ok pulse"><span class="d"></span>run live</span><h3 style="margin-top:12px">Video</h3><p class="muted" style="margin:0 0 14px">Weekly shorts for the attraction channel.</p><div class="row" style="justify-content:space-between"><span class="faint mono" style="font-size:12px">14 runs · 2 workflows</span><span class="faint mono" style="font-size:12px">1,284 nodes</span></div></div>
     <div class="card h"><span class="pill dim">quiet</span><h3 style="margin-top:12px">Marketing research</h3><p class="muted" style="margin:0 0 14px">Who's winning the niche this month and why.</p><div class="row" style="justify-content:space-between"><span class="faint mono" style="font-size:12px">3 runs · 1 workflow</span><span class="faint mono" style="font-size:12px">412 nodes</span></div></div>
@@ -320,10 +320,10 @@ pre .k{color:#9ad8ff}pre .s{color:#c9f29b}pre .c{color:var(--ink3)}
 
   <div class="card" id="addc" style="margin-top:24px;max-width:720px">
     <h3>Add a connector</h3>
-    <p class="muted" style="margin:0 0 4px;font-size:14px">Paste an MCP command or URL. Swarmify starts it once, lists its tools, and shows you what it will be allowed to do before saving.</p>
+    <p class="muted" style="margin:0 0 4px;font-size:14px">Paste an MCP command or URL. Kriflow starts it once, lists its tools, and shows you what it will be allowed to do before saving.</p>
     <label>Name</label><input value="fal video">
     <label>MCP server</label><input class="mono" value="npx -y @fal-ai/mcp">
-    <label>Keys (stored in ~/.swarmify/.env, mode 600)</label><input class="mono" placeholder="FAL_KEY=">
+    <label>Keys (stored in ~/.kriflow/.env, mode 600)</label><input class="mono" placeholder="FAL_KEY=">
     <label>Allowed in</label>
     <div class="row"><span class="pill">swarm</span><span class="pill ok">connector</span><span class="pill">notify</span></div>
     <div class="row" style="margin-top:16px"><button class="btn p">Test and list tools</button><button class="btn g">Cancel</button></div>

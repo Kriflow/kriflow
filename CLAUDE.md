@@ -1,4 +1,4 @@
-# Swarmify
+# Kriflow
 
 A swarm of Claude Code agents sharing one graphify memory per world, running gated workflows. Python backend (FastAPI, asyncio, SQLite, files), React web skin, one monorepo. Domain-driven: one package per bounded context, contexts share only ids and events.
 

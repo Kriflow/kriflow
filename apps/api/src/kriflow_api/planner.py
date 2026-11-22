@@ -1,5 +1,5 @@
 """The planner chat of the workflow editor: a Planner session on the AgentRuntime that drafts
-and edits a workflow through the swarmify MCP tools, called in-process.
+and edits a workflow through the Kriflow MCP tools, called in-process.
 
 One message in, one structured answer out: a reply for the operator and, when the planner
 changed something, the whole workflow YAML, which becomes the editor's text (the stage list,
@@ -36,7 +36,7 @@ from kriflow_worlds import Worlds
 log = logging.getLogger(__name__)
 PLANNER = "planner"
 TOOLS = ("check_workflow", "save_workflow", "get_workflow", "list_workflows", "start_run")
-"""The swarmify MCP tools the planner may call; the rest of the server stays out of reach."""
+"""The Kriflow MCP tools the planner may call; the rest of the server stays out of reach."""
 MAX_TURNS = 30
 ANSWER_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -71,7 +71,7 @@ ANSWER_SCHEMA: dict[str, Any] = {
     },
     "required": ["reply"],
 }
-SYSTEM = """You are the planner of swarmify. You turn what an operator describes into a workflow
+SYSTEM = """You are the planner of Kriflow. You turn what an operator describes into a workflow
 and edit the one they have. Answer only with the JSON the schema asks for.
 
 A workflow is YAML: `name`, optional `schedule` (cron, UTC), `skip_when_live` (true: a schedule
@@ -194,7 +194,7 @@ def _text(result: CallToolResult) -> str:
 
 
 async def mcp_tools(server: MCPServer, saves: list[dict[str, Any]]) -> list[AgentTool]:
-    """The planner's tools, each one of the swarmify MCP server's own, called in-process.
+    """The planner's tools, each one of the Kriflow MCP server's own, called in-process.
     `saves` collects every version `save_workflow` returns."""
     tools: list[AgentTool] = []
     for tool in await server.list_tools():

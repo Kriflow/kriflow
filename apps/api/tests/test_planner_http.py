@@ -1,5 +1,5 @@
 """The planner chat over HTTP: a real Agent SDK session with the scripted CLI behind it, whose
-tools are the swarmify MCP server's own, called in-process."""
+tools are the Kriflow MCP server's own, called in-process."""
 
 from collections.abc import Iterator
 from pathlib import Path

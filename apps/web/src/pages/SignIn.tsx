@@ -26,7 +26,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
       setError(
         response.status === 429
           ? "Too many wrong passwords. Wait a few minutes, then try again."
-          : "That is not the password. Use SWARMIFY_PASSWORD from the install's .env.",
+          : "That is not the password. Use KRIFLOW_PASSWORD (or SWARMIFY_PASSWORD) from the install's .env.",
       );
     } catch {
       setRefusals((n) => n + 1);

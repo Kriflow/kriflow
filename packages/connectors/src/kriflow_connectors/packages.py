@@ -9,7 +9,7 @@ dependencies land beside it; the install is recorded once for the whole install 
 step removes the folder.
 A package also installs from a git URL at a ref (issue 225): the clone runs nothing of the
 package, and the API installs only once the operator approved every permission it declares.
-A local package is one Swarmify wrote the Manifest of itself, from the Connectors page's "add an
+A local package is one Kriflow wrote the Manifest of itself, from the Connectors page's "add an
 MCP server" form (issue 211); it has no code of its own, only the command or URL it names.
 """
 
@@ -340,7 +340,7 @@ class InstallError(RuntimeError):
 @dataclass(frozen=True)
 class Package:
     """One installed version of a Connector Package. `state` is `installed`, or `invalid` with
-    `problem` when its Manifest no longer passes (a newer Swarmify, an edited file)."""
+    `problem` when its Manifest no longer passes (a newer Kriflow, an edited file)."""
 
     name: str
     version: str
@@ -588,7 +588,7 @@ def permissions(manifest: dict[str, Any]) -> list[str]:
     folders it reads (`folders`), the Services it calls (`services`), the host's GPU (`gpu`),
     the world folders it owns
     (`owned_folders`), the Credentials it is given (`credentials`, by the variable it reads),
-    the World Login a stage names (`logins`), the hosts Swarmify signs in to for it (`sign_in`)
+    the World Login a stage names (`logins`), the hosts Kriflow signs in to for it (`sign_in`)
     and the core's Capabilities it uses
     (`capabilities`). `{}` declares none."""
     granted = manifest.get("permissions", {})
@@ -633,7 +633,7 @@ def _escaping(folder: Path) -> str | None:
 
 
 def _listed_sources() -> list[str]:
-    """The folders SWARMIFY_PACKAGE_SOURCES lists, separated as PATH is; none when unset."""
+    """The folders KRIFLOW_PACKAGE_SOURCES lists, separated as PATH is; none when unset."""
     return [f for f in setting("PACKAGE_SOURCES").split(os.pathsep) if f]
 
 
@@ -720,7 +720,7 @@ def write_manifest(manifest: dict[str, Any]) -> str:
 
 def _install_env() -> dict[str, str]:
     """What the install step sees of the app's environment: enough to find uv, npm and Python,
-    and none of the app's own variables (no keys, no VIRTUAL_ENV pointing at Swarmify's venv).
+    and none of the app's own variables (no keys, no VIRTUAL_ENV pointing at Kriflow's venv).
     Its HOME and TMPDIR are its own scratch folder (sandbox.py)."""
     keep = ("PATH", "LANG", "UV_PYTHON", "UV_PYTHON_INSTALL_DIR", "UV_PYTHON_PREFERENCE")
     keep += ("UV_LINK_MODE", "UV_COMPILE_BYTECODE")
@@ -751,7 +751,7 @@ class Packages:
         self.sandbox = sandbox or Sandbox(root.parent)
 
     def source(self, name: str, version: str) -> str:
-        """Where an installed version came from: a folder, or `local` for one Swarmify wrote."""
+        """Where an installed version came from: a folder, or `local` for one Kriflow wrote."""
         record = self.root / name / version / RECORD
         return str(json.loads(record.read_text())["source"]) if record.is_file() else ""
 
@@ -795,7 +795,7 @@ class Packages:
         if not path.is_dir():
             raise InstallError(f"no package folder at {path}")
         # An operator's local source (a private package cloned on the host) may be held to the
-        # folders SWARMIFY_PACKAGE_SOURCES lists; this repository's own folders always install.
+        # folders KRIFLOW_PACKAGE_SOURCES lists; this repository's own folders always install.
         listed = [Path(f).expanduser().resolve() for f in _listed_sources()]
         real = path.resolve()
         if listed and not real.is_relative_to(self.repo.resolve()):
@@ -805,7 +805,7 @@ class Packages:
         return path
 
     def install_local(self, manifest: dict[str, Any]) -> Package:
-        """Install a Manifest Swarmify wrote as a local package. An installed local version
+        """Install a Manifest Kriflow wrote as a local package. An installed local version
         with the same Manifest is reused; else it installs as the next free `0.0.N`. Raises
         ManifestError for a bad Manifest."""
         name, manifest = manifest["name"], {**manifest, "contract": NEWEST_CONTRACT}
@@ -924,7 +924,7 @@ class Packages:
         its `subfolder`, when given) to `<root>/<name>/<version>/` and run its install step
         there. `approved`, the permissions the operator approved, must hold every one it
         declares, or nothing of it runs; None for this repository's own packages and local
-        ones, which Swarmify trusts. `shared_caches` lets its install step share uv's and npm's
+        ones, which Kriflow trusts. `shared_caches` lets its install step share uv's and npm's
         caches as this repository's own packages do: for a default from the Default List. Raises
         ManifestError for a bad Manifest, InstallError when a permission is not approved, the
         version is installed already or the step fails; either way nothing new is left

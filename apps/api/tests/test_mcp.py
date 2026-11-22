@@ -1,4 +1,4 @@
-"""The swarmify MCP tools, driven through an MCP client connected in-process."""
+"""The Kriflow MCP tools, driven through an MCP client connected in-process."""
 
 import os
 import sys

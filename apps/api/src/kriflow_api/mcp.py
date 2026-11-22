@@ -1,6 +1,6 @@
 """The swarmify MCP server: the same actions as the HTTP API, for Claude Code and the planner.
 
-Run over stdio with `uv run kriflow-mcp`. Reads the same `SWARMIFY_DATA_DIR` as the API, so a
+Run over stdio with `uv run kriflow-mcp`. Reads the same `KRIFLOW_DATA_DIR` as the API, so a
 world created here appears on the API's event stream.
 """
 
@@ -57,7 +57,7 @@ def server(
     control.check = checker(workflows)
     mcp = MCPServer(
         "kriflow",
-        instructions="Drive swarmify: worlds, workflows, runs (start, fork, artifacts, Run"
+        instructions="Drive Kriflow: worlds, workflows, runs (start, fork, artifacts, Run"
         " Changes, the Run Assistant), swarm stage whiteboards, the gates runs wait at, and each"
         " world's World Lists of Entries.",
     )

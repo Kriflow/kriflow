@@ -1,5 +1,5 @@
 """`kriflow-eval`: run each eval task's starter workflow as baseline and as swarm, against a
-running swarmify API (with the real model behind it), and store the report in the eval world.
+running Kriflow API (with the real model behind it), and store the report in the eval world.
 
 Each trial gets a fresh world, its own copy of the workflow and one run; the outputs it left
 (a brief, a draft, a typed list, ideas and a script) are graded, never the path it took, and
@@ -13,7 +13,7 @@ The baseline arm runs every swarm stage with one agent, the swarm arm with `swar
     uv run kriflow-eval --kind research-briefs          # its 8 tasks, 2 trials an arm
     uv run kriflow-eval --kind typed-lists --tasks 2 --k 1   # a smoke run
 
-When `SWARMIFY_PASSWORD` is set the harness signs in with it first, as a browser does.
+When `KRIFLOW_PASSWORD` is set the harness signs in with it first, as a browser does.
 """
 
 import argparse

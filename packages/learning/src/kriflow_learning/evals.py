@@ -16,7 +16,7 @@ the decided pairs (ties left out), significant on a one-sided sign test, at most
 baseline's cost a win.
 
 This module is the pure part: the tasks, the graders, the judge's prompt and the report.
-`swarmify-eval` (the api app) runs the trials over HTTP and stores the report as an artifact in
+`kriflow-eval` (the api app) runs the trials over HTTP and stores the report as an artifact in
 the eval world.
 """
 

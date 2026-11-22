@@ -213,7 +213,7 @@ def test_package_sources_limit_local_paths_to_the_listed_folders(
         packages.review(str(source))
     with pytest.raises(InstallError, match="not in KRIFLOW_PACKAGE_SOURCES"):
         packages.install(str(source), ref="main")
-    # this repository's own folders and a package Swarmify writes still install
+    # this repository's own folders and a package Kriflow writes still install
     assert packages.install("packages/echo").version == "1.0.0"
     assert packages.install_local({**read_manifest(source), "name": "drafted"}).version == "0.0.1"
     allowed.mkdir()

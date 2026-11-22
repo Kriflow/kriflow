@@ -593,7 +593,7 @@ const PERMISSION_KINDS: [string, string][] = [
   ["capabilities", "Capabilities it uses"],
 ];
 
-/** Install a Connector Package from a git URL at a ref, or a local folder: Swarmify fetches it
+/** Install a Connector Package from a git URL at a ref, or a local folder: Kriflow fetches it
  * running nothing, shows every permission it declares (what an upgrade adds marked new), and
  * installs only once the operator approves them (ADR 0021). */
 function InstallPackage({ from, onInstalled }: { from: PackageFrom; onInstalled: (p: Package) => void }) {
@@ -934,7 +934,7 @@ export function detail(error: unknown): string | null {
 }
 
 /** What a connector depends on, such as each of a package's Services (an engine it calls),
- * checked once when the page opens. Swarmify never starts them; the operator does. */
+ * checked once when the page opens. Kriflow never starts them; the operator does. */
 function Health({ connector, worldId }: { connector: Connector; worldId: string }) {
   const [checks, setChecks] = useState<HealthCheck[] | string | null>(null);
 
@@ -1117,7 +1117,7 @@ function Setup({
 /** Leaving the app for a provider's sign-in page; a seam for tests. */
 export const browser = { go: (url: string) => window.location.assign(url) };
 
-/** An `oauth` field: Swarmify runs the sign-in, so there is no value to type, only the button
+/** An `oauth` field: Kriflow runs the sign-in, so there is no value to type, only the button
  * that sends the browser to the provider and back to this page. */
 function SignIn({ f, connector, worldId }: { f: SetupField; connector: Pick<Connector, "name" | "label">; worldId: string }) {
   const [said, setSaid] = useState<string | null>(null);

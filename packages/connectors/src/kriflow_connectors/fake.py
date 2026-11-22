@@ -50,7 +50,7 @@ def tag_package(repo: Path, folder: Path) -> str:
 def default_list(where: Path, packages: Mapping[str, Path]) -> Path:
     """A Default List at `where/defaults.toml` naming each package of `packages` (name to its
     folder) at its release tag in a local packages repository `where/repo`, for
-    `SWARMIFY_DEFAULT_PACKAGES`. The list's file."""
+    `KRIFLOW_DEFAULT_PACKAGES`. The list's file."""
     repo = where / "repo"
     tags = {name: tag_package(repo, folder) for name, folder in packages.items()}
     lines = [f'git = "{repo}"', "packages = ["]

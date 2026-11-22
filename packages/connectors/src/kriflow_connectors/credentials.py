@@ -1,4 +1,4 @@
-"""Credentials: V1's env file in the home data dir (`~/.swarmify/.env`), mode 600.
+"""Credentials: V1's env file in the home data dir (`~/.kriflow/.env`), mode 600.
 
 Every key now lives in a package's Setup (ADR 0024). The file is read by the V1 migrations into
 Setup (`Connectors.install_defaults` and `adopt_world_connectors`), by the add form for a key

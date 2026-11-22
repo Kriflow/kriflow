@@ -27,7 +27,7 @@ UPDATING = (
 
 class DrainStart(BaseModel):
     seconds: float | None = Field(None, ge=0, le=24 * 3600)
-    """How long to wait for the stages at work; SWARMIFY_DRAIN_SECONDS when left out."""
+    """How long to wait for the stages at work; KRIFLOW_DRAIN_SECONDS when left out."""
 
 
 def with_updating(runner: Runner, source: Callable[[], list[Notice]]) -> Callable[[], list[Notice]]:

@@ -213,7 +213,7 @@ if __name__ == "__main__":
 def test_a_connector_runs_but_cannot_read_the_checkout_however_the_app_was_started(
     tmp_path: Path, mode: str
 ) -> None:
-    """Swarmify's own install lends the sandbox only what it runs with (its Python, the read
+    """Kriflow's own install lends the sandbox only what it runs with (its Python, the read
     tripwire, on Linux bubblewrap's seccomp helper), found the same way whatever is on `sys.path`:
     the checkout under pytest (the root conftest) and in `uvicorn --reload`'s worker, none of it
     under plain uvicorn (`''`) or `python -c` (as `mise run gen-client` starts the app)."""

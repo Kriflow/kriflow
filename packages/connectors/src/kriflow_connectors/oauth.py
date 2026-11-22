@@ -6,7 +6,7 @@ shared Credentials of the package, `<key>_client_id` and `<key>_client_secret`. 
 the browser to the field's `authorize_url` with a one-time `state` and, with `pkce`, an S256 code
 challenge, plus its static `authorize_params` and, by `authorize_settings`, the values of other
 Setup fields of the package (as a Meta login configuration ID); the provider sends it back to
-Swarmify's own `/api/setup/oauth/callback`, which trades the code for a token set at
+Kriflow's own `/api/setup/oauth/callback`, which trades the code for a token set at
 `token_url`. The token set is stored as the field's Credential:
 `{"access_token", "refresh_token", "expires_at"}` plus `needs_sign_in` once the provider refuses
 it. A field with `finish` stores what its package's `signed_in` tool answers instead

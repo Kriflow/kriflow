@@ -1,9 +1,11 @@
 """Import-boundary check: a bounded context imports the shared kernel and itself, nothing else.
 
 Usage: python tools/check_imports.py packages
-Each `packages/<name>/src/swarmify_<name>` package is scanned; any `swarmify_*` import that is
-not `kriflow_kernel` or the package's own name fails the check. The api app is the composition
-root and lives outside `packages`, so it is not scanned.
+Each `packages/<name>/src/kriflow_<name>` package is scanned; any `kriflow_*` import that is
+not `kriflow_kernel` or the package's own name fails the check, and so does any import of an old
+`swarmify_*` name (kriflow#593): those resolve only through the kernel's rename alias, kept for
+stored records, never for new code. The api app is the composition root and lives outside
+`packages`, so it is not scanned.
 """
 
 import ast

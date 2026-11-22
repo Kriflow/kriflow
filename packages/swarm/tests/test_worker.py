@@ -1181,12 +1181,12 @@ def test_stop_and_do_this_instead_interrupts_the_turn(board: SqliteStorage, tmp_
 def test_a_queued_message_comes_first_when_the_session_resumes(
     board: SqliteStorage, tmp_path: Path
 ) -> None:
-    """A message for an agent with no live session (between sessions, or after Swarmify
+    """A message for an agent with no live session (between sessions, or after Kriflow
     restarted) waits in its inbox, and the session it resumes reads it first."""
     _seed(board)
     board.agent(W, R, S, WORKER, "worker")
     board.update_agent(S, WORKER, status="working", session_id="session-before-restart")
-    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Swarmify restarted
+    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Kriflow restarted
     script = Script([GRAPH, CLAIM, FINISH, Say("Done.")], PASS)
     swarm = _swarm(board, tmp_path, script)
 
@@ -1233,7 +1233,7 @@ def test_a_queued_message_survives_a_session_that_cannot_be_resumed(
     _seed(board)
     board.agent(W, R, S, WORKER, "worker")
     board.update_agent(S, WORKER, status="working", session_id="session-before-restart")
-    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Swarmify restarted
+    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Kriflow restarted
     script = Script([Lost()], [GRAPH, CLAIM, FINISH, Say("Done.")], PASS)
     swarm = _swarm(board, tmp_path, script)
 

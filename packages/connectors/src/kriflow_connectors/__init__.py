@@ -125,7 +125,7 @@ _TAG = re.compile(r"^([a-z][a-z0-9_]{0,59})-v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+
 
 
 def default_list() -> tuple[str, list[tuple[str, str, str]]]:
-    """The Default List `SWARMIFY_DEFAULT_PACKAGES` names, else DEFAULT_LIST: its git URL and
+    """The Default List `KRIFLOW_DEFAULT_PACKAGES` names, else DEFAULT_LIST: its git URL and
     each package's name, release tag and the version that tag names (`<name>-v<version>`), so
     an installed version is known without a fetch. Raises ValueError saying what is wrong."""
     file = Path(kernel_settings.setting("DEFAULT_PACKAGES") or DEFAULT_LIST).expanduser()
@@ -1474,7 +1474,7 @@ class Connectors:
 
     def services(self, connector: Connector) -> list[HealthCheck]:
         """A GET of each declared Service's `health` path, one check per URL its Setting holds
-        (a comma-separated list is several, as one per engine). Swarmify never starts or
+        (a comma-separated list is several, as one per engine). Kriflow never starts or
         stops a Service (ADR 0026); the operator runs them."""
         try:
             resolved = self._resolved(connector)

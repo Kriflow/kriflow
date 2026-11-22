@@ -11,7 +11,7 @@ so a number, a ranking or any other rule-bound decision comes from code a person
 rerun, never from an agent's judgement. A swarm stage writes the input JSON, this stage runs the
 script, and a later swarm stage reads the output artifact and applies it.
 
-It is a Connector Package (ADR 0019) installed with Swarmify from this folder but not enabled by
+It is a Connector Package (ADR 0019) installed with Kriflow from this folder but not enabled by
 default: enable it for a world on the Connectors page (or `PUT /api/worlds/{id}/packages/python_script`).
 
 ## The stage

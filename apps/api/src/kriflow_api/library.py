@@ -41,7 +41,7 @@ _TEMPLATE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$")
 
 
 def template_cap() -> int:
-    """The most bytes a Template upload may unpack to: `SWARMIFY_TEMPLATE_MAX_BYTES`, else 1 GB."""
+    """The most bytes a Template upload may unpack to: `KRIFLOW_TEMPLATE_MAX_BYTES`, else 1 GB."""
     return int(setting("TEMPLATE_MAX_BYTES") or 10**9)
 
 
@@ -82,7 +82,7 @@ class Asset:
 @dataclass(frozen=True)
 class OwnedFolder:
     """A folder of the world's assets a package it enables owns (Manifest `[[owned_folders]]`).
-    Swarmify lists, plays, uploads, renames and deletes its files; the package gives them
+    Kriflow lists, plays, uploads, renames and deletes its files; the package gives them
     meaning."""
 
     path: str

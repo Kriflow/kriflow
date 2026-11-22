@@ -1,6 +1,6 @@
 """HTTP face of the Eval (Learning context): judge a task's two trials blind, store a finished
 eval's trials and judgements as a report artifact in the eval world, and list the reports.
-`swarmify-eval` (eval_harness) runs the trials."""
+`kriflow-eval` (eval_harness) runs the trials."""
 
 import logging
 from dataclasses import asdict

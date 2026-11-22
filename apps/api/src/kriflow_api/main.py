@@ -1,14 +1,14 @@
 """FastAPI composition root. Serves the API under /api and the built web skin at /.
 
 Run with `uvicorn --factory kriflow_api.main:create_app`; importing this module touches no disk.
-The GraphWriter runs in the API process unless `SWARMIFY_GRAPH_WRITER=external` says a
-`swarmify-graph-writer` process does it instead; never both (ADR 0003).
-`SWARMIFY_DATA_DIR` (default `~/.swarmify`) holds `swarmify.db`, the DBOS system database
-`dbos.sqlite`, `worlds/<id>/` and the operator's `sprite-packs/`. DBOS launches in the
+The GraphWriter runs in the API process unless `KRIFLOW_GRAPH_WRITER=external` says a
+`kriflow-graph-writer` process does it instead; never both (ADR 0003).
+`KRIFLOW_DATA_DIR` (default `~/.kriflow`, settings.py) holds `swarmify.db`, the DBOS system
+database `dbos.sqlite`, `worlds/<id>/` and the operator's `sprite-packs/`. DBOS launches in the
 lifespan, so runs execute only while the app is served (or inside `with TestClient(app)`).
-`SWARMIFY_DRAIN_SECONDS` (default 1200) is how long a stop waits for the stages at work (a
+`KRIFLOW_DRAIN_SECONDS` (default 1200) is how long a stop waits for the stages at work (a
 Drain, Safe Deploys) before it stops anyway; compose's stop grace period must outlast it.
-`SWARMIFY_PASSWORD` is the operator's sign-in password (auth.py); the MCP server is also served
+`KRIFLOW_PASSWORD` is the operator's sign-in password (auth.py); the MCP server is also served
 over HTTP at `/mcp`, for API tokens, and its Remote Approvals part at `/mcp/remote_approvals`, for
 the connectors that offer them (remote.py).
 """
@@ -174,7 +174,7 @@ def world_service(root: Path, on_create: Callable[[str], None] = lambda _world_i
 def connector_service(
     root: Path, transport: ConnectorTransport | None = None, poll_seconds: float = 2.0
 ) -> Connectors:
-    """Credentials live in `<data_dir>/.env`, mode 600 (`~/.swarmify/.env` by default)."""
+    """Credentials live in `<data_dir>/.env`, mode 600 (`~/.kriflow/.env` by default)."""
     return Connectors(
         ConnectorStorage(migrated_db(root)),
         transport or McpTransport(),
@@ -284,7 +284,7 @@ def base_url() -> str:
 
 
 def internal_url() -> str:
-    """Where a connector process reaches the API: `SWARMIFY_INTERNAL_URL`, as `http://api:8000`
+    """Where a connector process reaches the API: `KRIFLOW_INTERNAL_URL`, as `http://api:8000`
     from the sandbox runner in Docker, else the operator's own `base_url`."""
     return settings.setting("INTERNAL_URL") or base_url()
 
@@ -588,7 +588,7 @@ def create_app(
     Channel by default. Every `upkeep_seconds` the view counts are written back and old
     binaries pruned. `retro` ends every run but a baseline with the Retro stage (ADR 0008); tests
     that script no retro session turn it off. `network` waits for the model API after a session
-    lost it (a probe of the API with backoff, for SWARMIFY_NETWORK_WAIT_HOURS, by default)."""
+    lost it (a probe of the API with backoff, for KRIFLOW_NETWORK_WAIT_HOURS, by default)."""
     root = root or data_dir()
     registry = connector_service(root, transport, poll_seconds)
     # Every world is given this repository's default packages once (ADR 0023): those there now
@@ -1246,7 +1246,7 @@ def create_app(
     @app.get("/api/models")
     def models() -> Models:
         """The models a world, a role or a stage may choose, and the one used when none does
-        (`SWARMIFY_MODEL`, else Claude Opus 5.5). Any other model id is priced at the most
+        (`KRIFLOW_MODEL`, else Claude Opus 5.5). Any other model id is priced at the most
         expensive of these."""
         return Models(default=default_model(), models=list(PRICES))
 

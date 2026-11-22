@@ -6,7 +6,7 @@ opened gate with the answers that fit in a message (`answers`, each a label and 
 arguments to send back); `update_gate(message_ref, resolution)` gets how it closed, whether it was
 answered there, in the web UI or elsewhere. The connector delivers an answer by calling
 `decide_gate` on the MCP server at `/mcp/remote_approvals` with the token the core provisions for
-its long-lived `listen` process, which the core keeps running (`Listeners`): Swarmify starts no
+its long-lived `listen` process, which the core keeps running (`Listeners`): Kriflow starts no
 Service (ADR 0026), but a package's own process is the package, run like its stdio server.
 """
 

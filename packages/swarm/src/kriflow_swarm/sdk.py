@@ -42,7 +42,7 @@ from kriflow_swarm.ports import (
 INBOX_POLL = 0.5
 """How often, in seconds, a live session asks its hooks for messages people sent it."""
 DEFAULT_MODEL = "claude-opus-5-5"
-"""The model a session runs on when nothing more specific chose one. `SWARMIFY_MODEL` overrides
+"""The model a session runs on when nothing more specific chose one. `KRIFLOW_MODEL` overrides
 it."""
 
 

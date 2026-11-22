@@ -1,4 +1,4 @@
-"""The one kind of coding session Swarmify runs: a Build Session (ADR 0018), which a connector
+"""The one kind of coding session Kriflow runs: a Build Session (ADR 0018), which a connector
 package requests in its Manifest, supplying the system prompt, the brief, the starter files and the
 network domains; the core knows nothing of what it builds.
 
@@ -43,7 +43,7 @@ MINUTES: float | None = None
 """A build stage's defaults; its params `max_turns` and `minutes` override them. No time
 limit by default: the run's Budget and `max_turns` bound a session."""
 CONTINUE = (
-    "You were interrupted (the run was paused, or Swarmify restarted). Your build folder is as you"
+    "You were interrupted (the run was paused, or Kriflow restarted). Your build folder is as you"
     " left it. Carry on from where you stopped and finish the task."
 )
 """The prompt of a session that continues the builder's stored session; it has the brief."""

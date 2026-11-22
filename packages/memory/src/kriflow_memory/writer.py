@@ -345,8 +345,9 @@ def _deleted(conn: sqlite3.Connection, world_id: str) -> bool:
 
 
 def main() -> None:
-    """`swarmify-graph-writer`: the GraphWriter as its own process over `SWARMIFY_DATA_DIR`, for
-    hosts that run it beside the API (which then sets SWARMIFY_GRAPH_WRITER=external)."""
+    """`kriflow-graph-writer` (old name `swarmify-graph-writer`): the GraphWriter as its own
+    process over `KRIFLOW_DATA_DIR`, for hosts that run it beside the API (which then sets
+    KRIFLOW_GRAPH_WRITER=external)."""
 
     logging.basicConfig(level=logging.INFO)
     root = data_dir()

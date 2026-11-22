@@ -151,7 +151,7 @@ class Decision:
     the stage posts."""
     by: str | None = None
     """Who answered from outside the web UI (a Remote Approval), as its connector names them,
-    such as "anuj in chat"; None for an answer given in Swarmify."""
+    such as "anuj in chat"; None for an answer given in Kriflow."""
     artifacts: list[str] = field(default_factory=list)
     """At a pick gate: the cards picked, as paths in the world folder, in pick order; the first
     is `artifact`. Empty for a pick by name alone."""
@@ -352,7 +352,7 @@ afresh, a Follow-up continues their sessions with the person's words (both ADR 0
 @dataclass(frozen=True)
 class Cause:
     """What started a stage's visit: a gate's send-back, a Rerun or a Follow-up, with its note,
-    who gave it (None for an answer given in Swarmify) and when."""
+    who gave it (None for an answer given in Kriflow) and when."""
 
     kind: str
     note: str
