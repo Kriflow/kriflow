@@ -330,8 +330,8 @@ the world's event stream and handed to the notifier; the adapter logs a line unt
 A connector is an MCP server (a command line or an http(s) URL), the credential names it needs,
 its kind (tool, stage or publish) and the stage types allowed to use it (swarm, connector). A
 publish connector is only ever allowed in connector stages, and the editor makes it follow a gate.
-Every world starts with the default packages, the folders of `connectors/` (see Default
-packages), and a world adds its own (any MCP server) on the Connectors page.
+Every world starts with the default packages, `connectors/python_script` and the Default List's
+(see Default packages), and a world adds its own (any MCP server) on the Connectors page.
 
 `web_search` and `graph` are not connectors but Agent Tools: the core gives them to swarm stages,
 with no package, version or credentials. A swarm stage lists them in `tools` like a tool
@@ -464,7 +464,7 @@ installed version with its `label`, `kind`, `about` and `state` (`installed`, or
 the `problem` when its Manifest no longer passes), and the connectors page lists them under
 Installed packages.
 
-A git source may name a `subfolder` (`connectors/speech`), the package's folder when it is not
+A git source may name a `subfolder` (`speech`), the package's folder when it is not
 at the repository's root; the install record keeps it.
 
 A private package installs from a local path, since a URL install is public only by design (no
@@ -947,30 +947,30 @@ the fixture package, `test_build_http.py` with a default package).
 ## Default packages
 
 The first-party Connector Packages live in [Kriflow/packages](https://github.com/Kriflow/packages),
-each a separate work with its Manifest, code, tests and README (this repository's `connectors/`
-still holds their pre-move copies, and `python_script`). Kriflow installs the Default List's
+each a separate work with its Manifest, code, tests and README; this repository's `connectors/`
+holds only the core's own, `python_script`. Kriflow installs the Default List's
 versions on startup and enables
 them for every world (but for one whose Manifest says `enable_by_default = false`), so workflows
 call them by name with no setup beyond each one's Setup form. Each README covers its Setup, the
 stage and its params, what it answers, the Services it calls and how its V1 settings carry over:
 
-- [`speech`](connectors/speech/README.md): voices a script, one take per scene.
-- [`remotion_render`](connectors/remotion_render/README.md): renders a script through one of the
+- [`speech`](https://github.com/Kriflow/packages/tree/main/speech): voices a script, one take per scene.
+- [`remotion_render`](https://github.com/Kriflow/packages/tree/main/remotion_render): renders a script through one of the
   world's Remotion Templates.
-- [`remotion_build`](connectors/remotion_build/README.md): a Build Session that writes a video
+- [`remotion_build`](https://github.com/Kriflow/packages/tree/main/remotion_build): a Build Session that writes a video
   project for the script, then renders it.
-- [`hyperframes_render`](connectors/hyperframes_render/README.md) and
-  [`hyperframes_build`](connectors/hyperframes_build/README.md): the same pair for HyperFrames
+- [`hyperframes_render`](https://github.com/Kriflow/packages/tree/main/hyperframes_render) and
+  [`hyperframes_build`](https://github.com/Kriflow/packages/tree/main/hyperframes_build): the same pair for HyperFrames
   (HTML and GSAP), installed but enabled only in the worlds that ask for them.
-- [`blender_render`](connectors/blender_render/README.md) and
-  [`blender_build`](connectors/blender_build/README.md): renders a Blender project's shots on
+- [`blender_render`](https://github.com/Kriflow/packages/tree/main/blender_render) and
+  [`blender_build`](https://github.com/Kriflow/packages/tree/main/blender_build): renders a Blender project's shots on
   the GPU, then its own finish step, into one video, and a Build Session that writes the project,
   checking its shots with stills; installed but enabled only in the worlds that ask for them.
-- [`youtube`](connectors/youtube/README.md) and [`upload_post`](connectors/upload_post/README.md):
+- [`youtube`](https://github.com/Kriflow/packages/tree/main/youtube) and [`upload_post`](https://github.com/Kriflow/packages/tree/main/upload_post):
   publish connectors, with Outcomes.
-- [`meta`](connectors/meta/README.md): Reels to a world's Instagram and Facebook Page, its
+- [`meta`](https://github.com/Kriflow/packages/tree/main/meta): Reels to a world's Instagram and Facebook Page, its
   Sign-in finished by the package (ADR 0029).
-- [`slack`](connectors/slack/README.md): Remote Approvals, a gate answered from chat.
+- [`slack`](https://github.com/Kriflow/packages/tree/main/slack): Remote Approvals, a gate answered from chat.
 - [`python_script`](connectors/python_script/README.md): runs one of the world's Python scripts
   on a stage's input file, its stdout the output, with no network and no agent; installed but
   enabled only in the worlds that ask for it.
@@ -1653,7 +1653,7 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
 
    A connector process runs in the `sandbox` service, which is on the `swarmify` network, so it
    reaches a container there by its service name. A Service's compose file joins that network
-   (`networks: default: {name: swarmify, external: true}`, as `connectors/speech/compose.yaml`),
+   (`networks: default: {name: swarmify, external: true}`, as the speech package's `compose.yaml`),
    and the package names the address in a `url` Setting its `[[services]]` table points at
    (`http://kokoro:8880`): the sandbox's proxy lets it reach that host and port, and the
    Connectors page checks its `health`. A fixed host may instead be listed in
@@ -1777,9 +1777,9 @@ Agent SDK bundles, linked to `/usr/local/bin/claude` for graphify.
   through one `world_deleter`: its folder, schedules, live runs (cancelled through DBOS) and every
   context's rows.
 - `apps/web` React skin with a typed client generated by openapi-typescript.
-- `connectors/` the first-party Connector Packages, each with its Manifest, code, tests, README
-  and any compose file for the Services it calls, outside the uv workspace; Kriflow installs
-  them as default packages (see Default packages).
+- `connectors/` the core's own Connector Package, `python_script`, outside the uv workspace;
+  the other first-party packages live in Kriflow/packages, and Kriflow installs both as default
+  packages (see Default packages).
 - `tests/e2e` Playwright for Python against the real API. `test_phone.py` opens every page at
   390 by 844 signed in and fails if any scrolls sideways.
 

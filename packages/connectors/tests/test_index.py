@@ -9,9 +9,7 @@ import pytest
 
 from swarmify_connectors import index
 from swarmify_connectors.index import IndexUnavailable, read_index
-from swarmify_connectors.packages import permissions, read_manifest
 
-REPO = Path(__file__).parents[3]
 ENTRY = """
 [[packages]]
 name = "echo"
@@ -94,16 +92,3 @@ def test_https_reads_it_within_the_cap_and_the_timeout() -> None:
 
     with pytest.raises(IndexUnavailable, match="it could not be reached"):
         read_index(url, fake(down))
-
-
-def test_the_prepared_index_lists_every_first_party_package_as_reviewed() -> None:
-    entries = read_index(str(REPO / "docs/index-repo/index.toml"))
-    first_party = sorted(
-        p.parent.name for p in (REPO / "connectors").glob("*/swarmify-connector.toml")
-    )
-    assert [e["name"] for e in entries] == first_party
-    for e in entries:
-        manifest = read_manifest(REPO / e["subfolder"])
-        assert e["subfolder"] == f"connectors/{e['name']}" and manifest["name"] == e["name"]
-        assert e["git"] == "https://github.com/wagleanuj/swarmify.git"
-        assert e["permissions"] == permissions(manifest), e["name"]

@@ -46,10 +46,7 @@ def test_compose_pins_the_project_its_volumes_and_its_network() -> None:
     assert compose["name"] == "swarmify"  # the volumes below are swarmify_data and so on
     assert set(compose["volumes"]) == {"data", "sandbox-socket"}
     assert compose["networks"]["default"]["name"] == "swarmify"
-    speech = yaml.safe_load((ROOT / "connectors/speech/compose.yaml").read_text())
-    assert speech["name"] == "swarmify-speech"
-    assert speech["networks"]["default"] == {"name": "swarmify", "external": True}
-    assert speech["volumes"]["speech-models"]["name"] == "swarmify_speech-models"
+    # the speech package's compose file joins this network: Kriflow/packages tests its names
     # compose.gpu.yaml merges over compose.yaml and must not name a project, volume or network
     assert set(gpu_compose.compose({"devices": []})) == {"services"}
 

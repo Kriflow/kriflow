@@ -136,7 +136,7 @@ class PackageSource(BaseModel):
     """The tag, branch or commit to install from git; none for a git URL's default branch, or
     for a folder copied as it is. A local path given one is cloned at it."""
     subfolder: Ref | None = None
-    """The folder of the repository the package is in, as `connectors/speech`; none for its
+    """The folder of the repository the package is in, as `speech`; none for its
     root."""
 
 
