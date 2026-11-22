@@ -152,6 +152,7 @@ test("on a phone More lists every other page with a one-line summary, and the ba
   const rows = sheet.getByRole("link").elements().map((a) => a.textContent);
   expect(rows).toEqual([
     "Overview1 run today · $8.61",
+    "Listsshared work lists",
     "Assets2 files",
     "Memorygraph and notes",
     "Cast4 agents",

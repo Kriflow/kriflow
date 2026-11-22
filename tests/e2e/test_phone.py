@@ -58,6 +58,7 @@ PAGES = [
     "/worlds/{world}/connectors",
     "/worlds/{world}/graph",
     "/worlds/{world}/library",
+    "/worlds/{world}/lists",
     "/worlds/{world}/assets",
     "/worlds/{world}/cast",
     "/worlds/{world}/settings",

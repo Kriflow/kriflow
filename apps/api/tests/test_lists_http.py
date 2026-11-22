@@ -183,6 +183,32 @@ def test_status_and_fields_change_with_who_and_note_in_the_history(
     assert world_lists(tmp_path).lists(world) == []
 
 
+def test_entries_waiting_for_review_raise_one_needs_you_notice_until_none_wait(
+    client: TestClient,
+) -> None:
+    world = client.post("/api/worlds", json={"name": "Lists"}).json()["id"]
+    url = f"/api/worlds/{world}/lists/ideas"
+    stray = {**IDEAS, "review": ["waiting"]}
+    assert client.put(url, json=stray).status_code == 422
+    declared = client.put(url, json={**IDEAS, "review": ["pitched"]}).json()
+    assert declared["review"] == ["pitched"]
+
+    def review() -> list[str]:
+        notices = client.get("/api/notices").json()
+        return [n["text"] for n in notices if n["kind"] == "review" and n["world_id"] == world]
+
+    assert review() == []
+    for key in ("a", "b", "c"):
+        _add(client, url, key)
+    assert review() == ["Lists: 3 Entries wait for you in ideas (pitched)."]
+    # One batch: two approved, one rejected, all with the same reason.
+    client.post(f"{url}/status", json={"keys": ["a", "b"], "status": "new", "note": "Yes"})
+    assert review() == ["Lists: 1 Entry waits for you in ideas (pitched)."]
+    rejected = client.post(f"{url}/status", json={"keys": ["c"], "status": "rejected"})
+    assert rejected.json()[0]["status"] == "rejected"
+    assert review() == []
+
+
 @pytest.mark.anyio
 async def test_the_same_calls_on_mcp(tmp_path: Path) -> None:
     worlds = world_service(tmp_path)
@@ -195,8 +221,9 @@ async def test_the_same_calls_on_mcp(tmp_path: Path) -> None:
             assert not out.is_error, out.content
             return (out.structured_content or {}).get("result", out.structured_content)
 
-        await call("declare_list", name="ideas", **IDEAS)
-        assert [w["name"] for w in await call("list_lists")] == ["ideas"]  # type: ignore[union-attr]
+        await call("declare_list", name="ideas", **IDEAS, review=["pitched"])
+        (listed,) = await call("list_lists")  # type: ignore[misc]
+        assert (listed["name"], listed["review"]) == ("ideas", ["pitched"])
         first = await call("add_entry", list="ideas", key="a", title="A", score=2)
         assert first["added"] is True  # type: ignore[index]
         again = await call("add_entry", list="ideas", key="a", title="Again")
