@@ -28,7 +28,7 @@ import httpx
 from jsonschema.exceptions import best_match
 from jsonschema.validators import Draft202012Validator
 
-INDEX_URL = "https://raw.githubusercontent.com/wagleanuj/swarmify-connectors/main/index.toml"
+INDEX_URL = "https://raw.githubusercontent.com/Kriflow/packages/main/index.toml"
 """The default for the `SWARMIFY_CONNECTOR_INDEX` setting."""
 MAX_BYTES = 1_000_000
 TIMEOUT_SECONDS = 10.0

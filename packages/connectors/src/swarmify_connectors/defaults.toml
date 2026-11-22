@@ -1,0 +1,20 @@
+# The Default List (issue 585): the packages every install has, each pinned at a release tag of
+# the packages repository and installed from git there when that version is not installed yet.
+# Moving one to a new release is a one-line change of its `ref`, reviewed and deployed like any
+# other; the box never upgrades a package by itself. `SWARMIFY_DEFAULT_PACKAGES` names another
+# list of this shape (an offline box, a development checkout, the tests). `python_script` is not
+# here: it stays a folder of the core (connectors/python_script) and installs from it.
+git = "https://github.com/Kriflow/packages.git"
+packages = [
+  { name = "blender_build", ref = "blender_build-v1.1.2" },
+  { name = "blender_render", ref = "blender_render-v1.0.7" },
+  { name = "hyperframes_build", ref = "hyperframes_build-v1.0.2" },
+  { name = "hyperframes_render", ref = "hyperframes_render-v1.0.2" },
+  { name = "meta", ref = "meta-v1.3.0" },
+  { name = "remotion_build", ref = "remotion_build-v1.0.4" },
+  { name = "remotion_render", ref = "remotion_render-v1.0.9" },
+  { name = "slack", ref = "slack-v1.1.2" },
+  { name = "speech", ref = "speech-v1.3.1" },
+  { name = "upload_post", ref = "upload_post-v1.0.1" },
+  { name = "youtube", ref = "youtube-v1.6.0" },
+]

@@ -1,20 +1,63 @@
 """The fake ConnectorTransport: records every start and call, answers with declared outputs."""
 
-from collections.abc import Callable, Iterator
+import os
+import shutil
+import subprocess
+import tomllib
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 from swarmify_connectors.model import Connector, ConnectorError, Tool
 
-FIXTURE_DEFAULTS = (
-    "connectors/python_script",
-    *(f"packages/connectors/tests/fixtures/packages/{n}" for n in ("fake_publish", "kit")),
-    "packages/connectors/tests/fixtures/packages/sketch",
-)
-"""The default packages of the core's API and end-to-end tests (issue 586): `python_script`, the
-core's own, and fixture packages standing in for the real ones (`fake_publish` for a publish
-platform, `kit` for a Templates render, `sketch` for a Build Session), so no core test needs a
-real package."""
+FIXTURES = Path(__file__).parents[2] / "tests/fixtures/packages"
+"""The fixture packages of the core's tests."""
+FIXTURE_DEFAULTS = ("fake_publish", "kit", "sketch")
+"""The Default List of the core's API and end-to-end tests (issue 586): fixture packages standing
+in for the real ones (`fake_publish` for a publish platform, `kit` for a Templates render,
+`sketch` for a Build Session), so no core test needs a real package or GitHub."""
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    who = ["-c", "user.name=t", "-c", "user.email=t@example.org", "-c", "tag.gpgSign=false"]
+    done = subprocess.run(
+        ["git", *who, *args], cwd=repo, env=env, check=True, capture_output=True, text=True
+    )
+    return done.stdout.strip()
+
+
+def tag_package(repo: Path, folder: Path) -> str:
+    """Release the package at `folder` in the packages repository `repo` (made when missing):
+    copied to `<name>/`, committed and tagged `<name>-v<version>`, as Kriflow/packages does.
+    The tag."""
+    manifest = tomllib.loads((folder / "swarmify-connector.toml").read_text())
+    name, tag = manifest["name"], f"{manifest['name']}-v{manifest['version']}"
+    if not (repo / ".git").is_dir():
+        repo.mkdir(parents=True, exist_ok=True)
+        _git(repo, "init", "-q")
+    shutil.rmtree(repo / name, ignore_errors=True)
+    skip = shutil.ignore_patterns(".venv", "node_modules", "__pycache__", ".swarmify-install.json")
+    shutil.copytree(folder, repo / name, ignore=skip)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", tag, "--allow-empty")
+    _git(repo, "tag", tag)
+    return tag
+
+
+def default_list(where: Path, packages: Mapping[str, Path]) -> Path:
+    """A Default List at `where/defaults.toml` naming each package of `packages` (name to its
+    folder) at its release tag in a local packages repository `where/repo`, for
+    `SWARMIFY_DEFAULT_PACKAGES`. The list's file."""
+    repo = where / "repo"
+    tags = {name: tag_package(repo, folder) for name, folder in packages.items()}
+    lines = [f'git = "{repo}"', "packages = ["]
+    lines += [f'  {{ name = "{n}", ref = "{t}" }},' for n, t in tags.items()]
+    file = where / "defaults.toml"
+    file.write_text("\n".join([*lines, "]", ""]))
+    return file
+
 
 Answer = dict[str, Any] | BaseException | Callable[[dict[str, Any]], dict[str, Any]]
 

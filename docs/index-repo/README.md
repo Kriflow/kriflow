@@ -7,7 +7,7 @@ declares. It is a list, not a marketplace: nothing is hosted here but the list, 
 an entry is the same as installing its git URL by hand.
 
 Kriflow reads this file from `SWARMIFY_CONNECTOR_INDEX`, by default
-`https://raw.githubusercontent.com/wagleanuj/swarmify-connectors/main/index.toml`. Point that
+`https://raw.githubusercontent.com/Kriflow/packages/main/index.toml`. Point that
 setting at your own fork, over https, or at a local file to run a private index.
 
 ## The format

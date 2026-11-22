@@ -2,12 +2,22 @@
 
 import os
 import sys
+import tempfile
 import threading
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
 from swarmify_connectors import packages
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """An empty Default List (issue 585) unless a test names its own: no test clones GitHub."""
+    if "SWARMIFY_DEFAULT_PACKAGES" not in os.environ:
+        file = Path(tempfile.mkdtemp()) / "no-defaults.toml"
+        file.write_text('git = "nowhere"\npackages = []\n')
+        os.environ["SWARMIFY_DEFAULT_PACKAGES"] = str(file)
 
 
 def pytest_sessionfinish(session: pytest.Session) -> None:

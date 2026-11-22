@@ -10,7 +10,7 @@ import json
 import sqlite3
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -19,14 +19,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from swarmify_api import main
-from swarmify_connectors import Connectors, FakeTransport, oauth
-from swarmify_connectors.fake import FIXTURE_DEFAULTS
+from swarmify_connectors import FakeTransport, oauth
+from swarmify_connectors.fake import FIXTURE_DEFAULTS, FIXTURES, default_list
 from swarmify_connectors.fake_oauth import FakeProvider
 from swarmify_kernel import Event, new_id
 from swarmify_workflows import Workflow
 from swarmify_workflows.sqlite import SqliteStorage as WorkflowStorage
 
-ECHO = "packages/connectors/tests/fixtures/packages/echo"
 V1_WORKFLOW = """name: Bedtime
 stages:
   - connector: write
@@ -40,14 +39,11 @@ stages:
 
 
 @pytest.fixture
-def with_echo(monkeypatch: pytest.MonkeyPatch) -> None:
+def with_echo(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
     """echo is a default too, standing in for a V1 built-in with a Setting and a Credential."""
-    real = Connectors.install_defaults
-
-    def install_defaults(self: Connectors, sources: Sequence[str] | None = None) -> dict[str, str]:
-        return real(self, [*FIXTURE_DEFAULTS, ECHO] if sources is None else sources)
-
-    monkeypatch.setattr(Connectors, "install_defaults", install_defaults)
+    names = (*FIXTURE_DEFAULTS, "echo")
+    listed = default_list(tmp_path_factory.mktemp("list"), {n: FIXTURES / n for n in names})
+    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(listed))
 
 
 def writes(args: dict[str, Any]) -> dict[str, Any]:

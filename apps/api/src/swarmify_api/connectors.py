@@ -3,6 +3,7 @@ Connector Packages installed for the whole install."""
 
 import hashlib
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
@@ -31,6 +32,20 @@ from swarmify_connectors.packages import NEWEST_CONTRACT, OLDEST_CONTRACT, contr
 from swarmify_connectors.setup import env_name, fields, needs_sign_in, scope, secret
 from swarmify_workflows import Workflows
 from swarmify_worlds import Worlds
+
+_OLD_HELP = re.compile(
+    r"^https://github\.com/(?:wagleanuj|Kriflow)/swarmify/(?:tree|blob)/[^/]+/connectors/([a-z0-9_]+)(.*)$"
+)
+"""A help link into the core's old `connectors/` folder, which the packages left (issue 585)."""
+
+
+def help_link(url: str | None) -> str | None:
+    """A Setup form's help link. Legacy: a version installed before the packages moved to
+    Kriflow/packages keeps a link under the core's old `connectors/<name>`, answered as the same
+    place in the package's new home."""
+    if url and (old := _OLD_HELP.fullmatch(url)):
+        return f"https://github.com/Kriflow/packages/tree/main/{old[1]}{old[2]}"
+    return url
 
 
 class NewConnector(BaseModel):
@@ -387,7 +402,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
     @api.get("/packages/index")
     def package_index() -> PackageIndex:
         """The curated index of known packages, read from `SWARMIFY_CONNECTOR_INDEX` (an https
-        URL or a local file; by default the swarmify-connectors repository's `index.toml`). 502
+        URL or a local file; by default Kriflow/packages' `index.toml`). 502
         saying why when it cannot be fetched or read."""
         url = os.environ.get("SWARMIFY_CONNECTOR_INDEX") or INDEX_URL
         try:
@@ -554,7 +569,7 @@ def router(connectors: Connectors, worlds: Worlds, workflows: Workflows) -> APIR
         return SetupView(
             package=name,
             version=connector.version or "",
-            help_url=m.get("setup", {}).get("help_url"),
+            help_url=help_link(m.get("setup", {}).get("help_url")),
             test=m.get("setup", {}).get("test"),
             fields=[
                 SetupField.model_validate(

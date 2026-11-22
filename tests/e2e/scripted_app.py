@@ -23,6 +23,7 @@ after the last change; the real graphify MCP process answers queries over it."""
 import importlib.util
 import json
 import os
+import tempfile
 import wave
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -35,8 +36,8 @@ from fastapi import FastAPI
 
 from swarmify_api.main import create_app as real_app
 from swarmify_api.planner import SYSTEM as PLANNER_SYSTEM
-from swarmify_connectors import Connector, ConnectorError, Connectors, FakeTransport, McpTransport
-from swarmify_connectors.fake import FIXTURE_DEFAULTS
+from swarmify_connectors import Connector, ConnectorError, FakeTransport, McpTransport
+from swarmify_connectors.fake import FIXTURE_DEFAULTS, default_list
 from swarmify_connectors.mcp_transport import Caller
 from swarmify_connectors.model import Tool
 from swarmify_learning import SYSTEM as RETRO_SYSTEM
@@ -351,13 +352,11 @@ def _with_shorts_template() -> None:
 
 
 def _fixture_defaults() -> None:
-    """The defaults are the fixture packages, never the real ones."""
-    real = Connectors.install_defaults
-
-    def install_defaults(self: Connectors, sources: Any = None) -> dict[str, str]:
-        return real(self, FIXTURE_DEFAULTS if sources is None else sources)
-
-    Connectors.install_defaults = install_defaults  # type: ignore[method-assign]
+    """The defaults are the fixture packages, from a Default List of a local packages repository
+    made for this app, never the real packages, never GitHub."""
+    where = Path(tempfile.mkdtemp(prefix="default-list-"))
+    listed = default_list(where, {n: FIXTURES / n for n in FIXTURE_DEFAULTS})
+    os.environ["SWARMIFY_DEFAULT_PACKAGES"] = str(listed)
 
 
 def create_app() -> FastAPI:

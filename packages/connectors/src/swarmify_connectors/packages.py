@@ -894,12 +894,14 @@ class Packages:
         commit: str | None = None,
         approved: Collection[str] | None = None,
         subfolder: str | None = None,
+        shared_caches: bool = False,
     ) -> Package:
         """Copy the package at `source` (cloned at `commit`, the one reviewed, else at `ref`;
         its `subfolder`, when given) to `<root>/<name>/<version>/` and run its install step
         there. `approved`, the permissions the operator approved, must hold every one it
         declares, or nothing of it runs; None for this repository's own packages and local
-        ones, which Swarmify trusts. Raises
+        ones, which Swarmify trusts. `shared_caches` lets its install step share uv's and npm's
+        caches as this repository's own packages do: for a default from the Default List. Raises
         ManifestError for a bad Manifest, InstallError when a permission is not approved, the
         version is installed already or the step fails; either way nothing new is left
         behind."""
@@ -907,7 +909,7 @@ class Packages:
             record = {"source": record_as or source}
             if subfolder:
                 record["subfolder"] = subfolder
-            return self._install(folder, record, ref or commit, resolved, approved)
+            return self._install(folder, record, ref or commit, resolved, approved, shared_caches)
 
     def _install(
         self,
@@ -916,6 +918,7 @@ class Packages:
         ref: str | None,
         commit: str | None,
         approved: Collection[str] | None,
+        shared_caches: bool = False,
     ) -> Package:
         manifest = read_manifest(folder)
         if approved is not None:
@@ -930,7 +933,8 @@ class Packages:
         try:
             shutil.copytree(folder, target, ignore=COPY_SKIPS)
             if manifest.get("install"):
-                self._run_install(manifest, target, folder.is_relative_to(self.repo.resolve()))
+                ours = shared_caches or folder.is_relative_to(self.repo.resolve())
+                self._run_install(manifest, target, ours)
             record: dict[str, Any] = {
                 **source,
                 "installed_at": datetime.now(UTC).isoformat(),

@@ -111,7 +111,7 @@ def test_test_explains_what_went_wrong(
 
 
 def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
-    client: TestClient, tmp_path: Path
+    client: TestClient, tmp_path: Path, fixture_list: Path
 ) -> None:
     w = world(client)
     added = client.post(f"/api/worlds/{w}/connectors", json=FAL)
@@ -124,12 +124,14 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
         "0.0.1",
     )
     assert body["missing"] == [] and "s3cret" not in added.text
-    assert [(p["name"], p["version"], p["source"]) for p in client.get("/api/packages").json()] == [
-        ("fake_publish", "1.0.0", f"{FIXTURES}/fake_publish"),
-        ("fal_video", "0.0.1", "local"),
-        ("kit", "1.0.0", f"{FIXTURES}/kit"),
-        ("python_script", "1.0.0", "connectors/python_script"),
-        ("sketch", "1.0.0", f"{FIXTURES}/sketch"),
+    listed = client.get("/api/packages").json()
+    git = str(fixture_list.parent / "repo")  # the Default List's packages repository
+    assert [(p["name"], p["version"], p["source"], p.get("ref")) for p in listed] == [
+        ("fake_publish", "1.0.0", git, "fake_publish-v1.0.0"),
+        ("fal_video", "0.0.1", "local", None),
+        ("kit", "1.0.0", git, "kit-v1.0.0"),
+        ("python_script", "1.0.0", "connectors/python_script", None),
+        ("sketch", "1.0.0", git, "sketch-v1.0.0"),
     ]
     assert client.get(f"/api/worlds/{w}/packages").json() == [
         {"name": "fake_publish", "version": "1.0.0"},
@@ -638,3 +640,33 @@ def test_a_packages_setup_form_tests_before_saving_and_never_returns_a_credentia
     assert bad.status_code == 422 and bad.json()["detail"] == "Ratio: is a number"
     gone = client.get(f"/api/worlds/{one}/packages/echo/setup")
     assert gone.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("stored", "answered"),
+    [
+        (
+            "https://github.com/wagleanuj/swarmify/tree/main/connectors/youtube#setup",
+            "https://github.com/Kriflow/packages/tree/main/youtube#setup",
+        ),
+        (
+            "https://github.com/Kriflow/swarmify/blob/main/connectors/speech/README.md",
+            "https://github.com/Kriflow/packages/tree/main/speech/README.md",
+        ),
+        ("https://example.org/probe#setup", "https://example.org/probe#setup"),
+    ],
+)
+def test_a_setup_form_answers_an_old_core_help_link_as_the_package_s_new_home(
+    client: TestClient, tmp_path: Path, stored: str, answered: str
+) -> None:
+    """A version installed before the move keeps the help_url pointing into the core's old
+    `connectors/` folder, gone since: the form answers the package's README in Kriflow/packages."""
+    source = tmp_path / "probe"
+    shutil.copytree(Path(__file__).parents[3] / FIXTURES / "probe", source)
+    toml = source / "swarmify-connector.toml"
+    toml.write_text(toml.read_text().replace("[setup]\n", f'[setup]\nhelp_url = "{stored}"\n'))
+    assert install(client, str(source)).status_code == 201
+    w = world(client)
+    assert client.put(f"/api/worlds/{w}/packages/probe", json={"version": "1.0.0"}).is_success
+    form = client.get(f"/api/worlds/{w}/packages/probe/setup").json()
+    assert form["help_url"] == answered

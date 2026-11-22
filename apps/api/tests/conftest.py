@@ -1,6 +1,6 @@
 import threading
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -13,26 +13,37 @@ from fake_graph import fake_extract
 from swarmify_api import main
 from swarmify_api.main import create_app
 from swarmify_connectors import Connectors, FakeTransport, Packages
-from swarmify_connectors.fake import FIXTURE_DEFAULTS
+from swarmify_connectors.fake import FIXTURE_DEFAULTS, FIXTURES, default_list
 from swarmify_memory import FakeGraphIndex
 from swarmify_swarm import SdkRuntime
 from swarmify_swarm.fake import Script
 from swarmify_swarm.network import NetworkWait
 
 
-@pytest.fixture(autouse=True)
-def fixture_defaults(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The app's default packages are the fixture ones (FIXTURE_DEFAULTS), never the real
-    packages, and their install steps are skipped: the API starts the app ~200 times. A module
-    that needs an install step to run sets `real_default_installs = True`."""
-    real = Connectors.install_defaults
-    skip = not getattr(request.module, "real_default_installs", False)
+@pytest.fixture(scope="session")
+def fixture_list(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The Default List of the API tests: the fixture packages (FIXTURE_DEFAULTS) released in a
+    local packages repository, never the real packages, never GitHub."""
+    where = tmp_path_factory.mktemp("default-list")
+    return default_list(where, {n: FIXTURES / n for n in FIXTURE_DEFAULTS})
 
-    def install_defaults(self: Connectors, sources: Sequence[str] | None = None) -> dict[str, str]:
+
+@pytest.fixture(autouse=True)
+def fixture_defaults(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, fixture_list: Path
+) -> None:
+    """The app's defaults come from `fixture_list`, and their install steps (python_script's)
+    are skipped: the API starts the app ~200 times. A module that needs an install step to run
+    sets `real_default_installs = True`."""
+    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(fixture_list))
+    if getattr(request.module, "real_default_installs", False):
+        return
+    real = Connectors.install_defaults
+
+    def install_defaults(self: Connectors) -> dict[str, str]:
         with monkeypatch.context() as m:
-            if skip:
-                m.setattr(Packages, "_run_install", lambda *a: None)
-            return real(self, FIXTURE_DEFAULTS if sources is None else sources)
+            m.setattr(Packages, "_run_install", lambda *a: None)
+            return real(self)
 
     monkeypatch.setattr(Connectors, "install_defaults", install_defaults)
 
