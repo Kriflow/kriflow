@@ -18,10 +18,11 @@ type World = components["schemas"]["World"];
 type Spend = components["schemas"]["Spend"];
 
 type Busy = "world" | "slack" | "danger";
-type Form = { monthly: string; runCap: string; retention: string; agents: string; model: string };
+type Form = { name: string; monthly: string; runCap: string; retention: string; agents: string; model: string };
 
 /** The form as the world has it: what Save compares against to show itself. */
 const formOf = (w: World): Form => ({
+  name: w.name,
   monthly: w.monthly_budget_usd == null ? "" : String(w.monthly_budget_usd),
   runCap: String(w.run_cap ?? 2),
   retention: String(w.retention_days ?? 90),
@@ -49,7 +50,7 @@ export function Settings() {
   const path = { params: { path: { world_id: worldId } } };
   const [world, setWorld] = useState<World | null>(null);
   const [spend, setSpend] = useState<Spend | null>(null);
-  const [form, setForm] = useState<Form>({ monthly: "", runCap: "2", retention: "90", agents: "4", model: "" });
+  const [form, setForm] = useState<Form>({ name: "", monthly: "", runCap: "2", retention: "90", agents: "4", model: "" });
   const models = useModels();
   const [current, setCurrent] = useState<string | null | undefined>(undefined);
   const [draft, setDraft] = useState("");
@@ -114,6 +115,7 @@ export function Settings() {
     const { data, error } = await api.PATCH("/api/worlds/{world_id}", {
       ...path,
       body: {
+        name: form.name.trim(),
         monthly_budget_usd: form.monthly.trim() === "" ? null : Number(form.monthly),
         retention_days: Number(form.retention),
         model: form.model || null,
@@ -125,6 +127,7 @@ export function Settings() {
     if (error || !data) return bad(refused(error, "Not saved. Check the numbers and try again."));
     setWorld(data);
     setForm(formOf(data));
+    dispatchEvent(new Event("worlds-changed")); // the shell's world chip reads the new name
     setSpend((s) => (s ? { ...s, monthly_budget_usd: data.monthly_budget_usd ?? null } : s));
     notify("Saved. Applies to the next run that starts.", { tone: "ok" });
   }
@@ -180,6 +183,13 @@ export function Settings() {
         <Row title="World" about={`What ${name} may spend, how long it keeps files and the model it runs on.`}>
           <fieldset className="panel set-panel" disabled={!world}>
             <div className="settings-grid">
+              <div className="field">
+                <label>
+                  Name
+                  <input type="text" required maxLength={120} value={form.name} onChange={field("name")} />
+                </label>
+                <span className="faint">Shown across the app. Runs, workflows and links keep working.</span>
+              </div>
               <div className="field">
                 <label>
                   Monthly budget, dollars

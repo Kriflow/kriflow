@@ -100,6 +100,7 @@ test("one Save shows only once something changed, sends the World and Runs rows 
   await expect.element(save).not.toBeInTheDocument();
 
   await form.getByRole("spinbutton", { name: "Monthly budget, dollars" }).fill("25");
+  await form.getByRole("textbox", { name: "Name" }).fill(" Bowl Cut Science ");
   await form.getByRole("spinbutton", { name: "Keep videos and images for, days" }).fill("30");
   const model = form.getByRole("combobox", { name: "Model" });
   await expect.element(model).toHaveDisplayValue("Default: claude-opus-5-5");
@@ -109,7 +110,7 @@ test("one Save shows only once something changed, sends the World and Runs rows 
   expect(document.querySelectorAll("main button.primary")).toHaveLength(1);
   await save.click();
   await expect.element(screen.getByText("Saved. Applies to the next run that starts.")).toBeVisible(); // a toast
-  expect(bodies).toEqual([{ monthly_budget_usd: 25, retention_days: 30, model: "claude-sonnet-5-5", run_cap: 1, agent_count: 2 }]);
+  expect(bodies).toEqual([{ name: "Bowl Cut Science", monthly_budget_usd: 25, retention_days: 30, model: "claude-sonnet-5-5", run_cap: 1, agent_count: 2 }]);
   await expect.element(screen.getByTestId("spent")).toHaveTextContent("Spent this month: $1.50, an estimate of $25.00.");
   await expect.element(save).not.toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/worlds/world_1/settings");
