@@ -196,3 +196,22 @@ test("a workflow archives from its menu after a confirm, then shows under Show a
   await expect.element(screen.getByRole("button", { name: "Show archived (1)" })).toBeVisible();
   await expect.element(rows.nth(2)).not.toMatchTextContent(/archived/);
 });
+
+test("a workflow archived or restored elsewhere leaves or rejoins the list without a refresh", async () => {
+  await page.viewport(390, 844);
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([{ id: "world_1", name: "Video", purpose: "", created_at: ts }]),
+    "GET /api/gates": () => Response.json([]),
+    "GET /api/worlds/world_1/workflows": () => Response.json(workflows),
+    "GET /api/worlds/world_1/runs": () => Response.json(runs),
+  });
+  const { screen } = await mountAt("/worlds/world_1/workflows");
+  const rows = screen.getByTestId("workflow-row");
+  await expect.poll(() => rows.elements().length).toBe(2);
+  await expect.poll(() => FakeEventSource.open.length).toBeGreaterThan(0);
+  FakeEventSource.emit("workflow.archived", { payload: { workflow_id: "wf_2", name: "Daily digest" } });
+  await expect.poll(() => rows.elements().length).toBe(1);
+  await expect.element(screen.getByRole("button", { name: "Show archived (1)" })).toBeVisible();
+  FakeEventSource.emit("workflow.restored", { payload: { workflow_id: "wf_2", name: "Daily digest" } });
+  await expect.poll(() => rows.elements().length).toBe(2);
+});

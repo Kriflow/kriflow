@@ -982,7 +982,7 @@ test("on a 390 px phone a package's Review Feed shows as one notice in its world
     "GET /api/gates": () => Response.json([]),
     "GET /api/notices": () =>
       Response.json([
-        { kind: "feed", text: "3 Tray things need you: 2 move, 1 character. 3 from Body facts short.", world_id: "world_1", run_id: null, url: open },
+        { kind: "feed", text: "3 Tray things need you: 2 moves, 1 character. 3 from Body facts short.", world_id: "world_1", run_id: null, url: open },
         { kind: "feed", text: "1 Tray things need you: 1 prop.", world_id: "world_2", run_id: null, url: open },
       ]),
   });
@@ -990,7 +990,7 @@ test("on a 390 px phone a package's Review Feed shows as one notice in its world
   const { screen } = await mountAt("/gates?world=world_1");
   const feed = screen.getByTestId("notices-feed");
   await feed.getByText("1 app has things for you").click();
-  await expect.element(feed.getByTestId("notice")).toMatchTextContent(/3 Tray things need you: 2 move, 1 character\. 3 from Body facts short\./);
+  await expect.element(feed.getByTestId("notice")).toMatchTextContent(/3 Tray things need you: 2 moves, 1 character\. 3 from Body facts short\./);
   expect(screen.getByText(/1 prop/).elements()).toHaveLength(0); // another world's
   const link = feed.getByRole("link", { name: "Open" });
   await expect.element(link).toHaveAttribute("href", open);
@@ -999,6 +999,26 @@ test("on a 390 px phone a package's Review Feed shows as one notice in its world
     expect(target.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});
+
+test("a push about a Review Feed opens Needs you with the feed's notice open and its Open link in focus", async () => {
+  await page.viewport(390, 844);
+  const open = "https://tray.example.ts.net:8765/#/review";
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video]),
+    "GET /api/gates": () => Response.json([]),
+    "GET /api/notices": () =>
+      Response.json([
+        { kind: "sign_in", text: "YouTube needs sign-in.", world_id: "world_1", run_id: null },
+        { kind: "feed", text: "2 Tray things need you: 2 props.", world_id: "world_1", run_id: null, url: open },
+      ]),
+  });
+  localStorage.removeItem("swarmify.dismissed-notices");
+  const { screen } = await mountAt("/gates?notice=feed");
+  const link = screen.getByTestId("notices-feed").getByRole("link", { name: "Open" });
+  await expect.element(link).toBeVisible();
+  await expect.poll(() => document.activeElement === link.element()).toBe(true);
+  await expect.element(screen.getByTestId("notices-sign_in").getByTestId("notice")).not.toBeVisible(); // only the feed opens
 });
 
 test("on a phone a post that may have gone out asks Did this post go out?, and each answer says so", async () => {

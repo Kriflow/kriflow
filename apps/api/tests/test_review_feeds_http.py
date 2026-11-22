@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from api_fakes import install, until
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_push_http import AUTH, P256DH, PushService
 
@@ -19,6 +20,7 @@ from swarmify_api.review_feeds import ReviewFeeds
 
 TRAY = "packages/connectors/tests/fixtures/packages/tray"
 OPEN = "https://tray.example:8765/#/review"
+DAILY = "name: Daily cut\nstages:\n  - gate: ok\n    ask: Fine?\n"
 
 
 def item(id: str, kind: str = "move", run_id: str | None = None) -> dict[str, Any]:
@@ -42,7 +44,9 @@ class Feed:
 def feeds(feed: Feed, urls: tuple[str, ...] = ("http://t/f",)) -> ReviewFeeds:
     worlds = SimpleNamespace(list_all=lambda: [SimpleNamespace(id="w1")])
     registry = SimpleNamespace(review_feeds=lambda _w: [("tray", "Tray things", u) for u in urls])
-    names = {"run_1": "Daily cut"}
+    # each run's workflow name; a second run of Daily cut, and runs of five more workflows
+    names = {"run_1": "Daily cut", "run_2": "Daily cut"}
+    names |= {f"run_w{i}": f"Flow {i}" for i in range(5)}
     return ReviewFeeds(worlds, registry, lambda w, r: names.get(r) if w == "w1" else None, feed)  # type: ignore[arg-type]
 
 
@@ -57,13 +61,29 @@ def test_a_notice_counts_by_kind_names_the_run_and_goes_at_zero() -> None:
     ]
     f.refresh()
     (notice,) = f.notices()
-    assert notice.text == "3 Tray things need you: 2 move, 1 prop. 2 from Daily cut."
+    assert notice.text == "3 Tray things need you: 2 moves, 1 prop. 2 from Daily cut."
     assert (notice.kind, notice.world_id, notice.url) == ("feed", "w1", OPEN)
     assert f.for_run("w1", {"run_1"})[0].count == 2
     assert f.for_run("w2", {"run_1"}) == []
     feed.answer = {"open_url": OPEN, "items": []}
     f.refresh()
     assert f.notices() == []
+
+
+def test_a_notice_groups_runs_by_workflow_caps_the_list_and_names_kinds_in_plural() -> None:
+    feed = Feed()
+    f = feeds(feed)
+    runs = ["run_1", "run_2", "run_2", *[f"run_w{i}" for i in (0, 0, 1, 2, 3, 4)], "run_gone"]
+    kinds = ["prop"] * 7 + ["character"] * 2 + ["box"]
+    pairs = enumerate(zip(kinds, runs, strict=True))
+    feed.answer["items"] = [item(str(n), k, r) for n, (k, r) in pairs]
+    f.refresh()
+    (notice,) = f.notices()
+    # two runs of Daily cut are one workflow; a run whose workflow is unknown is not named
+    assert notice.text == (
+        "10 Tray things need you: 7 props, 2 characters, 1 box."
+        " 3 from Daily cut, 2 from Flow 0, 1 from Flow 1 and 3 more."
+    )
 
 
 def test_a_push_goes_once_per_new_item_and_never_again() -> None:
@@ -158,4 +178,37 @@ def test_a_package_feed_reaches_needs_you_the_run_page_and_the_phone_once(
     asked = len(feed.asked)
     until(lambda: len(feed.asked) > asked + 3)  # several passes later, still one push
     ((_, payload),) = service.sent
-    assert payload["body"] == "Tray things: Thing b needs you." and payload["url"] == "/gates"
+    # a tap opens Needs you with the feed's notice and its Open link in focus
+    assert payload["body"] == "Tray things: Thing b needs you."
+    assert payload["url"] == "/gates?notice=feed"
+
+
+def test_a_feed_notice_names_a_runs_workflow_and_never_an_ad_hoc_runs_goal(
+    service: PushService, feed: Feed, app: FastAPI
+) -> None:
+    """The app's own lookup: two runs' items group under their workflow's name; an Ad Hoc Run
+    (named after its free-text goal) is counted but never named."""
+    with TestClient(app) as client:
+        assert install(client, TRAY).status_code == 201
+        world = client.post("/api/worlds", json={"name": "Shorts"}).json()["id"]
+        package = f"/api/worlds/{world}/packages/tray"
+        assert client.put(package, json={"version": "1.0.0"}).is_success
+        made = client.post(f"/api/worlds/{world}/workflows", json={"yaml": DAILY})
+        assert made.status_code == 201, made.json()
+        runs = [
+            client.post(f"/api/workflows/{made.json()['workflow_id']}/runs", json={}).json()["id"]
+            for _ in range(2)
+        ]
+        goal = "Smoke test of the makers (no short is made). Use the tools only."
+        ad_hoc = client.post(f"/api/worlds/{world}/runs", json={"goal": goal}).json()["id"]
+        feed.answer["items"] = [item("a", "prop", runs[0]), item("b", "prop", runs[1])]
+        feed.answer["items"] += [item("c", "prop", ad_hoc)]
+        setup = {"world": {"app_url": "http://tray:8765/"}}
+        assert client.put(f"{package}/setup", json=setup).is_success
+
+        def text() -> str | None:
+            found = [n for n in client.get("/api/notices").json() if n["kind"] == "feed"]
+            return found[0]["text"] if found else None
+
+        until(lambda: text() is not None)
+        assert text() == "3 Tray things need you: 3 props. 2 from Daily cut."

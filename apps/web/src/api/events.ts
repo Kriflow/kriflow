@@ -50,6 +50,9 @@ export type WorldEvents = {
   "world.updated": Partial<components["schemas"]["World"]>;
   /** A workflow was saved; reload the list to see it. */
   "workflow.saved": unknown;
+  /** A workflow was archived (left out of the lists, its schedule off) or restored. */
+  "workflow.archived": { workflow_id: string; name: string };
+  "workflow.restored": { workflow_id: string; name: string };
   /** A World List's Entry was added or changed: which list and key. */
   "entry.added": { list: string; key: string };
   "entry.changed": { list: string; key: string };
@@ -68,6 +71,8 @@ const TYPES: (keyof WorldEvents)[] = [
   "artifact.created",
   "world.updated",
   "workflow.saved",
+  "workflow.archived",
+  "workflow.restored",
   "entry.added",
   "entry.changed",
   "entry.deleted",

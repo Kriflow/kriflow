@@ -1128,9 +1128,12 @@ def create_app(
                 log.exception("sweep failed, retrying next tick")
             await asyncio.sleep(sweep_seconds)
 
-    def run_name(world_id: str, run_id: str) -> str | None:
+    def workflow_of(world_id: str, run_id: str) -> str | None:
         run = runner.get(run_id)
-        return run.name if run and run.world_id == world_id else None
+        if run is None or run.world_id != world_id or run.workflow_id is None:
+            return None  # an Ad Hoc Run has no workflow, and its name is its goal
+        workflow = workflow_svc.get(run.workflow_id)
+        return workflow.name if workflow else None
 
     def family(run_id: str) -> set[str]:
         """The run's id and those of the runs it came from."""
@@ -1141,7 +1144,7 @@ def create_app(
             run = runner.get(run.parent_run_id) if run.parent_run_id else None
         return ids or {run_id}
 
-    feeds = review_feeds.ReviewFeeds(world_svc, registry, run_name)
+    feeds = review_feeds.ReviewFeeds(world_svc, registry, workflow_of)
     outcome_notices: dict[str, str] = {}  # by connector, from the last upkeep
     notices = upkeep.notice_source(
         world_svc,

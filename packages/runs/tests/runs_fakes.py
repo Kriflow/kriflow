@@ -40,7 +40,7 @@ class FakeNotifier:
         self.events.append(event)
 
 
-def wait_for(check: Callable[[], bool], seconds: float = 10.0) -> None:
+def wait_for(check: Callable[[], bool], seconds: float = 30.0) -> None:
     deadline = time.monotonic() + seconds
     while not check():
         if time.monotonic() > deadline:

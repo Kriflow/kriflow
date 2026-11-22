@@ -137,11 +137,16 @@ export function WorldOverview() {
       setRuns((prev) => prev && (prev.some((r) => r.id === run.id) ? prev.map((r) => (r.id === run.id ? run : r)) : [run, ...prev])),
     // A setting changed elsewhere (Crew in another tab): switching views sends the skin as it is now.
     "world.updated": (changes) => setWorld((prev) => prev && { ...prev, ...changes }),
-    "workflow.saved": () =>
-      void api
-        .GET("/api/worlds/{world_id}/workflows", { params: { path: { world_id: worldId } } })
-        .then(({ data }) => data && setWorkflows(data)),
+    "workflow.saved": () => reloadWorkflows(),
+    // archived or restored elsewhere: it leaves or rejoins the list
+    "workflow.archived": () => reloadWorkflows(),
+    "workflow.restored": () => reloadWorkflows(),
   });
+  function reloadWorkflows() {
+    void api
+      .GET("/api/worlds/{world_id}/workflows", { params: { path: { world_id: worldId } } })
+      .then(({ data }) => data && setWorkflows(data));
+  }
 
   useEffect(() => {
     api

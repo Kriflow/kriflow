@@ -471,6 +471,7 @@ export function Gates() {
       <Notices
         // an account is shared by every world, so only a post's, a list's or a feed's belongs to one
         notices={notices.filter((n) => !["visibility", "review", "feed"].includes(n.kind) || !n.world_id || inWorld({ world_id: n.world_id }))}
+        opened={search.notice}
       />
     </main>
   );
@@ -502,8 +503,16 @@ const readDismissed = (): string[] => {
 };
 
 // ponytail: dismissals live in this browser; a server-side store if they must follow the operator.
-function Notices({ notices }: { notices: Notice[] }) {
+function Notices({ notices, opened }: { notices: Notice[]; opened?: string }) {
   const [dismissed, setDismissed] = useState(readDismissed);
+  // A push opened this kind (a Review Feed's): its group starts open, its first link in focus.
+  const focused = useRef(false);
+  const focusFirst = (link: HTMLAnchorElement | null) => {
+    if (link && !focused.current) {
+      focused.current = true;
+      link.focus();
+    }
+  };
   const dismiss = (n: Notice) => {
     // Forget dismissals of notices that are gone, so the list cannot grow for ever.
     const live = new Set(notices.map(noticeKey));
@@ -524,7 +533,7 @@ function Notices({ notices }: { notices: Notice[] }) {
         const list = shown.filter((n) => n.kind === k);
         const [one, many, failed] = NOTICE_KIND[k];
         return (
-          <details key={k} className={failed ? "notice-group failed" : "notice-group"} data-testid={`notices-${k}`}>
+          <details key={k} className={failed ? "notice-group failed" : "notice-group"} data-testid={`notices-${k}`} open={k === opened || undefined}>
             <summary>
               {list.length} {list.length === 1 ? one : many}
             </summary>
@@ -535,7 +544,7 @@ function Notices({ notices }: { notices: Notice[] }) {
                   <span className="notice-actions">
                     {n.url ? (
                       // a package's own app, where its things are reviewed (its Review Feed)
-                      <a href={n.url} target="_blank" rel="noreferrer">
+                      <a href={n.url} target="_blank" rel="noreferrer" ref={k === opened ? focusFirst : undefined}>
                         Open
                       </a>
                     ) : n.world_id && n.kind === "review" ? (

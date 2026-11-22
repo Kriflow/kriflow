@@ -246,6 +246,39 @@ test("a warning shows beside passing checks and does not block saving", async ()
   await expect.element(screen.getByRole("button", { name: "Save as version 1" })).toBeEnabled();
 });
 
+test("on a phone an archived workflow opened by link says so with Restore, and follows archive and restore live", async () => {
+  await page.viewport(390, 844);
+  const ts = video.created_at;
+  const restored: string[] = [];
+  fake({
+    "GET /api/worlds/world_1": () => Response.json(video),
+    "POST /api/worlds/world_1/workflows/check": check,
+    "GET /api/workflows/wf_1": () => Response.json({ id: "wf_1", world_id: "world_1", name: "Weekly short", current_version: 1, created_at: ts, archived_at: ts }),
+    "GET /api/workflows/wf_1/versions": () => Response.json([v1]),
+    "POST /api/workflows/wf_1/restore": () => {
+      restored.push("wf_1");
+      return Response.json({ id: "wf_1", world_id: "world_1", name: "Weekly short", current_version: 1, created_at: ts, archived_at: null });
+    },
+  });
+  const { screen } = await mountAt("/worlds/world_1/workflows/wf_1");
+  const note = screen.getByTestId("archived");
+  await expect.element(note).toMatchTextContent(/archived.*new runs of it are refused/i);
+  const restore = note.getByRole("button", { name: "Restore" });
+  expect(restore.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  await restore.click();
+  await expect.element(note).not.toBeInTheDocument();
+  expect(restored).toEqual(["wf_1"]);
+
+  // Archived or restored elsewhere (another tab, the phone): this page follows at once.
+  await expect.poll(() => FakeEventSource.open.length).toBeGreaterThan(0);
+  FakeEventSource.emit("workflow.archived", { payload: { workflow_id: "wf_1", name: "Weekly short" } });
+  await expect.element(screen.getByTestId("archived")).toBeVisible();
+  FakeEventSource.emit("workflow.archived", { payload: { workflow_id: "wf_2", name: "Other" } });
+  FakeEventSource.emit("workflow.restored", { payload: { workflow_id: "wf_1", name: "Weekly short" } });
+  await expect.element(screen.getByTestId("archived")).not.toBeInTheDocument();
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});
+
 test("a workflow that no longer exists is an alert", async () => {
   fake({ "GET /api/worlds/world_1": () => Response.json(video) });
   const { screen } = await mountAt("/worlds/world_1/workflows/wf_gone");

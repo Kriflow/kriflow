@@ -265,8 +265,10 @@ class WebPush:
             self.jobs.put(lambda msg=msg: self._push(msg))
 
     def alert(self, text: str) -> None:
-        """Push `text` as a Needs-you notice now: what a Review Feed newly has."""
-        msg = Message("notices", "Needs you", text, "/gates", "review-feed", True)
+        """Push `text` as a Needs-you notice now: what a Review Feed newly has. A tap opens
+        Needs you with the feed's notice open and its link to the package's app in focus: the
+        service worker follows only this origin's links, so a feed cannot send a phone anywhere."""
+        msg = Message("notices", "Needs you", text, "/gates?notice=feed", "review-feed", True)
         self.jobs.put(lambda: self._push(msg))
 
     def test(self, id: str) -> int:

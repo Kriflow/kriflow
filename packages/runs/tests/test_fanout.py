@@ -112,6 +112,20 @@ def at(runner: RunControl, run_id: str, status: str) -> Run:
     return fetch(runner, run_id)
 
 
+def regated(runner: RunControl, run_id: str) -> Run:
+    """The run back at its items gate once every Item settled. After a send-back the run still
+    reads waiting_gate from before until its workflow takes the message, and the forked child
+    may finish its stage first, so the status alone can be the old gate."""
+
+    def back() -> bool:
+        run = fetch(runner, run_id)
+        settled = all(i.status not in ("pending", "running") for i in run.stages[STAGE].items)
+        return run.status == "waiting_gate" and settled
+
+    wait_for(back, 20)
+    return fetch(runner, run_id)
+
+
 def children(runner: Runner, run_id: str) -> list[Run]:
     return [fetch(runner, c) for c in runner.storage.child_run_ids(run_id)]
 
@@ -473,7 +487,7 @@ def test_an_item_sent_back_with_a_note_reruns_only_its_child_and_its_output_repl
 
     runner.review_items(parent.id, approve=["p1"], send_back={"p2": "Too stiff, warmer"})
     wait_for(lambda: len(translate.seen.get("Paragraph 2", [])) == 2)
-    again = at(runner, parent.id, "waiting_gate")
+    again = regated(runner, parent.id)
     (closed,) = [e for e in notifier.events if e.type == "gate.closed"]
     assert closed.payload["resolution"] == {
         "outcome": "sent_back",
@@ -515,7 +529,7 @@ def test_a_failed_item_of_an_approve_stage_is_sent_back_from_where_it_failed(
         runner.review_items(parent.id, approve=["p1"])
     runner.review_items(parent.id, approve=["p2"], send_back={"p1": "Try again"})
     wait_for(lambda: len(translate.seen.get("Paragraph 1", [])) == 2)
-    at(runner, parent.id, "waiting_gate")
+    regated(runner, parent.id)
     runner.review_items(parent.id, approve=["p1"])
     at(runner, parent.id, "done")
 
