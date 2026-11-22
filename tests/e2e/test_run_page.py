@@ -70,6 +70,7 @@ def test_a_voiced_build_shows_its_takes_its_build_and_its_video_then_the_gate_is
         expect(build).to_contain_text("Wrote src/Main.tsx")
         expect(page.get_by_test_id("render-progress")).to_contain_text("Rendered every frame")
         expect(page.get_by_test_id("project")).to_contain_text("/build")
+        page.get_by_role("tab", name="Details").click()
         page.get_by_text("Technical details").click()
         expect(page.get_by_test_id("call-request")).to_contain_text('"composition": "Main"')
 

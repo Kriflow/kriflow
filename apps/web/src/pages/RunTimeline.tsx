@@ -17,7 +17,7 @@ import { type Task, upsert, who as agentName } from "../api/tasks";
 import { runRoute } from "../router";
 import { Sheet } from "../Sheet";
 import { Loading, Skeleton } from "../Skeleton";
-import { cap, the } from "../skin";
+import { cap } from "../skin";
 import { usePhone } from "../usePhone";
 import { ChangeCard, type ChangeKind, changeLabel, hhmm, who } from "./ChangeCard";
 import { changed, changedStage, StepChangeCard, type StepKind } from "./StepChangeCard";
@@ -29,6 +29,7 @@ import { RunRef, version } from "./Runs";
 import { type MenuItem, Menu } from "./Menu";
 import { mainArtifact, Result, resultStage, StagePanel } from "./StagePanel";
 import { RunHero, StageRail } from "./RunHero";
+import { MadeInRun, SpendByStage } from "./RunSide";
 import { PullToRefresh } from "../PullToRefresh";
 
 type World = components["schemas"]["World"];
@@ -86,6 +87,8 @@ export function RunTimeline() {
   // The Run Assistant: a third column on a wide screen, a sheet on a phone; what asking cost.
   const [askOpen, setAskOpen] = useState(false);
   const [askedUsd, setAskedUsd] = useState(0);
+  // The one-agent comparison, opened from the run menu into the spend card.
+  const [comparing, setComparing] = useState(false);
   // An answer just sent: the gate's action bar slides out before the answered state takes its place.
   const [leaving, setLeaving] = useState(false);
   const phone = usePhone();
@@ -136,7 +139,9 @@ export function RunTimeline() {
       if (task.stage_id === swarmId) setTasks((prev) => upsert(prev, task));
     },
     "agent.updated": (agent) => {
-      if (agent.run_id === runId) setAgents((prev) => ({ ...prev, [agent.id]: agent }));
+      // The run's own agents and its child runs': each stage's spend counts both.
+      if (agent.run_id === runId || run?.stages.some((s) => s.child?.id === agent.run_id || s.items?.some((i) => i.child?.id === agent.run_id)))
+        setAgents((prev) => ({ ...prev, [agent.id]: agent }));
     },
     "agent.logged": (entry) => {
       if (entry.stage_id === stageId) setLog((prev) => dedupe(prev, [entry], "seq"));
@@ -420,6 +425,9 @@ export function RunTimeline() {
     items.push({ label: "Save as workflow", note: "Saves the steps it ran as a new workflow; you stay on this run", onSelect: saveAsWorkflow });
   }
   // Rarely needed, so in the menu rather than on the page.
+  if (!run.baseline) {
+    items.push({ label: "Compare with one agent", note: "Shows what one agent with no graph spent on this; you stay here", onSelect: () => setComparing(!comparing) });
+  }
   items.push({ label: "Copy run id", note: run.id, onSelect: () => void navigator.clipboard?.writeText(run.id) });
   if (!ended) {
     items.push({ label: "Abort run", note: "Stops every agent; finished steps keep their artifacts", danger: true, onSelect: () => act("abort") });
@@ -582,15 +590,10 @@ export function RunTimeline() {
                   }
                 : undefined
             }
-            onAsk={stage.status === "failed" ? () => setAskOpen(true) : undefined}
-            lead={
-              editingFile?.stage === stage.id ? (
-                <ChangeCard key={editingFile.path} run={run} stage={stage} file={editingFile} onClose={() => setEditingFile(null)} />
-              ) : editing?.stageId === stage.id ? (
-                <ChangeCard key={`${stage.id}-${editing.kind}`} run={run} stage={stage} kind={editing.kind} onClose={() => setEditing(null)} />
-              ) : stepping?.id === stage.id ? (
-                <StepChangeCard key={`${stepping.kind} ${stage.id}`} run={run} stage={stage} kind={stepping.kind} onClose={() => setStepping(null)} />
-              ) : open ? (
+            onAsk={() => setAskOpen(true)}
+            onStep={select}
+            decision={
+              open ? (
                 <ul className={`gate-list inline-gate${leaving ? " leaving" : ""}`} aria-label="Answer the gate">
                   <GateCard gate={open} world={world?.name ?? worldId} onAnswer={answer} bare />
                 </ul>
@@ -603,6 +606,15 @@ export function RunTimeline() {
                   next={openGates.find((g) => g.stage_id !== done.stageId)}
                   onWatch={select}
                 />
+              ) : undefined
+            }
+            lead={
+              editingFile?.stage === stage.id ? (
+                <ChangeCard key={editingFile.path} run={run} stage={stage} file={editingFile} onClose={() => setEditingFile(null)} />
+              ) : editing?.stageId === stage.id ? (
+                <ChangeCard key={`${stage.id}-${editing.kind}`} run={run} stage={stage} kind={editing.kind} onClose={() => setEditing(null)} />
+              ) : stepping?.id === stage.id ? (
+                <StepChangeCard key={`${stepping.kind} ${stage.id}`} run={run} stage={stage} kind={stepping.kind} onClose={() => setStepping(null)} />
               ) : isResult ? (
                 <Result run={run} artifacts={artifacts} worldId={worldId} />
               ) : undefined
@@ -613,7 +625,14 @@ export function RunTimeline() {
         )}
         {askOpen && !phone && <RunAssistant run={run} onSpent={setAskedUsd} onClose={() => setAskOpen(false)} files={files} />}
         <aside className="run-side">
-          <Spend run={run} baseline={baseline} asked={askedUsd} />
+          <MadeInRun run={run} artifacts={artifacts} worldId={worldId} connectors={connectors} />
+          <SpendByStage
+            run={run}
+            agents={Object.values(agents)}
+            connectors={connectors}
+            asked={askedUsd}
+            compare={comparing ? compareLine(run, baseline) : undefined}
+          />
         </aside>
       </div>
     </main>
@@ -745,61 +764,12 @@ function Lineage({ run, worldId }: { run: Run; worldId: string }) {
   return <>{lines}</>;
 }
 
-/** Part 5: what the run spent against its budget, what is left before the pause, and a link to
- * the one-agent comparison. */
-function Spend({ run, baseline, asked }: { run: Run; baseline: Run | null; asked: number }) {
-  const budget = run.budget_usd;
-  const spent = run.spent_usd ?? 0;
-  let note = "";
-  if (budget != null && run.over_budget) note = `Every agent stopped at ${money(budget)}. Add money to go on, or abort.`;
-  else if (budget != null) note = `${money(Math.max(0, budget - spent))} left before ${the("budget")} pauses the run.`;
-  const seconds = duration(run);
-  let compare: string;
-  if (baseline) {
-    const base = duration(baseline);
-    compare = `One agent with no graph did this for ${money(baseline.spent_usd)}${base === null ? "" : ` in ${took(base)}`}; this run ${money(spent)}${seconds === null ? "" : ` in ${took(seconds)}`}.`;
-  } else compare = "No one-agent run of this yet. Start a baseline from the world page to compare.";
-  return (
-    <section className="panel spend" aria-label="Spend" data-testid="measure">
-      <div className="panel-head">
-        <h3>Spend</h3>
-        <span className="num" data-testid="budget">
-          {budget != null ? (
-            <>
-              {money(spent)} <span className="faint">of {money(budget)}</span>
-            </>
-          ) : (
-            `${money(spent)} spent, no budget set`
-          )}
-        </span>
-      </div>
-      {budget != null && (
-        <meter min={0} max={budget} low={0.8 * budget} high={0.8 * budget} optimum={0} value={Math.min(spent, budget)} aria-label="Budget spent" />
-      )}
-      {note && (
-        <span className={run.over_budget ? "stage-error" : budget != null && spent >= 0.8 * budget ? "warn" : "faint"} data-testid="budget-line">
-          {note}
-        </span>
-      )}
-      {asked > 0 && (
-        <span className="faint" data-testid="assistant-spend">
-          Assistant {money(asked)}, from the world's budget, not this run's.
-        </span>
-      )}
-      {run.baseline ? (
-        <span className="faint" data-testid="baseline">
-          This is a one-agent baseline, with no graph, to measure the swarm against.
-        </span>
-      ) : (
-        <details className="compare">
-          <summary>Compare with one agent</summary>
-          <p className="faint" data-testid="baseline">
-            {compare}
-          </p>
-        </details>
-      )}
-    </section>
-  );
+/** What one agent with no graph spent on the same work, against this run; how to get one when
+ * there is none yet. */
+function compareLine(run: Run, baseline: Run | null): string {
+  if (!baseline) return "No one-agent run of this yet. Start a baseline from the world page to compare.";
+  const [base, seconds] = [duration(baseline), duration(run)];
+  return `One agent with no graph did this for ${money(baseline.spent_usd)}${base === null ? "" : ` in ${took(base)}`}; this run ${money(run.spent_usd ?? 0)}${seconds === null ? "" : ` in ${took(seconds)}`}.`;
 }
 
 /** Items of both lists by a numeric key, each once (the later wins), oldest first. */

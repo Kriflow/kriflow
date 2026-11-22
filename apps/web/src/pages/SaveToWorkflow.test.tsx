@@ -101,6 +101,7 @@ test("an applied Artifact Edit saves the Run Assistant's drafted Stage Edit to t
     },
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByRole("tab", { name: /^Files/ }).click();
   await screen.getByTestId("all-files").getByText("All files (1)").click();
   await screen.getByRole("button", { name: "Edit file metadata.md" }).click();
   const card = screen.getByTestId("change-card");

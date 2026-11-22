@@ -133,6 +133,7 @@ test("an Artifact Edit of a finished step's text file shows the line diff and wh
     },
   });
   const { screen } = await mountAt("/worlds/world_1/runs/run_1?stage=stage_0");
+  await screen.getByRole("tab", { name: "Details" }).click();
   await screen.getByTestId("all-files").getByText("All files (2)").click();
   expect(screen.getByRole("button", { name: "Edit file short.mp4" }).elements()).toHaveLength(0);
   await screen.getByRole("button", { name: "Edit file metadata.md" }).click();

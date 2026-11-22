@@ -97,11 +97,56 @@ p.status-line.state-failed, p.status-line.state-aborted { color: var(--negative)
 .live-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); align-items: start; }
 .run-side { display: grid; gap: var(--gap); }
+/* The open stage's card: its look, name and where it sits, prev and next, then its tabs */
+.stage-card { gap: 14px; }
+.stage-head { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.stage-head > div:nth-child(2) { flex: 1; min-width: 0; }
+.stage-head h2 { margin: 0; font-size: 1rem; font-weight: 650; }
+.stage-head .tile { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--control); background: var(--raised); color: var(--muted); }
+.stage-head .tile img { width: 22px; height: 22px; object-fit: contain; }
+.run-page .panel p.stage-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin: 2px 0 0; color: var(--faint); font-size: 0.75rem; }
+.stage-meta > span { display: inline-flex; align-items: center; gap: 6px; }
+.stage-meta .icon { width: 12px; height: 12px; }
+.stage-nav { display: flex; gap: 6px; flex: none; }
+.stage-nav button.icon { border-radius: 999px; }
+.stage-tabs { display: flex; gap: 18px; margin: 0 -16px; padding: 0 16px; border-bottom: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none; }
+.stage-tabs::-webkit-scrollbar { display: none; }
+.stage-tabs [role="tab"] { flex: none; display: inline-flex; align-items: center; gap: 6px; justify-content: center; min-height: 44px; min-width: 44px; padding: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--faint); font-weight: 550; }
+.stage-tabs [role="tab"][aria-selected="true"] { color: var(--text); border-color: var(--text); }
+.tab-count { padding: 0 6px; border-radius: 99px; background: var(--raised); color: var(--muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.tab-panel.away { display: none; }
+/* The gate's decision, out of view behind another tab, keeps its phone answer bar pinned */
+.tab-panel.away.keeps-dock { display: block; visibility: hidden; height: 0; overflow: hidden; }
+.gate-ask { display: grid; gap: 10px; justify-items: start; }
+
+/* The side column: what the run made, then what each stage spent */
+.side-card { gap: 10px; }
+.side-head { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.side-head h3 { margin: 0; font-size: 0.8125rem; font-weight: 600; }
+.side-head > span { margin-left: auto; color: var(--faint); font-size: 0.8125rem; }
+.made-list { list-style: none; margin: 0 -6px; padding: 0; display: grid; gap: 2px; }
+.made-file { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px; border-radius: 8px; color: inherit; text-decoration: none; }
+a.made-file:hover { background: var(--raised); }
+.made-file .fi { flex: none; width: 36px; height: 36px; display: grid; place-items: center; overflow: hidden; border-radius: 7px; background: var(--raised); color: var(--muted); }
+.made-file .fi img { width: 100%; height: 100%; object-fit: cover; }
+.made-file .fi.vid { background: linear-gradient(160deg, #3b2a5a, #c2577a 60%, #f2b05e); color: #fff; }
+.made-file .fi.aud { background: #1d2333; color: #8ea8ff; }
+.made-text { flex: 1; min-width: 0; display: grid; }
+.made-text b, .made-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.made-text b { font-weight: 550; font-size: 0.8125rem; }
+.made-text span { color: var(--faint); font-size: 0.75rem; }
+.made-by { flex: none; display: grid; place-items: center; color: var(--faint); }
+.made-by img, .made-by .icon { width: 18px; height: 18px; }
 .spend { display: grid; gap: 8px; }
-.run-page .spend .panel-head { justify-content: space-between; }
 .spend meter { width: 100%; }
-.spend .compare summary { margin: 0; font-size: 0.8125rem; }
-.compare p { margin-top: 4px; }
+.spend-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.spend-rows li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; font-size: 0.75rem; }
+.spend-rows li > img, .spend-rows li > .icon { width: 16px; height: 16px; color: var(--muted); }
+.spend-rows li > span:not(.bar) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spend-rows em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.spend-rows .bar { grid-column: 2; height: 4px; border-radius: 9px; background: var(--raised); overflow: hidden; }
+.spend-rows .bar i { display: block; height: 100%; border-radius: 9px; background: var(--muted); }
 
 /* A short list of actions under a button (Menu.tsx; its box is in base.css), each with what
    happens and where you land. The run's menu sits at the right edge, so it opens leftwards. */
@@ -214,6 +259,12 @@ p.status-line.state-failed, p.status-line.state-aborted { color: var(--negative)
   .rail { margin: 0 -16px var(--gap); padding: 8px 16px 10px; }
   .rail .node { flex: 0 0 78px; }
   .run-grid > .run-side { order: 9; }
+  .stage-nav { display: none; }
+  .stage-head .tile { width: 40px; height: 40px; }
+  /* A pick's cards sit side by side and snap, one and a bit in view */
+  .run-page .pick-cards:not(:has(.pick-slot)) { grid-auto-flow: column; grid-auto-columns: 82%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .run-page .pick-cards:not(:has(.pick-slot)) > .pick-card { scroll-snap-align: start; }
+  .tab-panel.away.keeps-dock .action-bar { visibility: visible; }
   /* The back link and the run menu take the top bar from the world chip; the compact title
      fades in between them. */
   .topbar:has(.run-topbar) .world-chip, .run-actions .menu-wrap { display: none; }

@@ -4,18 +4,20 @@ import { type ReactNode, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { type Agent, type ArtifactFile, type LogEntry, outcomeOf, type Verdict } from "../api/events";
 import { type Connector, type Connectors, labelOf } from "../api/connectors";
-import { RECORD, underReview } from "../api/answer";
-import { type Call, clock, decisionLine, plainError, type Run } from "../api/runs";
+import { choosable, RECORD, underReview } from "../api/answer";
+import { type Call, clock, decisionLine, money, plainError, type Run } from "../api/runs";
 import { Icon } from "../Icon";
 import { Media } from "../Media";
 import type { components } from "../api/schema";
 import type { Task } from "../api/tasks";
 import { AgentCards, describe, LiveLog, usd } from "./AgentLog";
-import { ArtifactView, AUDIO, FileLink, fileUrl, IMAGE, Markdown, mdBlocks, rawUrl, summary, VIDEO } from "./Artifacts";
+import { ArtifactView, AUDIO, cardLine, Chips, FileLink, fileUrl, IMAGE, Markdown, mdBlocks, rawUrl, VIDEO } from "./Artifacts";
 import { EDITABLE } from "./ChangeCard";
 import { PublishValue } from "./Connectors";
 import { SaveAsTemplate, StageOutput } from "./StageOutput";
 import { Whiteboard } from "./Whiteboard";
+import { StageLook } from "./RunHero";
+import { cap } from "../skin";
 
 type Stage = Run["stages"][number];
 type Proposal = components["schemas"]["Proposal"];
@@ -63,7 +65,7 @@ export function kindOf(s: Stage, made: ArtifactFile[] = [], c?: Connector): stri
 }
 
 /** The run's work: what its stages made, not what it wrote about itself or what it posted. */
-const work = (artifacts: ArtifactFile[]) =>
+export const work = (artifacts: ArtifactFile[]) =>
   artifacts.filter((a) => !RECORD.has(a.type) && a.type !== "publish" && !a.fields.deleted);
 
 /** The stage whose output is the run's result: the latest stage that made anything. */
@@ -143,7 +145,7 @@ export function Made({ a, worldId }: { a: ArtifactFile; worldId: string }) {
   );
 }
 
-/** Typed items (ideas, candidates) as cards: title and hook or summary. */
+/** Typed items of any type as cards: title, its one line, the fields it was scored on. */
 function ItemCards({ items }: { items: ArtifactFile[] }) {
   const sorted = [...items].sort((a, b) => Number(a.fields.rank ?? 1e9) - Number(b.fields.rank ?? 1e9));
   return (
@@ -155,7 +157,8 @@ function ItemCards({ items }: { items: ArtifactFile[] }) {
             {a.fields.rank != null ? ` · #${String(a.fields.rank)} of ${items.length}` : ""}
           </span>
           <b>{a.title}</b>
-          <span>{typeof a.fields.hook === "string" ? a.fields.hook : summary(a.body)}</span>
+          <span>{cardLine(a)}</span>
+          <Chips a={a} />
         </li>
       ))}
     </ul>
@@ -617,8 +620,13 @@ export type PanelProps = {
   /** The world's connectors by name, which say what a connector step is. */
   connectors: Connectors;
   onTaskAdded: (task: Task) => void;
-  /** What the panel leads with: the open gate's question and answer, or the run's result. */
+  /** What the panel leads with, above its tabs: a change being made, or the run's result. */
   lead?: ReactNode;
+  /** The open gate's question and answer, or what you just decided: a gate's Decision tab, or
+   * above the tabs of a stage a budget gate stopped. */
+  decision?: ReactNode;
+  /** Opens another stage: the header's previous and next. */
+  onStep?: (id: string) => void;
   /** The gate's answer is the lead, so the gate panel does not repeat its question. */
   answering?: boolean;
   /** This step made the result shown above, so its player is not repeated here. */
@@ -663,73 +671,234 @@ function Failure({ error, onRetry, onAsk }: { error: string; onRetry?: () => voi
   );
 }
 
-/** Part 7: what the selected step did and made, by its type, then its live log (part 8). */
+/** What a stage is, in the card's header: its kind in a word, a fan-out by its width. */
+export function kindLabel(s: Stage, kind: string): string {
+  if (s.items?.length) return `Fan-out of ${s.items.length}`;
+  return { swarm: "Agents", gate: "Gate", workflow: "Workflow", retro: "Retro" }[kind] ?? cap(kind);
+}
+
+type Tab = { id: string; label: string; count?: number; body: ReactNode; keepsDock?: boolean };
+
+/** The open stage's tabs. Every panel stays mounted, so a half-made answer survives a look at
+ * another tab; a panel that `keepsDock` (the gate's decision) keeps its phone answer bar pinned
+ * while another tab is open. */
+function Tabs({ tabs, label }: { tabs: Tab[]; label: string }) {
+  const [on, setOn] = useState(tabs[0]!.id);
+  const active = tabs.some((t) => t.id === on) ? on : tabs[0]!.id;
+  return (
+    <>
+      <div className="stage-tabs" role="tablist" aria-label={label}>
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={t.id === active} onClick={() => setOn(t.id)}>
+            {t.label}
+            {t.count ? <span className="tab-count">{t.count}</span> : null}
+          </button>
+        ))}
+      </div>
+      {tabs.map((t) => (
+        <div
+          key={t.id}
+          role="tabpanel"
+          aria-label={t.label}
+          className={t.id === active ? "tab-panel" : t.keepsDock ? "tab-panel away keeps-dock" : "tab-panel away"}
+          data-testid={`tab-${t.id}`}
+        >
+          {t.body}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Part 7: the open stage as a card. Its header (look, kind, position, time, prev and next),
+ * then what leads it (a change, the result), then tabs fitted to its kind: a gate's Decision,
+ * All and Ask; an agent stage's Activity, Items, Files and Details; a connector's Result,
+ * Inputs and Details. */
 export function StagePanel(p: PanelProps) {
   const { run, stage, worldId, made, call } = p;
-  const kind = kindOf(stage, made, p.connectors[stage.calls ?? ""]);
+  const connectorOf = p.connectors[stage.calls ?? ""];
+  const kind = kindOf(stage, made, connectorOf);
   const timings = kind === "audio" ? made.find((a) => a.name === "timings.json") : undefined;
   const connector = stage.type === "connector";
-  let inside;
-  if (stage.type === "swarm") {
-    inside = (
-      <>
-        <AgentCards agents={p.agents} log={p.log} tasks={p.tasks} />
-        <Whiteboard runId={run.id} stage={stage} tasks={p.tasks} onAdded={p.onTaskAdded} />
-        <StageOutput verdicts={p.verdicts} artifacts={made} />
-      </>
-    );
-  } else if (stage.type === "gate") {
-    inside = <GatePanel run={run} stage={stage} open={!!p.answering} artifacts={p.artifacts} worldId={worldId} />;
-  } else if (stage.type === "retro") {
-    inside = <RetroPanel run={run} stage={stage} />;
-  } else if (timings) {
-    inside = p.resultShown ? <p className="faint">Its takes are the result shown above.</p> : <Takes timings={timings} worldId={worldId} />;
-  } else if (kind === "build") {
-    inside = (
-      <>
-        <BuildPanel call={call} log={p.log} agents={p.agents} made={made} worldId={worldId} shown={p.resultShown} />
-        <SaveAsTemplate runId={run.id} stage={stage} call={call} connector={p.connectors[stage.calls ?? ""]} />
-      </>
-    );
-  } else if (kind === "video") {
-    inside = (
-      <>
-        {call?.template && (
-          <p className="faint" data-testid="template">
-            Rendered the Template <b>{call.template.name}</b>
-          </p>
-        )}
-        <RenderProgress call={call} />
-        <Video made={made} worldId={worldId} shown={p.resultShown} />
-      </>
-    );
-  } else if (kind === "publish") {
-    inside = <PublishPanel made={made} call={call} connectors={p.connectors} />;
-  } else {
-    const out = work(made);
-    inside = out.length ? (
-      p.resultShown ? (
-        <p className="faint">It made {out.map((a) => a.name).join(", ")}, the result shown above.</p>
-      ) : (
-        out.map((a) => <Made key={a.path} a={a} worldId={worldId} />)
-      )
-    ) : (
-      <p className="faint">{call?.status === "polling" ? `Working: ${Math.round((call.progress ?? 0) * 100)}%` : "Nothing made yet."}</p>
-    );
-  }
   // A build step's panel shows its builder's steps; anything else logged there (the sandbox
   // blocking its render) still gets the live log.
   const shownLog = kind === "build" ? p.log.filter((e) => e.agent !== "builder") : p.log;
-  const logged = stage.type === "swarm" || stage.type === "retro" || (connector && shownLog.length > 0);
+  const prev = run.stages[stage.index - 1];
+  const next = run.stages[stage.index + 1];
+  const files = (
+    <>
+      {!p.resultShown && work(made).map((a) => <Made key={a.path} a={a} worldId={worldId} />)}
+      {made.length === 0 && <p className="faint">Nothing made yet.</p>}
+      <AllFiles made={made} worldId={worldId} onEdit={p.onEditFile} />
+    </>
+  );
+  let tabs: Tab[];
+  if (stage.type === "gate") {
+    const all = choosable(before(run, stage, p.artifacts));
+    tabs = [
+      {
+        id: "decision",
+        label: "Decision",
+        keepsDock: true,
+        body: (
+          <>
+            {p.decision}
+            <GatePanel run={run} stage={stage} open={!!p.answering} artifacts={p.artifacts} worldId={worldId} />
+          </>
+        ),
+      },
+      ...(all.length ? [{ id: "all", label: `All ${all.length}`, body: <ItemCards items={all} /> }] : []),
+      {
+        id: "ask",
+        label: "Ask",
+        body: (
+          <div className="gate-ask">
+            <p className="faint">Not sure? Ask the run what its stages found and why, before you answer.</p>
+            {p.onAsk && (
+              <button type="button" onClick={p.onAsk}>
+                Ask this run
+              </button>
+            )}
+          </div>
+        ),
+      },
+    ];
+  } else if (connector) {
+    let result;
+    if (timings) {
+      result = p.resultShown ? <p className="faint">Its takes are the result shown above.</p> : <Takes timings={timings} worldId={worldId} />;
+    } else if (kind === "build") {
+      result = (
+        <>
+          <BuildPanel call={call} log={p.log} agents={p.agents} made={made} worldId={worldId} shown={p.resultShown} />
+          <SaveAsTemplate runId={run.id} stage={stage} call={call} connector={connectorOf} />
+        </>
+      );
+    } else if (kind === "video") {
+      result = (
+        <>
+          {call?.template && (
+            <p className="faint" data-testid="template">
+              Rendered the Template <b>{call.template.name}</b>
+            </p>
+          )}
+          <RenderProgress call={call} />
+          <Video made={made} worldId={worldId} shown={p.resultShown} />
+        </>
+      );
+    } else if (kind === "publish") {
+      result = <PublishPanel made={made} call={call} connectors={p.connectors} />;
+    } else {
+      const out = work(made);
+      result = out.length ? (
+        p.resultShown ? (
+          <p className="faint">It made {out.map((a) => a.name).join(", ")}, the result shown above.</p>
+        ) : (
+          out.map((a) => <Made key={a.path} a={a} worldId={worldId} />)
+        )
+      ) : (
+        <p className="faint">{call?.status === "polling" ? `Working: ${Math.round((call.progress ?? 0) * 100)}%` : "Nothing made yet."}</p>
+      );
+    }
+    const ins = (stage.inputs ?? []).length;
+    tabs = [
+      { id: "result", label: "Result", body: result },
+      ...(ins ? [{ id: "inputs", label: "Inputs", count: ins, body: <StepInputs run={run} stage={stage} artifacts={p.artifacts} worldId={worldId} /> }] : []),
+      {
+        id: "details",
+        label: "Details",
+        body: (
+          <>
+            <AllFiles made={made} worldId={worldId} onEdit={p.onEditFile} />
+            {shownLog.length > 0 && <LiveLog log={shownLog} tasks={p.tasks} />}
+            <TechnicalDetails call={call} />
+          </>
+        ),
+      },
+    ];
+  } else {
+    // An agent stage: a swarm, a workflow or fan-out over child runs, the retro.
+    const items = stage.items ?? [];
+    const activity =
+      stage.type === "swarm" ? (
+        <>
+          <AgentCards agents={p.agents} log={p.log} tasks={p.tasks} />
+          <StageOutput verdicts={p.verdicts} artifacts={made} />
+          <LiveLog log={shownLog} tasks={p.tasks} />
+        </>
+      ) : stage.type === "retro" ? (
+        <>
+          <RetroPanel run={run} stage={stage} />
+          <LiveLog log={shownLog} tasks={p.tasks} />
+        </>
+      ) : (
+        <>
+          {stage.child ? null : <p className="faint">{items.length ? "Each item runs as its own run; open one from Items." : "Its run starts once the stage before it is done."}</p>}
+          {shownLog.length > 0 && <LiveLog log={shownLog} tasks={p.tasks} />}
+        </>
+      );
+    const spent = p.agents.reduce((sum, a) => sum + a.cost_usd, 0);
+    tabs = [
+      { id: "activity", label: "Activity", body: activity },
+      ...(stage.type === "swarm"
+        ? [{ id: "items", label: "Items", count: p.tasks.length, body: <Whiteboard runId={run.id} stage={stage} tasks={p.tasks} onAdded={p.onTaskAdded} /> }]
+        : items.length
+          ? [{ id: "items", label: "Items", count: items.length, body: <FanoutItems items={items} /> }]
+          : []),
+      { id: "files", label: "Files", count: made.length, body: files },
+      {
+        id: "details",
+        label: "Details",
+        body: (
+          <dl className="facts" data-testid="stage-details">
+            <dt>Kind</dt>
+            <dd>{kindLabel(stage, kind)}</dd>
+            <dt>Agents</dt>
+            <dd>{p.agents.length ? p.agents.map((a) => a.name).join(", ") : "None yet"}</dd>
+            <dt>Spent</dt>
+            <dd>{money(spent)}</dd>
+            {stage.started_at && (
+              <>
+                <dt>Started</dt>
+                <dd>{new Date(stage.started_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</dd>
+              </>
+            )}
+          </dl>
+        ),
+      },
+    ];
+  }
   return (
-    <section className="panel" aria-label={`Step ${stage.index + 1}, ${stage.name}`} data-testid="stage-panel">
-      <div className="panel-head">
-        <h2>{stage.name}</h2>
-        <span className="faint">
-          {kind} · step {stage.index + 1} of {run.stages.length} · {stepMeta(stage, run.status === "queued")}
+    <section className="panel stage-card" aria-label={`Step ${stage.index + 1}, ${stage.name}`} data-testid="stage-panel">
+      <div className="stage-head">
+        <span className="tile">
+          <StageLook stage={stage} connector={connectorOf} />
         </span>
+        <div>
+          <h2>{stage.name}</h2>
+          <p className="stage-meta" data-testid="stage-meta">
+            {[kindLabel(stage, kind), `step ${stage.index + 1} of ${run.stages.length}`, stepMeta(stage, run.status === "queued")].map((part, i) => (
+              <span key={i}>
+                {i > 0 && <Icon name="next" size={16} />}
+                {part}
+              </span>
+            ))}
+          </p>
+        </div>
+        {p.onStep && (
+          <div className="stage-nav">
+            <button type="button" className="icon" aria-label="Previous step" disabled={!prev} onClick={() => prev && p.onStep!(prev.id)}>
+              <Icon name="back" />
+            </button>
+            <button type="button" className="icon" aria-label="Next step" disabled={!next} onClick={() => next && p.onStep!(next.id)}>
+              <Icon name="next" />
+            </button>
+          </div>
+        )}
       </div>
       {p.lead}
+      {/* A budget gate opens on whatever stage ran out: its answer leads that stage's card. */}
+      {stage.type !== "gate" && p.decision}
       {stage.child && (
         <p data-testid="child-run">
           Child run:{" "}
@@ -737,24 +906,6 @@ export function StagePanel(p: PanelProps) {
             {stage.child.name}
           </Link>
         </p>
-      )}
-      {(stage.items ?? []).length > 0 && (
-        <ul className="fanout-items" aria-label="Items" data-testid="stage-items">
-          {(stage.items ?? []).map((item) => (
-            <li key={item.key}>
-              {item.child ? (
-                <Link to="/worlds/$worldId/runs/$runId" params={{ worldId: item.child.world_id, runId: item.child.id }}>
-                  {item.title}
-                </Link>
-              ) : (
-                item.title
-              )}{" "}
-              <span className={item.status === "failed" || item.status === "aborted" ? "chip warn" : "chip"}>{item.status}</span>
-              {item.approved && <span className="chip ok">approved</span>}
-              {item.error && <ItemError error={item.error} />}
-            </li>
-          ))}
-        </ul>
       )}
       {(stage.notes ?? []).map((note, i) => (
         <p className="faint" key={i}>
@@ -772,11 +923,29 @@ export function StagePanel(p: PanelProps) {
         </p>
       )}
       {stage.status === "failed" && stage.error && <Failure error={stage.error} onRetry={p.onRetry} onAsk={p.onAsk} />}
-      {connector && <StepInputs run={run} stage={stage} artifacts={p.artifacts} worldId={worldId} />}
-      {inside}
-      <AllFiles made={made} worldId={worldId} onEdit={p.onEditFile} />
-      {logged && <LiveLog log={shownLog} tasks={p.tasks} />}
-      {connector && <TechnicalDetails call={call} />}
+      <Tabs key={stage.id} tabs={tabs} label={`${stage.name} views`} />
     </section>
+  );
+}
+
+/** A fan-out's items: each a link to its child run, its state, and its error folded. */
+function FanoutItems({ items }: { items: NonNullable<Stage["items"]> }) {
+  return (
+    <ul className="fanout-items" aria-label="Items" data-testid="stage-items">
+      {items.map((item) => (
+        <li key={item.key}>
+          {item.child ? (
+            <Link to="/worlds/$worldId/runs/$runId" params={{ worldId: item.child.world_id, runId: item.child.id }}>
+              {item.title}
+            </Link>
+          ) : (
+            item.title
+          )}{" "}
+          <span className={item.status === "failed" || item.status === "aborted" ? "chip warn" : "chip"}>{item.status}</span>
+          {item.approved && <span className="chip ok">approved</span>}
+          {item.error && <ItemError error={item.error} />}
+        </li>
+      ))}
+    </ul>
   );
 }

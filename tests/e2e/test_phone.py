@@ -297,6 +297,7 @@ def test_a_document_opens_from_its_run_into_the_reader(phone: Page, ids: dict) -
     research = ids["doc"].split("/")[2]
     phone.goto(f"/worlds/{ids['world']}/runs/{ids['done']}?stage={research}")
     panel = phone.get_by_test_id("stage-panel")
+    panel.get_by_role("tab", name=re.compile("^Files")).click()
     panel.get_by_test_id("all-files").locator("summary").click()
     panel.get_by_test_id("all-files").get_by_role("link", name="ideas.md").click()
     expect(phone).to_have_url(re.compile(r"/read\?path=.*ideas\.md"))

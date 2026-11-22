@@ -51,7 +51,7 @@ test("the queue opens the next decision after each answer and says what was deci
   const queue = screen.getByRole("navigation", { name: "Waiting decisions" });
   await expect
     .element(queue)
-    .toMatchTextContent(/Confirm before it goes out.*Publish it · Video.*Review and approve.*Weekly short.*Pick an idea.*Weekly short/);
+    .toMatchTextContent(/Confirm before it goes out.*Publish it · Video.*Review and approve.*Weekly short.*Pick one.*Weekly short/);
   // The open decision is the first, and carries the selection line.
   await expect.element(queue.getByRole("link", { name: /Publish it/ })).toHaveAttribute("aria-current");
   await expect.element(screen.getByTestId("gate-run_2")).not.toBeInTheDocument();
@@ -75,7 +75,7 @@ test("the queue opens the next decision after each answer and says what was deci
   expect(router.state.location.search).toEqual({ gate: "s2" });
   await expect.element(screen.getByTestId("place")).toHaveTextContent("1 of 2");
   // Answered items sort last, dimmed.
-  await expect.element(queue).toMatchTextContent(/Review and approve.*Pick an idea.*Answered.*Publish it/);
+  await expect.element(queue).toMatchTextContent(/Review and approve.*Pick one.*Answered.*Publish it/);
   await expect.element(queue.getByRole("link", { name: /Publish it/ })).toHaveClass("done");
   await expect.element(queue.getByRole("link", { name: /Review and approve/ })).toHaveAttribute("aria-current");
 
@@ -89,7 +89,7 @@ test("the queue opens the next decision after each answer and says what was deci
   await vi.waitFor(() =>
     expect(bodies.run_2).toEqual({ note: "Too much text.", send_back_to: "research" }),
   );
-  await expect.element(screen.getByText("You sent it back to research. Next: Pick an idea")).toBeVisible();
+  await expect.element(screen.getByText("You sent it back to research. Next: Pick one")).toBeVisible();
   // Told once: the second answer does not tell it again.
   expect(document.body.textContent).not.toMatch(/Your first decision is in/);
 
