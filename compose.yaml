@@ -29,8 +29,13 @@ services:
       # after the container is recreated (issue 387); the image's own ~/.claude went with it.
       - { type: volume, source: data, target: /root/.claude, volume: { subpath: claude } }
     entrypoint: ["/app/docker/needs.sh", "CLAUDE_CODE_OAUTH_TOKEN", "SWARMIFY_PASSWORD", "--"]
-    # A compose entrypoint clears the image's CMD, so the start command is repeated here.
-    command: ["uvicorn", "--factory", "swarmify_api.main:create_app", "--host", "0.0.0.0", "--port", "8000"]
+    # A compose entrypoint clears the image's CMD, so the start command is repeated here. Open
+    # event streams (a phone with the app open) are cut after 5 s on a stop, never waited on, so
+    # the drain below runs.
+    command: ["uvicorn", "--factory", "swarmify_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
+    # A stop drains (README, Deployment): stages at work finish for up to SWARMIFY_DRAIN_SECONDS
+    # (20 min) first. Keep this a minute over it, or Docker kills the drain.
+    stop_grace_period: 21m
     depends_on:
       folders:
         condition: service_completed_successfully
@@ -46,6 +51,7 @@ services:
       # Where a connector process reaches the api (a remote approver's MCP calls), from `sandbox`.
       SWARMIFY_INTERNAL_URL: http://api:8000
       SWARMIFY_GRAPH_WRITER: external
+      SWARMIFY_DRAIN_SECONDS: ${SWARMIFY_DRAIN_SECONDS:-1200}
       # The operator's sign-in password (README, Sign-in), required, see entrypoint.
       SWARMIFY_PASSWORD: ${SWARMIFY_PASSWORD:-}
       SWARMIFY_BASE_URL: ${SWARMIFY_BASE_URL:-http://localhost:8000}
@@ -74,6 +80,8 @@ services:
   sandbox:
     build: .
     init: true
+    # As the api's: a connector stage the api's drain still finishes runs here.
+    stop_grace_period: 21m
     command: ["python", "-m", "swarmify_connectors.runner", "serve", "/run/swarmify/sandbox.sock"]
     security_opt:
       - seccomp=./docker/seccomp-sandbox.json

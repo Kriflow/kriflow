@@ -483,6 +483,7 @@ const NOTICE_KIND: Record<Notice["kind"], [one: string, many: string, failed: bo
   network: ["run waiting for the network", "runs waiting for the network", false],
   review: ["list waits for you", "lists wait for you", false],
   feed: ["app has things for you", "apps have things for you", false],
+  updating: ["update under way", "updates under way", false],
 };
 const DISMISSED = "swarmify.dismissed-notices";
 // Digits stripped, as push does: a notice whose minutes tick up is the same notice. A dismissed

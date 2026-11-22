@@ -6,6 +6,8 @@ The GraphWriter runs in the API process unless `SWARMIFY_GRAPH_WRITER=external` 
 `SWARMIFY_DATA_DIR` (default `~/.swarmify`) holds `swarmify.db`, the DBOS system database
 `dbos.sqlite`, `worlds/<id>/` and the operator's `sprite-packs/`. DBOS launches in the
 lifespan, so runs execute only while the app is served (or inside `with TestClient(app)`).
+`SWARMIFY_DRAIN_SECONDS` (default 1200) is how long a stop waits for the stages at work (a
+Drain, Safe Deploys) before it stops anyway; compose's stop grace period must outlast it.
 `SWARMIFY_PASSWORD` is the operator's sign-in password (auth.py); the MCP server is also served
 over HTTP at `/mcp`, for API tokens, and its Remote Approvals part at `/mcp/remote_approvals`, for
 the connectors that offer them (remote.py).
@@ -44,6 +46,7 @@ from swarmify_api import (
     assistant,
     auth,
     connectors,
+    drain,
     evals,
     fanout,
     graph,
@@ -100,6 +103,7 @@ from swarmify_notifications import Notifications, PushStorage, push
 from swarmify_notifications import SqliteStorage as ChannelStorage
 from swarmify_runs import (
     DEFAULT_CAP,
+    DRAIN_SECONDS,
     UNSPOILED,
     AppliedChange,
     Connector,
@@ -263,6 +267,10 @@ def world_deleter(
         return True
 
     return delete
+
+
+def drain_seconds() -> float:
+    return float(os.environ.get("SWARMIFY_DRAIN_SECONDS") or DRAIN_SECONDS)
 
 
 def base_url() -> str:
@@ -1154,6 +1162,9 @@ def create_app(
             server.streamable_http_app(stateless_http=True, json_response=True, host="0.0.0.0")
         async with tools.session_manager.run(), approvals.session_manager.run():
             yield
+        # A stop signal drains: no new stage starts, those at work finish up to the limit.
+        await to_thread.run_sync(lambda: runner.drain(drain_seconds()))
+        await to_thread.run_sync(runner.wait_drained)
         stop.set()
         for task in (sweeper, upkeeper, pusher):
             task.cancel()
@@ -1229,7 +1240,9 @@ def create_app(
     app.include_router(agents.router(whiteboard, memory, runner.get, runner.family))
     app.include_router(graph.router(world_svc, index, writer))
     app.include_router(graph.stalled_router(world_svc, writer))
-    app.include_router(upkeep.notices_router(notices))
+    # The Updating notice shows on the page only: pushing it would ring phones every deploy.
+    app.include_router(upkeep.notices_router(drain.with_updating(runner, notices)))
+    app.include_router(drain.router(runner, drain_seconds()))
     app.include_router(review_feeds.router(feeds, family))
     app.include_router(
         library.router(

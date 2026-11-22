@@ -60,6 +60,13 @@ def script() -> Script:
 
 
 @pytest.fixture(autouse=True)
+def no_drain_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An app stopped with a stage still at work stops at once, as before the Drain; a drain
+    test sets its own limit."""
+    monkeypatch.setenv("SWARMIFY_DRAIN_SECONDS", "0")
+
+
+@pytest.fixture(autouse=True)
 def no_web_build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A built apps/web/dist in the checkout would serve every unknown path (a PUT to one is 405,
     not 404); tests that want the web skin set WEB_DIST themselves."""
