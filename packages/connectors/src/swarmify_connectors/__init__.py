@@ -267,15 +267,19 @@ def _saved_session(home: Path) -> str | None:
     return raw.decode()
 
 
-def _scrub_files(folder: Path, stage_id: str) -> None:
-    """Every UTF-8 text file under `folder` (under SCAN_BYTES) with the stage's secrets
-    replaced, read and written without following a link the stage's process left there."""
+def _scrub_files(folder: Path, stage_id: str, since: float | None = None) -> None:
+    """Every UTF-8 text file under `folder` (under SCAN_BYTES; with `since`, only those changed
+    from then on) with the stage's secrets replaced, read and written without following a link
+    the stage's process left there."""
     if not folder.is_dir() or folder.is_symlink():
         return
     for rel in safefile.files(folder):
         try:
             *dirs, name = rel.parts
             with safefile.folder(folder, Path(*dirs) if dirs else "") as at:
+                changed = os.stat(name, dir_fd=at, follow_symlinks=False).st_mtime
+                if since is not None and changed < since:
+                    continue
                 said = safefile.read_at(at, name, SCAN_BYTES).decode()
                 if (clean := scrub.text(said, stage_id)) != said:
                     mode = stat.S_IMODE(os.stat(name, dir_fd=at, follow_symlinks=False).st_mode)
@@ -395,6 +399,9 @@ class Connectors:
         """The id of the top run of a run's family (the run itself when it has no parent)."""
         self._watched: list[tuple[Connector, Confined]] = []
         """Processes others start (a swarm stage's agents), whose blocks `drain` reports."""
+        self._since: dict[str, float] = {}
+        """When each stage holding a login was first handed it: settle scans what the world's
+        assets changed since."""
         self._handoffs: dict[Stage, list[_Handoff]] = {}
         """Logins handed to processes others start, by stage, settled when it ends (`settle`)."""
         self.setups = SetupStore(self.data_dir / "setup.json")
@@ -907,6 +914,7 @@ class Connectors:
             ) from None
         # its values are the stage's secrets now: scrubbed wherever its output goes
         run_id, stage_id = stage
+        self._since.setdefault(stage_id, time.time() - 1)
         secrets_ = [handed.password, handed.totp, *scrub.cookies(handed.session)]
         scrub.add(stage_id, run_id, login, secrets_, handed.login.username, connector.world_id)
         return Grants(domains=list(handed.login.domains)), handed
@@ -963,9 +971,12 @@ class Connectors:
         self.checks.unwatch_stage(stage_id)
         for handoff in self._handoffs.pop((run_id, stage_id), []):
             self._settle_login(handoff)
+        since = self._since.pop(stage_id, None)
         if scrub.holds(stage_id):
-            folder = self.data_dir / "worlds" / world_id / "runs" / run_id / stage_id
-            _scrub_files(folder, stage_id)
+            world = self.data_dir / "worlds" / world_id
+            _scrub_files(world / "runs" / run_id / stage_id, stage_id)
+            # its packages' Owned Folders are the world's assets: what changed while it ran
+            _scrub_files(world / "assets", stage_id, since)
         scrub.drop(stage_id)
 
     # The sandbox (ADR 0021)

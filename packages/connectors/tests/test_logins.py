@@ -182,7 +182,12 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
     assert stat.S_IMODE(session.stat().st_mode) == 0o600
     (home / "login-session.out.json").write_text(NEW_SESSION)
 
+    # a text file its package wrote to the world's assets (an Owned Folder) while it ran
+    assets = tmp_path / "worlds" / "w1" / "assets" / "clips"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / "note.txt").write_text("saw pa55-word on the page")
     connectors.settle("w1", "run_1", "stg_1")
+    assert (assets / "note.txt").read_text() == "saw [secret: shop] on the page"
     assert connectors.logins.hand("w1", "shop").session == NEW_SESSION
     assert not session.exists() and not (home / "login-session.out.json").exists()
     assert not login_file.exists()
