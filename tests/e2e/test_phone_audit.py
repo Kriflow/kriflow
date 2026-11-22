@@ -58,7 +58,12 @@ ROUTES = [
     "/worlds/{world}/settings",
 ]
 
-CHECKS = """W => {
+CHECKS = """async W => {
+  // Measure the page at rest: a docked bar rises from behind the tab bar as it mounts, so mid
+  // rise it overlaps the bar it ends up sitting on. Endless loops (a live dot) never finish.
+  await Promise.all(document.getAnimations()
+    .filter(a => a.playState === 'running' && a.effect.getComputedTiming().endTime !== Infinity)
+    .map(a => a.finished.catch(() => {})));
   // The phone's width, not innerWidth: a phone zooms the page out to fit what runs wide.
   const out = [];
   const add = (check, e, detail) => out.push({check, element: name(e), detail});
