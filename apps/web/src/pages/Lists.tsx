@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import { useWorldEvents } from "../api/events";
+import { useConfirm } from "../Dialog";
 import { took } from "../api/runs";
 import type { components } from "../api/schema";
 import { Empty } from "../Empty";
@@ -19,6 +20,11 @@ type Change = { type: string; ts: string; by?: string; note?: string; from?: str
 
 const ago = (ts: string) => `${took(Math.max(0, (Date.now() - Date.parse(ts)) / 1000))} ago`;
 const entries = (n: number) => `${n} ${n === 1 ? "Entry" : "Entries"}`;
+/** Why the API refused, from its `detail`. */
+const why = (error: unknown) => {
+  const detail = (error as { detail?: unknown } | undefined)?.detail;
+  return typeof detail === "string" ? detail : "the API refused";
+};
 /** A field's value as typed in its box: text stays text, anything else is JSON. */
 const shown = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 /** What was typed back as a value: text stays text when it was text, else JSON when it reads
@@ -56,11 +62,19 @@ export function Lists() {
   const [open, setOpen] = useState<string | null>(null);
   const [moving, setMoving] = useState<string[] | null>(null);
   const [seen, setSeen] = useState(0);
+  const [declared, setDeclared] = useState(0);
+  const [making, setMaking] = useState(false);
+  const [confirm, dialog] = useConfirm();
 
   // The list the address names, else the first that asks for review, else the first.
   const list = lists?.find((l) => l.name === search.list) ?? lists?.find((l) => l.review.length) ?? lists?.[0];
   const reload = (e: { list: string }) => e.list === list?.name && setSeen((n) => n + 1);
-  const saw = useWorldEvents(worldId, { "entry.added": reload, "entry.changed": reload });
+  const saw = useWorldEvents(worldId, {
+    "entry.added": reload,
+    "entry.changed": reload,
+    "entry.deleted": reload,
+    "list.deleted": () => setDeclared((n) => n + 1),
+  });
 
   useEffect(() => {
     api
@@ -70,7 +84,7 @@ export function Lists() {
         setLists(data);
       })
       .catch(() => setError("Could not load the lists. Is the API running?"));
-  }, [worldId, saw]);
+  }, [worldId, saw, declared]);
 
   useEffect(() => {
     if (!list) return;
@@ -102,6 +116,32 @@ export function Lists() {
     void navigate({ search: { list: s.list ?? list?.name, status: s.status }, replace: true });
   };
 
+  const deleteList = async () => {
+    if (!list || !items) return;
+    const n = items.length;
+    const lines = [n ? `Its ${entries(n)} go with it.` : "It has no Entries.", "This cannot be undone."];
+    if (!(await confirm({ title: `Delete the list ${list.name}?`, lines, action: "Delete", danger: true }))) return;
+    const { error } = await api.DELETE("/api/worlds/{world_id}/lists/{name}", { params: { path: { world_id: worldId, name: list.name } } });
+    if (error) return notify(`Could not delete: ${why(error)}`, { tone: "error" });
+    notify(n ? `Deleted ${list.name} and its ${entries(n)}.` : `Deleted ${list.name}.`, { tone: "ok" });
+    setItems(null);
+    setDeclared((k) => k + 1);
+    go({ list: "", status: undefined });
+  };
+
+  const deleteEntry = async (e: Entry) => {
+    setOpen(null);
+    if (!list) return;
+    const ok = await confirm({ title: `Delete ${e.title}?`, lines: [`It leaves ${list.name}.`, "This cannot be undone."], action: "Delete", danger: true });
+    if (!ok) return;
+    const { error } = await api.DELETE("/api/worlds/{world_id}/lists/{name}/entries/{key}", {
+      params: { path: { world_id: worldId, name: list.name, key: e.key } },
+    });
+    if (error) return notify(`Could not delete: ${why(error)}`, { tone: "error" });
+    notify(`Deleted ${e.title}.`, { tone: "ok" });
+    setSeen((n) => n + 1);
+  };
+
   return (
     <main className="lists-page">
       <PullToRefresh />
@@ -124,6 +164,9 @@ export function Lists() {
             </select>
           </label>
         )}
+        <button type="button" aria-haspopup="dialog" aria-expanded={making} onClick={() => setMaking(true)}>
+          New list
+        </button>
       </header>
       {error && <p role="alert">{error}</p>}
       {lists?.length === 0 && (
@@ -136,7 +179,7 @@ export function Lists() {
             </Link>
           }
         >
-          A world declares its lists; its workflows then add Entries here for you to curate.
+          Make a list with New list, or let a workflow declare one; its workflows then add Entries here for you to curate.
         </Empty>
       )}
       {list && items === null && !error && (
@@ -209,7 +252,20 @@ export function Lists() {
               </button>
             </div>
           )}
-          <EntrySheet worldId={worldId} list={list} entryKey={open} seen={seen} onClose={() => setOpen(null)} onMove={(k) => setMoving([k])} />
+          <p className="list-end">
+            <button type="button" className="danger" aria-label={`Delete list ${list.name}`} onClick={() => void deleteList()}>
+              Delete list
+            </button>
+          </p>
+          <EntrySheet
+            worldId={worldId}
+            list={list}
+            entryKey={open}
+            seen={seen}
+            onClose={() => setOpen(null)}
+            onMove={(k) => setMoving([k])}
+            onDelete={(e) => void deleteEntry(e)}
+          />
           <MoveSheet
             worldId={worldId}
             list={list}
@@ -224,7 +280,90 @@ export function Lists() {
           />
         </>
       )}
+      <NewListSheet
+        worldId={worldId}
+        open={making}
+        onClose={() => setMaking(false)}
+        onMade={(name) => {
+          setDeclared((n) => n + 1);
+          go({ list: name, status: undefined });
+        }}
+      />
+      {dialog}
     </main>
+  );
+}
+
+/** Split typed statuses on commas: trimmed, none empty, none twice. */
+const parse = (text: string) => [...new Set(text.split(",").map((s) => s.trim()).filter(Boolean))];
+
+/** Make a list: its name, its statuses in order, and which of them count as done, rejected or
+ * waiting for a person. The API checks the names. */
+function NewListSheet({ worldId, open, onClose, onMade }: { worldId: string; open: boolean; onClose: () => void; onMade: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const [text, setText] = useState("");
+  const [marks, setMarks] = useState<Record<"done" | "rejected" | "review", string[]>>({ done: [], rejected: [], review: [] });
+  const [busy, setBusy] = useState(false);
+  const statuses = parse(text);
+  const make = async (ev: FormEvent) => {
+    ev.preventDefault();
+    const n = name.trim();
+    const pick = (k: keyof typeof marks) => marks[k].filter((s) => statuses.includes(s));
+    setBusy(true);
+    const { data, error } = await api
+      .PUT("/api/worlds/{world_id}/lists/{name}", {
+        params: { path: { world_id: worldId, name: n } },
+        body: { statuses, done: pick("done"), rejected: pick("rejected"), review: pick("review") },
+      })
+      .finally(() => setBusy(false));
+    if (error || !data) return notify(`Could not create: ${why(error)}`, { tone: "error" });
+    notify(`Created ${n}.`, { tone: "ok" });
+    setName("");
+    setText("");
+    setMarks({ done: [], rejected: [], review: [] });
+    onMade(n);
+    onClose();
+  };
+  return (
+    <Sheet open={open} onClose={onClose} label="New list" className="new-list-sheet">
+      <form className="new-list" onSubmit={(ev) => void make(ev)}>
+        <label>
+          Name
+          <input value={name} onChange={(e) => setName(e.target.value)} required autoCapitalize="none" autoComplete="off" spellCheck={false} placeholder="leads" />
+        </label>
+        <small className="faint">Lowercase letters, digits, - and _.</small>
+        <label>
+          Statuses, in order
+          <input value={text} onChange={(e) => setText(e.target.value)} required autoCapitalize="none" autoComplete="off" spellCheck={false} placeholder="new, contacted, won, lost" />
+        </label>
+        <small className="faint">Comma separated. A new Entry starts in the first.</small>
+        {statuses.length > 0 &&
+          (
+            [
+              ["done", "Done"],
+              ["rejected", "Rejected"],
+              ["review", "Waits for you"],
+            ] as const
+          ).map(([k, legend]) => (
+            <fieldset key={k}>
+              <legend>{legend}</legend>
+              {statuses.map((s) => (
+                <label key={s} className="check">
+                  <input
+                    type="checkbox"
+                    checked={marks[k].includes(s)}
+                    onChange={(e) => setMarks((m) => ({ ...m, [k]: e.target.checked ? [...m[k], s] : m[k].filter((x) => x !== s) }))}
+                  />
+                  {s}
+                </label>
+              ))}
+            </fieldset>
+          ))}
+        <button type="submit" className="primary" disabled={busy || !name.trim() || statuses.length === 0}>
+          Create list
+        </button>
+      </form>
+    </Sheet>
   );
 }
 
@@ -308,6 +447,7 @@ function EntrySheet({
   seen,
   onClose,
   onMove,
+  onDelete,
 }: {
   worldId: string;
   list: WorldList;
@@ -315,6 +455,7 @@ function EntrySheet({
   seen: number;
   onClose: () => void;
   onMove: (key: string) => void;
+  onDelete: (entry: Entry) => void;
 }) {
   const [entry, setEntry] = useState<Viewed | null>(null);
   const [runs, setRuns] = useState<Record<string, string>>({});
@@ -395,6 +536,9 @@ function EntrySheet({
                 Open file
               </Link>
             )}
+            <button type="button" className="danger" onClick={() => onDelete(e)}>
+              Delete
+            </button>
           </div>
           <form className="entry-edit" onSubmit={(ev) => void save(ev)}>
             <label>

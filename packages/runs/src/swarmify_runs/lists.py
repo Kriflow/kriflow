@@ -726,7 +726,9 @@ class WorldLists:
             gone = conn.execute(
                 "DELETE FROM list_entries WHERE world_id = ? AND list = ?", (world_id, name)
             ).rowcount
-            conn.execute("DELETE FROM world_lists WHERE world_id = ? AND name = ?", (world_id, name))
+            conn.execute(
+                "DELETE FROM world_lists WHERE world_id = ? AND name = ?", (world_id, name)
+            )
             payload = {"list": name, "entries": gone, "by": by}
             append(conn, Event.new("list.deleted", world_id=world_id, payload=payload))
             conn.execute("COMMIT")

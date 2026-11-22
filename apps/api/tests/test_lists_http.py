@@ -193,9 +193,7 @@ def _run(tmp_path: Path, world: str, run_id: str) -> RunStorage:
     return storage
 
 
-def test_an_entry_is_deleted_unless_a_live_run_holds_it(
-    client: TestClient, tmp_path: Path
-) -> None:
+def test_an_entry_is_deleted_unless_a_live_run_holds_it(client: TestClient, tmp_path: Path) -> None:
     world, url = _world(client)
     for key in ("a", "b", "https://example.com/c"):
         _add(client, url, key)
@@ -210,7 +208,7 @@ def test_an_entry_is_deleted_unless_a_live_run_holds_it(
     assert _keys(client, url) == ["a"]
     assert client.delete(f"{url}/entries/b").status_code == 404
     assert client.delete(f"/api/worlds/{world}/lists/nope/entries/a").status_code == 404
-    assert client.delete(f"/api/worlds/world_nope/lists/ideas/entries/a").status_code == 404
+    assert client.delete("/api/worlds/world_nope/lists/ideas/entries/a").status_code == 404
 
     # Once the run ends it holds nothing, and the Entry goes.
     storage.save_state("run_1", RunState("aborted", ()))
@@ -249,9 +247,7 @@ def test_a_list_is_deleted_with_its_entries_unless_a_live_run_holds_one(
     assert client.delete(url).status_code == 204
     assert client.get(f"/api/worlds/{world}/lists").json() == []
     assert client.get(f"{url}/entries").status_code == 404
-    (event,) = [
-        e for e in world_service(tmp_path).events_after(world) if e.type == "list.deleted"
-    ]
+    (event,) = [e for e in world_service(tmp_path).events_after(world) if e.type == "list.deleted"]
     assert (event.payload["list"], event.payload["entries"], event.payload["by"]) == (
         "ideas",
         2,
@@ -318,7 +314,9 @@ async def test_the_same_calls_on_mcp(tmp_path: Path) -> None:
         assert entry["history"][-1]["note"] == "Why"  # type: ignore[index]
         await call("delete_entry", list="ideas", key="b")
         assert [e["key"] for e in await call("read_list", list="ideas")] == ["a"]  # type: ignore[union-attr]
-        gone = await client.call_tool("delete_entry", {"world_id": world, "list": "ideas", "key": "b"})
+        gone = await client.call_tool(
+            "delete_entry", {"world_id": world, "list": "ideas", "key": "b"}
+        )
         assert gone.is_error
 
         bad = await client.call_tool(
