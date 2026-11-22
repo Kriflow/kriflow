@@ -469,6 +469,21 @@ class Memory:
             append(conn, event)
         return artifact
 
+    def remove_artifact(self, world_id: str, path: str) -> None:
+        """Delete the run artifact at `path` (relative to the world folder) with its sidecar,
+        and the folders that leaves empty. Raises ValueError when there is no such artifact."""
+        file = self._inside(world_id, path)
+        runs = self.world_folder(world_id).resolve() / "runs"
+        if not file.is_relative_to(runs):
+            raise ValueError(f"no artifact at {path}")
+        file.with_name(f"{file.name}.md").unlink(missing_ok=True)
+        file.unlink()
+        for folder in file.parents:
+            if folder == runs or any(folder.iterdir()):
+                break
+            folder.rmdir()
+        self._event(world_id, file.relative_to(runs).parts[0], "artifact.deleted", path=path)
+
     def _artifacts(self, world_id: str, files: list[Path]) -> list[ArtifactFile]:
         return _read(self.world_folder(world_id), files)
 

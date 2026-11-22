@@ -33,6 +33,18 @@ class Storage(Protocol):
         self, proposal_id: str, status: str, note: str, decided_at: str, event: Event
     ) -> Proposal | None: ...
 
+    def archived(self, world_id: str) -> dict[str, str]:
+        """The world's archived skills, name to when."""
+        ...
+
+    def archive(self, world_id: str, name: str, at: str, event: Event) -> bool:
+        """False when it was archived already."""
+        ...
+
+    def restore(self, world_id: str, name: str, event: Event) -> bool:
+        """False when it was not archived."""
+        ...
+
     def delete_world(self, world_id: str) -> None: ...
 
 

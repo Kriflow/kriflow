@@ -1923,7 +1923,8 @@ export interface paths {
         /**
          * List Skills
          * @description Every skill the world's agents load: its own (with version and the run that produced
-         *     it) and the shared ones it has not overridden.
+         *     it) and the shared ones it has not overridden. `archived` adds the archived ones, each
+         *     with its `archived_at`.
          */
         get: operations["list_skills_api_worlds__world_id__skills_get"];
         put?: never;
@@ -1933,6 +1934,48 @@ export interface paths {
          *     folder, so every stage that starts from now on loads it.
          */
         post: operations["write_skill_api_worlds__world_id__skills_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/skills/{name}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Skill
+         * @description Archive the skill, the world's own or a shared one: no stage that starts from now on
+         *     loads it, and the list hides it. Its versions stay. 409 when it is archived already.
+         */
+        post: operations["archive_skill_api_worlds__world_id__skills__name__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worlds/{world_id}/skills/{name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Skill
+         * @description Restore an archived skill: every stage that starts from now on loads it again. 409
+         *     when it is not archived.
+         */
+        post: operations["restore_skill_api_worlds__world_id__skills__name__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2084,6 +2127,26 @@ export interface paths {
          */
         post: operations["save_eval_api_evals_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evals/{eval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Eval
+         * @description Delete the stored report. The trial worlds and runs it names stay.
+         */
+        delete: operations["delete_eval_api_evals__eval_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4518,6 +4581,8 @@ export interface components {
             run_id?: string | null;
             /** Created At */
             created_at?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
         };
         /**
          * SkillChange
@@ -9049,7 +9114,9 @@ export interface operations {
     };
     list_skills_api_worlds__world_id__skills_get: {
         parameters: {
-            query?: never;
+            query?: {
+                archived?: boolean;
+            };
             header?: never;
             path: {
                 world_id: string;
@@ -9108,6 +9175,98 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    archive_skill_api_worlds__world_id__skills__name__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_skill_api_worlds__world_id__skills__name__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                world_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -9392,6 +9551,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    delete_eval_api_evals__eval_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

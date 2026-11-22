@@ -140,6 +140,8 @@ button.icon.play svg { margin-left: 2px; }
 .skill-list { list-style: none; padding: 0; margin: 0; display: grid; }
 .skills .skill-list li { display: grid; gap: 2px; padding: 10px 0; background: none; border: 0; border-radius: 0; }
 .skills .skill-list li + li { border-top: 1px solid var(--rule); }
+.skills .skill-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.skills .skill-archived-toggle { margin-top: 8px; }
 .skills .skill-list b { font-family: var(--mono); font-weight: 500; }
 
 /* Status and type tabs (.tabs.chip-row) become one row of chips on a phone; the library's

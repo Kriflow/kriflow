@@ -93,20 +93,56 @@ class Learning:
     # Skills
 
     def sync(self, world_id: str) -> None:
-        """Make the shared skills the world has not overridden loadable from its folder. Call it
-        before agents start."""
-        self.files.sync(world_id)
+        """Make the shared skills the world has not overridden loadable from its folder, and
+        keep archived ones out of it. Call it before agents start."""
+        self.files.sync(world_id, self.storage.archived(world_id))
 
-    def skills(self, world_id: str) -> list[Skill]:
-        """Every skill the world's agents load, with the world's version and run for its own."""
+    def skills(self, world_id: str, archived: bool = False) -> list[Skill]:
+        """Every skill the world's agents load, with the world's version and run for its own;
+        with `archived`, the archived ones too (their `archived_at` set), by name."""
         latest = {v.name: v for v in self.storage.versions(world_id)}
+        kept = self.storage.archived(world_id)
+        listed = self.files.list(world_id, kept)
+        if archived:
+            listed += [
+                replace(s, archived_at=kept[s.name])
+                for s in self.files.list_archived(world_id, kept)
+            ]
         out = []
-        for skill in self.files.list(world_id):
+        for skill in sorted(listed, key=lambda s: s.name):
             v = latest.get(skill.name) if skill.source == "world" else None
             if v is not None and not v.retired:
                 skill = replace(skill, version=v.number, run_id=v.run_id, created_at=v.created_at)
             out.append(skill)
         return out
+
+    def archive_skill(self, world_id: str, name: str) -> Skill:
+        """Keep the skill out of every stage that starts from now on, its own or a shared one;
+        its versions stay. Raises KeyError when the world has no such skill, ValueError when
+        it is archived already."""
+        if name in self.storage.archived(world_id):
+            raise ValueError(f"{name} is already archived")
+        if name not in {s.name for s in self.files.list(world_id)}:
+            raise KeyError(f"the world has no skill named {name}")
+        at = _now()
+        event = Event.new("skill.archived", world_id=world_id, payload={"name": name, "at": at})
+        if not self.storage.archive(world_id, name, at, event):
+            raise ValueError(f"{name} is already archived")
+        self.sync(world_id)
+        return self._skill(world_id, name, archived=True)
+
+    def restore_skill(self, world_id: str, name: str) -> Skill:
+        """Load the archived skill again from the next stage on. Raises ValueError when it is
+        not archived."""
+        event = Event.new("skill.restored", world_id=world_id, payload={"name": name})
+        if not self.storage.restore(world_id, name, event):
+            raise ValueError(f"{name} is not archived")
+        self.files.restore(world_id, name)
+        self.sync(world_id)
+        return self._skill(world_id, name)
+
+    def _skill(self, world_id: str, name: str, archived: bool = False) -> Skill:
+        return next(s for s in self.skills(world_id, archived) if s.name == name)
 
     def versions(self, world_id: str, name: str) -> list[SkillVersion]:
         return self.storage.versions(world_id, name)
@@ -117,9 +153,11 @@ class Learning:
         """Write the world's skill as its next version (1 for a new one) and make it current.
         Raises ValueError for a name or content the agents would not load."""
         check_skill(name, content)
+        if name in self.storage.archived(world_id):
+            self.restore_skill(world_id, name)  # a new version is a decision to load it again
         self._version(world_id, name, content, run_id, note, retired=False)
         self.files.write(world_id, name, content)
-        return next(s for s in self.skills(world_id) if s.name == name)
+        return self._skill(world_id, name)
 
     def retire_skill(
         self, world_id: str, name: str, run_id: str | None = None, note: str = ""
