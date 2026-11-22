@@ -12,6 +12,8 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 AGENT_TOOLS = {
     "web_search": "the web, through Claude's own WebSearch and WebFetch",
     "graph": "this world's graph, read only",
+    "lists": "this world's World Lists: read Entries by status, field and order, add Entries,"
+    " set their status and fields",
 }
 """The Agent Tools (ADR 0023): names a swarm stage's `tools` may list that the core itself
 provides, not a Connector, so they have no package, version or Credentials. Shared here because

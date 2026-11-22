@@ -1,0 +1,444 @@
+"""World Lists (issue 539): named, world-wide lists of Entries that any workflow of a world adds
+to, reads and moves through the statuses the world declares.
+
+Core knows no meaning beyond the rules here: a key is unique per list (adding it again returns
+the existing Entry unchanged), a status must be declared, fields stay small. Every add and change
+is an event in the world stream, which is also the Entry's history. One class serves the HTTP
+API, MCP and the `lists` Agent Tool alike.
+"""
+
+import builtins
+import json
+import re
+import sqlite3
+from contextlib import closing
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+from swarmify_kernel import Event
+from swarmify_kernel.events import append
+from swarmify_kernel.sqlite import connect
+
+MAX_FIELDS = 4000
+"""The most an Entry's fields may take as JSON, in characters: small facts, not content (the
+content is the Entry's file)."""
+MAX_TITLE, MAX_KEY = 300, 500
+NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+"""A list's or a status's name."""
+FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+"""A field name a filter or an order may use."""
+ORDERS = ("score", "time")
+"""What an order may name besides a numeric field; a leading `-` makes it descending."""
+
+
+@dataclass(frozen=True)
+class WorldList:
+    """A list as the world declared it. `statuses` keeps its order: the first is where an added
+    Entry starts unless the adder names another."""
+
+    world_id: str
+    name: str
+    statuses: list[str]
+    done: list[str]
+    rejected: list[str]
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class Entry:
+    list: str
+    key: str
+    title: str
+    status: str
+    score: float | None
+    fields: dict[str, Any]
+    file: str | None
+    """The Entry's content, a path in the world folder."""
+    claimed_by: str | None
+    """The run holding it now, None when free."""
+    runs: builtins.list[str]  # `list` is the field above
+    """Every run that held it, oldest first."""
+    created_at: str
+    updated_at: str
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _names(kind: str, values: list[str]) -> list[str]:
+    for v in values:
+        if not NAME.match(v):
+            raise ValueError(f"{kind} {v!r}: use lowercase letters, digits, - and _ (up to 64)")
+    if len(set(values)) != len(values):
+        raise ValueError(f"{kind}s repeat a name")
+    return values
+
+
+def _fields(fields: dict[str, Any]) -> str:
+    text = json.dumps(fields, sort_keys=True)
+    if len(text) > MAX_FIELDS:
+        raise ValueError(
+            f"fields take {len(text)} characters as JSON, over {MAX_FIELDS}: keep them small"
+            " and put the rest in the Entry's file"
+        )
+    return text
+
+
+def _file(file: str | None) -> str | None:
+    if not file:
+        return None
+    path = PurePosixPath(file)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"file {file!r} must be a path inside the world folder")
+    return str(path)
+
+
+def _entry(row: sqlite3.Row) -> Entry:
+    return Entry(
+        row["list"],
+        row["key"],
+        row["title"],
+        row["status"],
+        row["score"],
+        json.loads(row["fields"]),
+        row["file"],
+        row["claimed_by"],
+        json.loads(row["runs"]),
+        row["created_at"],
+        row["updated_at"],
+    )
+
+
+def _list(row: sqlite3.Row) -> WorldList:
+    return WorldList(
+        row["world_id"],
+        row["name"],
+        json.loads(row["statuses"]),
+        json.loads(row["done"]),
+        json.loads(row["rejected"]),
+        row["created_at"],
+        row["updated_at"],
+    )
+
+
+def order_by(order: str) -> tuple[str, tuple[Any, ...]]:
+    """The SQL ORDER BY of `order`: score, time (when added) or a numeric field, descending with
+    a leading `-`. Entries without the value come last; ties go oldest first."""
+    desc = order.startswith("-")
+    name = order.removeprefix("-")
+    if name == "score":
+        column, args = "score", ()
+    elif name == "time":
+        column, args = "created_at", ()
+    elif FIELD.match(name):
+        column, args = "json_extract(fields, ?)", (f"$.{name}",)
+    else:
+        raise ValueError(f"order {order!r}: name score, time or a field, with - for descending")
+    way = "DESC" if desc else "ASC"
+    return f"({column}) IS NULL, ({column}) {way}, created_at, key", args * 2
+
+
+class WorldLists:
+    """The World Lists of every world, on SQLite. Raises KeyError for an unknown list or Entry
+    and ValueError for anything the rules refuse. `by` is who acted (a person, an agent or a
+    run) and `run_id` the run an agent acted in, both recorded on the event."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def _conn(self) -> closing[sqlite3.Connection]:
+        return closing(connect(self.path))
+
+    def declare(
+        self,
+        world_id: str,
+        name: str,
+        statuses: list[str],
+        done: list[str] | None = None,
+        rejected: list[str] | None = None,
+        by: str = "operator",
+    ) -> WorldList:
+        """Declare a list, or declare it again with new statuses. Refused when `done` or
+        `rejected` names an undeclared status, or a status some Entry is in would go."""
+        _names("list", [name])
+        statuses, done, rejected = _names("status", statuses), done or [], rejected or []
+        if not statuses:
+            raise ValueError("a list declares at least one status")
+        if stray := [s for s in [*done, *rejected] if s not in statuses]:
+            raise ValueError(f"done and rejected must be declared statuses: {', '.join(stray)}")
+        now = _now()
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            used = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT DISTINCT status FROM list_entries WHERE world_id = ? AND list = ?",
+                    (world_id, name),
+                )
+            }
+            if gone := sorted(used - set(statuses)):
+                conn.execute("ROLLBACK")
+                raise ValueError(f"Entries of {name} are in {', '.join(gone)}: keep those statuses")
+            conn.execute(
+                "INSERT INTO world_lists VALUES (?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT (world_id, name) DO UPDATE SET statuses = excluded.statuses,"
+                " done = excluded.done, rejected = excluded.rejected,"
+                " updated_at = excluded.updated_at",
+                (world_id, name, *map(json.dumps, (statuses, done, rejected)), now, now),
+            )
+            payload = {"list": name, "statuses": statuses, "done": done, "rejected": rejected}
+            append(
+                conn, Event.new("list.declared", world_id=world_id, payload={**payload, "by": by})
+            )
+            conn.execute("COMMIT")
+        return self.get_list(world_id, name)
+
+    def lists(self, world_id: str) -> list[WorldList]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM world_lists WHERE world_id = ? ORDER BY name", (world_id,)
+            ).fetchall()
+        return [_list(r) for r in rows]
+
+    def get_list(self, world_id: str, name: str) -> WorldList:
+        with self._conn() as conn:
+            return self._declared(conn, world_id, name)
+
+    @staticmethod
+    def _declared(conn: sqlite3.Connection, world_id: str, name: str) -> WorldList:
+        row = conn.execute(
+            "SELECT * FROM world_lists WHERE world_id = ? AND name = ?", (world_id, name)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no list {name!r} in this world")
+        return _list(row)
+
+    @staticmethod
+    def _status(declared: WorldList, status: str) -> str:
+        if status not in declared.statuses:
+            raise ValueError(
+                f"{status!r} is not a status of {declared.name}: {', '.join(declared.statuses)}"
+            )
+        return status
+
+    def add(
+        self,
+        world_id: str,
+        name: str,
+        key: str,
+        title: str,
+        *,
+        status: str | None = None,
+        score: float | None = None,
+        fields: dict[str, Any] | None = None,
+        file: str | None = None,
+        by: str = "operator",
+        run_id: str | None = None,
+    ) -> tuple[Entry, bool]:
+        """Add an Entry, in `status` or else the list's first. A key already in the list returns
+        that Entry unchanged and False: re-running a stage is safe."""
+        key, title = key.strip(), " ".join(title.split())
+        if not key or len(key) > MAX_KEY:
+            raise ValueError(f"a key is 1 to {MAX_KEY} characters")
+        if not title or len(title) > MAX_TITLE:
+            raise ValueError(f"a title is 1 to {MAX_TITLE} characters")
+        text, file = _fields(fields or {}), _file(file)
+        now = _now()
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                declared = self._declared(conn, world_id, name)
+                status = self._status(declared, status or declared.statuses[0])
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            if (found := self._row(conn, world_id, name, key)) is not None:
+                conn.execute("ROLLBACK")
+                return found, False
+            conn.execute(
+                "INSERT INTO list_entries (world_id, list, key, title, status, score, fields,"
+                " file, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (world_id, name, key, title, status, score, text, file, now, now),
+            )
+            payload = {"list": name, "key": key, "title": title, "status": status, "by": by}
+            append(
+                conn, Event.new("entry.added", world_id=world_id, payload=payload, run_id=run_id)
+            )
+            entry = self._row(conn, world_id, name, key)
+            conn.execute("COMMIT")
+        assert entry is not None
+        return entry, True
+
+    @staticmethod
+    def _row(conn: sqlite3.Connection, world_id: str, name: str, key: str) -> Entry | None:
+        row = conn.execute(
+            "SELECT * FROM list_entries WHERE world_id = ? AND list = ? AND key = ?",
+            (world_id, name, key),
+        ).fetchone()
+        return _entry(row) if row else None
+
+    def get(self, world_id: str, name: str, key: str) -> Entry:
+        with self._conn() as conn:
+            self._declared(conn, world_id, name)
+            entry = self._row(conn, world_id, name, key)
+        if entry is None:
+            raise KeyError(f"no Entry {key!r} in {name}")
+        return entry
+
+    def read(
+        self,
+        world_id: str,
+        name: str,
+        *,
+        status: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+        order: str = "-score",
+        limit: int | None = None,
+    ) -> list[Entry]:
+        """The list's Entries in any of `status` (all when None) whose fields equal `where`, by
+        `order` (best score first by default), at most `limit`."""
+        sql, args = "world_id = ? AND list = ?", [world_id, name]
+        with self._conn() as conn:
+            declared = self._declared(conn, world_id, name)
+            if status:
+                for s in status:
+                    self._status(declared, s)
+                sql += f" AND status IN ({', '.join('?' * len(status))})"
+                args += status
+            for field, value in (where or {}).items():
+                if not FIELD.match(field):
+                    raise ValueError(f"field {field!r}: use letters, digits and _")
+                sql += " AND json_extract(fields, ?) = ?"
+                args += [f"$.{field}", value]
+            ordering, more = order_by(order)
+            limited = " LIMIT ?" if limit is not None else ""
+            rows = conn.execute(
+                f"SELECT * FROM list_entries WHERE {sql} ORDER BY {ordering}{limited}",
+                [*args, *more, *([max(0, limit)] if limit is not None else [])],
+            ).fetchall()
+        return [_entry(r) for r in rows]
+
+    def set_status(
+        self,
+        world_id: str,
+        name: str,
+        keys: list[str],
+        status: str,
+        *,
+        note: str = "",
+        by: str = "operator",
+        run_id: str | None = None,
+    ) -> list[Entry]:
+        """Move every Entry of `keys` to `status` at once, or none when one is unknown. An Entry
+        already there is left as it is, with no event."""
+        if not keys:
+            raise ValueError("name at least one Entry")
+        now, out = _now(), []
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._status(self._declared(conn, world_id, name), status)
+                for key in dict.fromkeys(keys):
+                    entry = self._row(conn, world_id, name, key)
+                    if entry is None:
+                        raise KeyError(f"no Entry {key!r} in {name}")
+                    if entry.status != status:
+                        conn.execute(
+                            "UPDATE list_entries SET status = ?, updated_at = ?"
+                            " WHERE world_id = ? AND list = ? AND key = ?",
+                            (status, now, world_id, name, key),
+                        )
+                        payload = {"from": entry.status, "to": status}
+                        self._changed(conn, world_id, name, key, payload, note, by, run_id)
+                    out.append(self._row(conn, world_id, name, key))
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            conn.execute("COMMIT")
+        return [e for e in out if e is not None]
+
+    def set_fields(
+        self,
+        world_id: str,
+        name: str,
+        key: str,
+        fields: dict[str, Any],
+        *,
+        score: float | None = None,
+        note: str = "",
+        by: str = "operator",
+        run_id: str | None = None,
+    ) -> Entry:
+        """Merge `fields` into the Entry's (a None value removes that field) and set `score`
+        when given."""
+        with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._declared(conn, world_id, name)
+                entry = self._row(conn, world_id, name, key)
+                if entry is None:
+                    raise KeyError(f"no Entry {key!r} in {name}")
+                merged = {**entry.fields, **fields}
+                merged = {k: v for k, v in merged.items() if v is not None}
+                text = _fields(merged)
+            except (KeyError, ValueError):
+                conn.execute("ROLLBACK")
+                raise
+            conn.execute(
+                "UPDATE list_entries SET fields = ?, score = COALESCE(?, score), updated_at = ?"
+                " WHERE world_id = ? AND list = ? AND key = ?",
+                (text, score, _now(), world_id, name, key),
+            )
+            payload: dict[str, Any] = {"fields": fields}
+            if score is not None:
+                payload["score"] = score
+            self._changed(conn, world_id, name, key, payload, note, by, run_id)
+            changed = self._row(conn, world_id, name, key)
+            conn.execute("COMMIT")
+        assert changed is not None
+        return changed
+
+    @staticmethod
+    def _changed(
+        conn: sqlite3.Connection,
+        world_id: str,
+        name: str,
+        key: str,
+        change: dict[str, Any],
+        note: str,
+        by: str,
+        run_id: str | None,
+    ) -> None:
+        payload = {"list": name, "key": key, **change, "by": by, "note": note}
+        append(conn, Event.new("entry.changed", world_id=world_id, payload=payload, run_id=run_id))
+
+    def history(self, world_id: str, name: str, key: str) -> list[Event]:
+        """The Entry's events, oldest first: added, then every change with who and why."""
+        self.get(world_id, name, key)
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM events WHERE world_id = ? AND type IN ('entry.added',"
+                " 'entry.changed') AND json_extract(payload, '$.list') = ?"
+                " AND json_extract(payload, '$.key') = ? ORDER BY seq",
+                (world_id, name, key),
+            ).fetchall()
+        return [
+            Event(
+                r["id"],
+                r["world_id"],
+                r["type"],
+                json.loads(r["payload"]),
+                r["ts"],
+                r["run_id"],
+                r["seq"],
+            )  # fmt: skip
+            for r in rows
+        ]
+
+    def delete_world(self, world_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM world_lists WHERE world_id = ?", (world_id,))
