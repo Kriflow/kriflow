@@ -275,8 +275,10 @@ class SdkRuntime:
                             )
                         )
                     elif isinstance(msg, ResultMessage):
-                        # A structured answer outlives the turns a message added after it.
-                        output = msg.structured_output if output is None else output
+                        # The newest structured answer wins (a message's reply may correct it);
+                        # it outlives a later turn that gives none.
+                        if msg.structured_output is not None:
+                            output = msg.structured_output
                         turns -= 1
                         if turns > 0:
                             continue  # an interrupted turn, or one answered before a message's

@@ -1132,12 +1132,14 @@ def create_app(
         it lands in each agent's inbox (the swarm's)."""
         to = change.payload.get("to") or None
         try:
-            swarm.recipients(run_id, change.stage, to)
+            names = swarm.recipients(run_id, change.stage, to)
         except Refused as exc:
             raise Illegal(str(exc)) from exc
         applied = runner.message(run_id, change, by)
         p = applied.payload
-        swarm.message(run_id, change.stage, applied.id, p["text"], p["to"], p["interrupt"])
+        # The names checked above, not a second check: an agent that finished meanwhile still
+        # gets it queued, so the recorded change and the log agree.
+        swarm.message(run_id, change.stage, applied.id, p["text"], p["to"], p["interrupt"], names)
         return applied
 
     app.include_router(

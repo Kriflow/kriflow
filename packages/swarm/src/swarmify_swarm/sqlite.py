@@ -327,6 +327,22 @@ class SqliteStorage:
                 for q in _queued(conn, stage_id, agent)
             ]
 
+    def drop(self, stage_id: str, why: str) -> list[LogEntry]:
+        with self._write() as conn:
+            return [
+                _log(
+                    conn,
+                    stage_id,
+                    q.agent,
+                    "message",
+                    q.detail,
+                    None,
+                    {**(q.input or {}), "state": "dropped", "why": why},
+                    q.ref,
+                )  # fmt: skip
+                for q in _queued(conn, stage_id)
+            ]
+
     # Attempts
 
     def start_attempt(
@@ -568,15 +584,16 @@ def _log(
     return entry
 
 
-def _queued(conn: sqlite3.Connection, stage_id: str, agent: str) -> list[LogEntry]:
-    """The agent's queued messages no delivered line answers yet, oldest first."""
+def _queued(conn: sqlite3.Connection, stage_id: str, agent: str | None = None) -> list[LogEntry]:
+    """The agent's (else every agent's) queued messages no delivered or dropped line answers
+    yet, oldest first."""
     rows = conn.execute(
-        "SELECT * FROM agent_log q WHERE q.stage_id = ? AND q.agent = ?"
+        "SELECT * FROM agent_log q WHERE q.stage_id = ? AND (? IS NULL OR q.agent = ?)"
         " AND q.kind = 'message' AND json_extract(q.input, '$.state') = 'queued'"
         " AND NOT EXISTS (SELECT 1 FROM agent_log d WHERE d.stage_id = q.stage_id"
         " AND d.agent = q.agent AND d.kind = 'message' AND d.ref = q.ref"
-        " AND json_extract(d.input, '$.state') = 'delivered') ORDER BY q.seq",
-        (stage_id, agent),
+        " AND json_extract(d.input, '$.state') IN ('delivered', 'dropped')) ORDER BY q.seq",
+        (stage_id, agent, agent),
     ).fetchall()
     return [_entry(r) for r in rows]
 

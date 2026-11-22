@@ -166,6 +166,11 @@ class Storage(Protocol):
         first, each now answered by one, in one transaction, so a message is delivered once."""
         ...
 
+    def drop(self, stage_id: str, why: str) -> list[LogEntry]:
+        """Answer every queued `message` line of the stage with a `dropped` one saying `why`:
+        the Attempt it was sent in ended before its agent took it."""
+        ...
+
 
 TOOL_SERVER = "swarmify"
 """The in-process tool server. Hooks and the allowlist see its tools as `mcp__swarmify__<name>`,
