@@ -46,6 +46,15 @@ stages:
 """
 
 
+def regated(run: dict[str, Any]) -> bool:
+    """Back at the items gate with every Item settled: until the workflow takes a send-back the
+    run still reads waiting_gate from before, and the forked child may finish first."""
+    items = run["stages"][1]["items"]
+    return run["status"] == "waiting_gate" and all(
+        i["status"] not in ("pending", "running") for i in items
+    )
+
+
 @pytest.fixture
 def read(transport: FakeTransport) -> list[Any]:
     """`split` writes the paragraphs; `translate` reads its input and writes out.md."""
@@ -132,7 +141,7 @@ def test_an_approve_stage_shows_each_items_output_and_takes_approvals_and_send_b
     assert running.post(review, json={"approve": ["nope"]}).status_code == 404
     sent = running.post(review, json={"approve": ["intro", "2"], "send_back": {"1": "Shorter"}})
     assert sent.status_code == 200, sent.json()
-    until(lambda: len(read) == 4 and running.get(url).json()["status"] == "waiting_gate")
+    until(lambda: len(read) == 4 and regated(running.get(url).json()))
     again = running.get(url).json()["stages"][1]["items"]
     assert [(i["key"], i["approved"]) for i in again] == [
         ("intro", True), ("1", False), ("2", True),

@@ -41,8 +41,11 @@ def sign_in_youtube(data_dir: Path) -> None:
     store.put_value("youtube", None, "youtube", tokens)
 
 
-def until(check: Callable[[], bool]) -> None:
-    deadline = time.monotonic() + 10
+def until(check: Callable[[], bool], seconds: float = 30) -> None:
+    """Poll `check` until it holds. Wait on the state the next step needs, not a status that
+    can still be the old one. A run's wall time grows with the machine's load (a fan-out that
+    takes 2.7 s alone took 9.6 s at -n 16, issue 601), so the limit only catches a hang."""
+    deadline = time.monotonic() + seconds
     while not check():
         assert time.monotonic() < deadline, "timed out"
         time.sleep(0.05)
