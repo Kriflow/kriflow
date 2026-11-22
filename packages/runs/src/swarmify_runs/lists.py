@@ -44,6 +44,8 @@ class WorldList:
     statuses: list[str]
     done: list[str]
     rejected: list[str]
+    review: list[str]
+    """Statuses whose Entries wait for a person: while any do, Needs you says so."""
     created_at: str
     updated_at: str
 
@@ -145,6 +147,7 @@ def _list(row: sqlite3.Row) -> WorldList:
         json.loads(row["statuses"]),
         json.loads(row["done"]),
         json.loads(row["rejected"]),
+        json.loads(row["review"]),
         row["created_at"],
         row["updated_at"],
     )
@@ -190,15 +193,20 @@ class WorldLists:
         done: list[str] | None = None,
         rejected: list[str] | None = None,
         by: str = "operator",
+        review: list[str] | None = None,
     ) -> WorldList:
-        """Declare a list, or declare it again with new statuses. Refused when `done` or
-        `rejected` names an undeclared status, or a status some Entry is in would go."""
+        """Declare a list, or declare it again with new statuses. Refused when `done`,
+        `rejected` or `review` names an undeclared status, or a status some Entry is in would
+        go."""
         _names("list", [name])
         statuses, done, rejected = _names("status", statuses), done or [], rejected or []
+        review = review or []
         if not statuses:
             raise ValueError("a list declares at least one status")
-        if stray := [s for s in [*done, *rejected] if s not in statuses]:
-            raise ValueError(f"done and rejected must be declared statuses: {', '.join(stray)}")
+        if stray := [s for s in [*done, *rejected, *review] if s not in statuses]:
+            raise ValueError(
+                f"done, rejected and review must be declared statuses: {', '.join(stray)}"
+            )
         now = _now()
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -213,13 +221,20 @@ class WorldLists:
                 conn.execute("ROLLBACK")
                 raise ValueError(f"Entries of {name} are in {', '.join(gone)}: keep those statuses")
             conn.execute(
-                "INSERT INTO world_lists VALUES (?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO world_lists (world_id, name, statuses, done, rejected, review,"
+                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (world_id, name) DO UPDATE SET statuses = excluded.statuses,"
                 " done = excluded.done, rejected = excluded.rejected,"
-                " updated_at = excluded.updated_at",
-                (world_id, name, *map(json.dumps, (statuses, done, rejected)), now, now),
+                " review = excluded.review, updated_at = excluded.updated_at",
+                (world_id, name, *map(json.dumps, (statuses, done, rejected, review)), now, now),
             )
-            payload = {"list": name, "statuses": statuses, "done": done, "rejected": rejected}
+            payload = {
+                "list": name,
+                "statuses": statuses,
+                "done": done,
+                "rejected": rejected,
+                "review": review,
+            }
             append(
                 conn, Event.new("list.declared", world_id=world_id, payload={**payload, "by": by})
             )
@@ -469,6 +484,25 @@ class WorldLists:
             )  # fmt: skip
             for r in rows
         ]
+
+    def waiting(self, world_id: str) -> list[tuple[WorldList, int]]:
+        """Each list of the world with Entries in one of its `review` statuses, and how many."""
+        out = []
+        with self._conn() as conn:
+            for row in conn.execute(
+                "SELECT * FROM world_lists WHERE world_id = ? ORDER BY name", (world_id,)
+            ).fetchall():
+                declared = _list(row)
+                if not declared.review:
+                    continue
+                (n,) = conn.execute(
+                    "SELECT COUNT(*) FROM list_entries WHERE world_id = ? AND list = ?"
+                    f" AND status IN ({', '.join('?' * len(declared.review))})",
+                    (world_id, declared.name, *declared.review),
+                ).fetchone()
+                if n:
+                    out.append((declared, n))
+        return out
 
     def delete_world(self, world_id: str) -> None:
         with self._conn() as conn:

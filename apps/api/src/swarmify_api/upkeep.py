@@ -27,6 +27,7 @@ from swarmify_connectors import (
     setup,
 )
 from swarmify_memory import Memory
+from swarmify_runs import WorldLists
 from swarmify_swarm.network import NOTICE_AFTER, Waiting
 from swarmify_worlds import Worlds
 
@@ -41,7 +42,7 @@ HIDDEN_AFTER = timedelta(hours=24)
 class Notice(BaseModel):
     """Something the operator should fix that no gate asks about."""
 
-    kind: Literal["sign_in", "outcomes", "visibility", "network"]
+    kind: Literal["sign_in", "outcomes", "visibility", "network", "review"]
     text: str
     world_id: str | None = None
     """The world whose Connectors page (sign_in, outcomes) or run (visibility, network) fixes
@@ -189,11 +190,13 @@ def notice_source(
     outcome_notices: Mapping[str, str],
     clock: Callable[[], datetime],
     waiting: Callable[[], list[Waiting]] = lambda: [],
+    lists: WorldLists | None = None,
 ) -> Callable[[], list[Notice]]:
     """What the Needs-you page lists beside the gates: an account whose sign-in the provider
     refused (an expired refresh token, say), what a connector could not read on the last
     upkeep, a post still hidden a day after it went out, and a run whose agents have waited
-    for the network over NOTICE_AFTER. Web Push sends the same list as it changes."""
+    for the network over NOTICE_AFTER, and a World List with Entries in a status it declared
+    for review. Web Push sends the same list as it changes."""
 
     def notices() -> list[Notice]:
         out: list[Notice] = []
@@ -225,6 +228,11 @@ def notice_source(
             records = memory.publish_records(world.id)
             for run, text in hidden_posts(records, run_status, clock(), labels):
                 out.append(Notice(kind="visibility", text=text, world_id=world.id, run_id=run))
+            for declared, n in lists.waiting(world.id) if lists else []:
+                many = "Entry waits" if n == 1 else "Entries wait"
+                where = f"{declared.name} ({', '.join(declared.review)})"
+                text = f"{world.name}: {n} {many} for you in {where}."
+                out.append(Notice(kind="review", text=text, world_id=world.id))
         first = everyone[0].id if everyone else None
         out += [Notice(kind="outcomes", text=t, world_id=first) for t in outcome_notices.values()]
         out += network_notices(waiting(), clock())

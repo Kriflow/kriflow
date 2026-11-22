@@ -360,14 +360,17 @@ def server(
         token = CALLER.get()
         return token.name if token else OPERATOR
 
-    @mcp.tool(description="List a world's World Lists with their statuses, done and rejected.")
+    @mcp.tool(
+        description="List a world's World Lists with their statuses, done, rejected and review."
+    )
     def list_lists(world_id: str) -> list[dict[str, Any]]:
         return listed(world_id, lambda: [asdict(w) for w in world_lists.lists(world_id)])
 
     @mcp.tool(
         description="Declare a World List of a world, or declare it again: its `statuses` in"
         " order (the first is where an added Entry starts), and which of them count as `done`"
-        " and `rejected`. Refused when a status some Entry is in would go."
+        " and `rejected`, and in which Entries wait for a person (`review`: Needs you says so"
+        " while any do). Refused when a status some Entry is in would go."
     )
     def declare_list(
         world_id: str,
@@ -375,10 +378,13 @@ def server(
         statuses: list[str],
         done: list[str] | None = None,
         rejected: list[str] | None = None,
+        review: list[str] | None = None,
     ) -> dict[str, Any]:
         return listed(
             world_id,
-            lambda: asdict(world_lists.declare(world_id, name, statuses, done, rejected, who())),
+            lambda: asdict(
+                world_lists.declare(world_id, name, statuses, done, rejected, who(), review)
+            ),
         )
 
     @mcp.tool(

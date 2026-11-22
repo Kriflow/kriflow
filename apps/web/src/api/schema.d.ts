@@ -2990,6 +2990,11 @@ export interface components {
              * @default []
              */
             rejected: string[];
+            /**
+             * Review
+             * @default []
+             */
+            review: string[];
         };
         /**
          * Device
@@ -3663,7 +3668,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "sign_in" | "outcomes" | "visibility" | "network";
+            kind: "sign_in" | "outcomes" | "visibility" | "network" | "review";
             /** Text */
             text: string;
             /** World Id */
@@ -5198,6 +5203,8 @@ export interface components {
             done: string[];
             /** Rejected */
             rejected: string[];
+            /** Review */
+            review: string[];
             /** Created At */
             created_at: string;
             /** Updated At */

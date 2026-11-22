@@ -22,6 +22,8 @@ class Declared(BaseModel):
     """In order: the first is where an added Entry starts."""
     done: list[str] = []
     rejected: list[str] = []
+    review: list[str] = []
+    """Statuses whose Entries wait for a person; Needs you says so while any do."""
 
 
 class NewEntry(BaseModel):
@@ -91,7 +93,9 @@ def router(lists: WorldLists, world_exists: WorldExists) -> APIRouter:
     def declare(world_id: str, name: str, body: Declared) -> WorldList:
         return act(
             world_id,
-            lambda: lists.declare(world_id, name, body.statuses, body.done, body.rejected),
+            lambda: lists.declare(
+                world_id, name, body.statuses, body.done, body.rejected, review=body.review
+            ),
         )
 
     @api.get("/{name}/entries")

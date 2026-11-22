@@ -1046,6 +1046,7 @@ def create_app(
         outcome_notices,
         clock,
         swarm.waiting,
+        lists_svc,
     )
 
     def upkeep_once() -> None:
