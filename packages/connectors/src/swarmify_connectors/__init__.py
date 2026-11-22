@@ -1154,6 +1154,21 @@ class Connectors:
                         checks.append(HealthCheck(url, False, str(exc) or type(exc).__name__))
         return checks
 
+    def review_feeds(self, world_id: str) -> list[tuple[str, str, str]]:
+        """(package, label, URL) of each Review Feed (Manifest `reviews`) the world's packages
+        declare whose URL Setting is filled in. None filled in is the feature off."""
+        out = []
+        for c in self.list_all(world_id):
+            if not (feed := c.manifest.get("reviews")):
+                continue
+            try:
+                base = str(self._resolved(c).get(feed["url"]) or "").strip().rstrip("/")
+            except PermissionError:
+                continue
+            if base:
+                out.append((c.name, feed["label"], base + feed.get("path", "")))
+        return out
+
     # Remote Approvals: a notify connector posts gates and delivers their answers
 
     def remote_approvers(self, world_id: str) -> list[Connector]:

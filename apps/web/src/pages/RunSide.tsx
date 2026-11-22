@@ -1,7 +1,10 @@
+import { useEffect, useState } from "react";
 import { RECORD } from "../api/answer";
+import { api } from "../api/client";
 import { type Connectors, labelOf } from "../api/connectors";
 import type { Agent, ArtifactFile } from "../api/events";
 import { money, type Run } from "../api/runs";
+import type { components } from "../api/schema";
 import { Icon, type IconName } from "../Icon";
 import { the } from "../skin";
 import { AUDIO, FileLink, IMAGE, rawUrl, VIDEO } from "./Artifacts";
@@ -201,4 +204,23 @@ export function SpendByStage(p: { run: Run; agents: Agent[]; connectors: Connect
       )}
     </section>
   );
+}
+
+/** "2 Tray things from this run need review": what an installed package's own app holds from this
+ * run's family (its Review Feed), opening that app. Nothing when there is none. */
+export function FeedLine({ worldId, runId }: { worldId: string; runId: string }) {
+  const [feeds, setFeeds] = useState<components["schemas"]["RunFeed"][]>([]);
+  useEffect(() => {
+    api.GET("/api/worlds/{world_id}/runs/{run_id}/review-feed", { params: { path: { world_id: worldId, run_id: runId } } }).then(({ data }) => setFeeds(data ?? []));
+  }, [worldId, runId]);
+  return feeds.map((f) => (
+    <p key={f.label} className="feed-line" data-testid="feed-line">
+      {f.count} {f.label} from this run need review.
+      {f.open_url && (
+        <a href={f.open_url} target="_blank" rel="noreferrer">
+          Open
+        </a>
+      )}
+    </p>
+  ));
 }

@@ -972,3 +972,31 @@ test("on a 390 px phone the gate's ask fits with no horizontal scroll", async ()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   expect(ask.element().getBoundingClientRect().right).toBeLessThanOrEqual(390);
 });
+
+test("on a 390 px phone a package's Review Feed shows as one notice in its world that opens its app", async () => {
+  await page.viewport(390, 844);
+  const music = { ...video, id: "world_2", name: "Music" };
+  const open = "https://tray.example.ts.net:8765/#/review";
+  fakeFetch({
+    "GET /api/worlds": () => Response.json([video, music]),
+    "GET /api/gates": () => Response.json([]),
+    "GET /api/notices": () =>
+      Response.json([
+        { kind: "feed", text: "3 Tray things need you: 2 move, 1 character. 3 from Body facts short.", world_id: "world_1", run_id: null, url: open },
+        { kind: "feed", text: "1 Tray things need you: 1 prop.", world_id: "world_2", run_id: null, url: open },
+      ]),
+  });
+  localStorage.removeItem("swarmify.dismissed-notices");
+  const { screen } = await mountAt("/gates?world=world_1");
+  const feed = screen.getByTestId("notices-feed");
+  await feed.getByText("1 app has things for you").click();
+  await expect.element(feed.getByTestId("notice")).toMatchTextContent(/3 Tray things need you: 2 move, 1 character\. 3 from Body facts short\./);
+  expect(screen.getByText(/1 prop/).elements()).toHaveLength(0); // another world's
+  const link = feed.getByRole("link", { name: "Open" });
+  await expect.element(link).toHaveAttribute("href", open);
+  await expect.element(link).toHaveAttribute("target", "_blank");
+  for (const target of [link, feed.getByRole("button", { name: "Dismiss" })]) {
+    expect(target.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  }
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});

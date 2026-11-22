@@ -42,12 +42,14 @@ HIDDEN_AFTER = timedelta(hours=24)
 class Notice(BaseModel):
     """Something the operator should fix that no gate asks about."""
 
-    kind: Literal["sign_in", "outcomes", "visibility", "network", "review"]
+    kind: Literal["sign_in", "outcomes", "visibility", "network", "review", "feed"]
     text: str
     world_id: str | None = None
     """The world whose Connectors page (sign_in, outcomes) or run (visibility, network) fixes
     it."""
     run_id: str | None = None
+    url: str | None = None
+    """Where a package's Review Feed (review_feeds.py) says its items are reviewed: off-app."""
 
 
 def record_outcomes(
@@ -192,12 +194,14 @@ def notice_source(
     clock: Callable[[], datetime],
     waiting: Callable[[], list[Waiting]] = lambda: [],
     lists: WorldLists | None = None,
+    feeds: Callable[[], list[Notice]] = lambda: [],
 ) -> Callable[[], list[Notice]]:
     """What the Needs-you page lists beside the gates: an account whose sign-in the provider
     refused (an expired refresh token, say), what a connector could not read on the last
     upkeep, a post still hidden a day after it went out, and a run whose agents have waited
     for the network over NOTICE_AFTER, and a World List with Entries in a status it declared
-    for review. Web Push sends the same list as it changes."""
+    for review, and what a package's Review Feed says waits on the operator (`feeds`). Web Push
+    sends the same list as it changes, the feeds' by item instead (review_feeds.py)."""
 
     def notices() -> list[Notice]:
         out: list[Notice] = []
@@ -237,7 +241,7 @@ def notice_source(
         first = everyone[0].id if everyone else None
         out += [Notice(kind="outcomes", text=t, world_id=first) for t in outcome_notices.values()]
         out += network_notices(waiting(), clock())
-        return out
+        return out + feeds()
 
     return notices
 

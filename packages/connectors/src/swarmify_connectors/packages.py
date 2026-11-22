@@ -206,6 +206,19 @@ SCHEMA: dict[str, Any] = {
                 },
             },
         },
+        # A Review Feed: a GET the core reads each minute for what waits on the operator in the
+        # package's own app, shown in Needs you and pushed when new. `url` is the [[config]] key
+        # holding its base URL, `path` is added to it. Its JSON: swarmify_api.review_feeds.
+        "reviews": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["label", "url"],
+            "properties": {
+                "label": {"type": "string", "minLength": 1, "maxLength": 60},
+                "url": {"type": "string", "pattern": _SNAKE},
+                "path": {"type": "string", "pattern": "^/"},
+            },
+        },
         "owned_folders": {
             "type": "array",
             "items": {
@@ -425,6 +438,8 @@ def check_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
                 bad(at, f"{key} is not a [[config]] key")
             elif keys[key].get("secret") or keys[key]["type"] == "oauth":
                 bad(at, f"{key} is a Credential, and an authorize URL is not secret")
+    if "reviews" in manifest and manifest["reviews"]["url"] not in keys:
+        bad("reviews.url", f"{manifest['reviews']['url']} is not a [[config]] key")
     names = set()
     for i, service in enumerate(manifest.get("services", [])):
         if service["url"] not in keys:

@@ -94,6 +94,8 @@ p.status-line.state-failed, p.status-line.state-aborted { color: var(--negative)
 /* The live step's latest line, under the strip while you watch it */
 .live-line { display: flex; align-items: center; gap: 8px; margin: calc(-1 * var(--gap) + 8px) 0 var(--gap); color: var(--muted); font-size: 0.8125rem; min-width: 0; }
 .live-line .icon { flex: none; color: var(--accent); }
+.feed-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 0 0 8px; color: var(--muted); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.feed-line a { display: inline-flex; align-items: center; min-height: 44px; }
 .live-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); align-items: start; }
 .run-side { display: grid; gap: var(--gap); }

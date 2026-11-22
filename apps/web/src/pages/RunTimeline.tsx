@@ -29,7 +29,7 @@ import { RunRef, version } from "./Runs";
 import { type MenuItem, Menu } from "./Menu";
 import { mainArtifact, Result, resultStage, StagePanel } from "./StagePanel";
 import { RunHero, StageRail } from "./RunHero";
-import { MadeInRun, SpendByStage } from "./RunSide";
+import { FeedLine, MadeInRun, SpendByStage } from "./RunSide";
 import { PullToRefresh } from "../PullToRefresh";
 
 type World = components["schemas"]["World"];
@@ -610,6 +610,7 @@ export function RunTimeline() {
           </p>
         }
       />
+      <FeedLine worldId={worldId} runId={run.id} />
       <StageRail
         run={run}
         selected={stageId}
