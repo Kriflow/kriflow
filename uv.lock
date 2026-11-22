@@ -1875,6 +1875,12 @@ requires-dist = [
 name = "swarmify-kernel"
 version = "0.1.0"
 source = { editable = "packages/kernel" }
+dependencies = [
+    { name = "tzdata" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "tzdata" }]
 
 [[package]]
 name = "swarmify-learning"

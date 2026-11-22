@@ -76,3 +76,54 @@ def test_scheduled_lists_only_workflows_whose_current_version_has_a_cron(
     plain = WEEKLY_SHORT.replace('schedule: "0 8 * * 1"\n', "")
     workflows.save("world_1", plain, timed.workflow_id)
     assert workflows.scheduled() == {}
+
+
+TIMED = """name: post daily
+schedule: 0 12 * * *
+skip_when_live: true
+stages:
+  - swarm: write
+    goal: Write it.
+    done_when: written
+  - gate: approve
+    ask: Post it?
+  - connector: post
+    calls: publish
+    not_before: 17:00 America/Toronto
+"""
+
+
+def test_not_before_and_skip_when_live_parse_and_dump_back() -> None:
+    model, violations = parse_workflow(TIMED)
+    assert violations == [] and model is not None
+    assert model.skip_when_live is True
+    assert [getattr(s, "not_before", None) for s in model.stages] == [
+        None, None, "17:00 America/Toronto"
+    ]  # fmt: skip
+    stages = []
+    for stage in model.stages:
+        fields = {k: v for k, v in asdict(stage).items() if k not in ("name", "type")}
+        stages.append((stage.type, stage.name, fields))
+    again, _ = parse_workflow(dump_workflow(model.name, stages, schedule=model.schedule))
+    assert again is not None and again.stages == model.stages
+
+
+@pytest.mark.parametrize(
+    ("change", "message", "stage"),
+    [
+        (("17:00 America/Toronto", "5pm Toronto"), "a time and a timezone", "post"),
+        (("17:00 America/Toronto", "17:00 Mars/Base"), "unknown timezone 'Mars/Base'", "post"),
+        (
+            ("    ask: Post it?", "    ask: Post it?\n    not_before: 17:00 UTC"),
+            "unknown field 'not_before'",
+            "approve",
+        ),  # noqa: E501
+        (("skip_when_live: true", "skip_when_live: often"), "true or false", None),
+        (("schedule: 0 12 * * *\n", ""), "give a schedule", None),
+    ],
+)
+def test_a_bad_not_before_or_skip_when_live_is_refused(
+    change: tuple[str, str], message: str, stage: str | None
+) -> None:
+    _, violations = parse_workflow(TIMED.replace(*change))
+    assert [(v.stage, message in v.message) for v in violations] == [(stage, True)]

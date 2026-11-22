@@ -6,6 +6,7 @@ from typing import Any
 
 from swarmify_kernel.events import Event
 from swarmify_kernel.ids import new_id
+from swarmify_kernel.local_time import local_time_problem, next_local
 
 MIGRATIONS = Path(__file__).parent / "migrations"
 
@@ -25,4 +26,12 @@ def posts_privately(private_when: Mapping[str, Any], params: Mapping[str, Any]) 
     return bool(private_when) and all(params.get(k) == v for k, v in private_when.items())
 
 
-__all__ = ["AGENT_TOOLS", "MIGRATIONS", "Event", "new_id", "posts_privately"]
+__all__ = [
+    "AGENT_TOOLS",
+    "MIGRATIONS",
+    "Event",
+    "local_time_problem",
+    "new_id",
+    "next_local",
+    "posts_privately",
+]

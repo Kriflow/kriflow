@@ -4,6 +4,7 @@ from typing import Any
 
 import yaml
 
+from swarmify_kernel import local_time_problem
 from swarmify_workflows.model import (
     GATE_KINDS,
     MAX_PARALLEL,
@@ -19,12 +20,25 @@ from swarmify_workflows.model import (
 )
 from swarmify_workflows.schedule import CRON_RULE, cron_problem
 
-TOP_FIELDS = {"name", "schedule", "budget_usd", "budget_warn_usd", "agents", "given", "stages"}
+TOP_FIELDS = {
+    "name", "schedule", "skip_when_live", "budget_usd", "budget_warn_usd", "agents", "given",
+    "stages",
+}  # fmt: skip
 STAGE_FIELDS: dict[str, set[str]] = {
-    "swarm": {"goal", "done_when", "tools", "graphs", "output_type", "produces", "model", "agents"},
+    "swarm": {
+        "goal",
+        "done_when",
+        "tools",
+        "graphs",
+        "output_type",
+        "produces",
+        "model",
+        "agents",
+        "not_before",
+    },
     "gate": {"ask", "kind", "max_send_backs", "picks"},
-    "connector": {"calls", "input", "inputs", "output", "params"},
-    "workflow": {"runs", "take", "for_each", "as", "max_parallel", "approve"},
+    "connector": {"calls", "input", "inputs", "output", "params", "not_before"},
+    "workflow": {"runs", "take", "for_each", "as", "max_parallel", "approve", "not_before"},
 }
 
 
@@ -96,6 +110,11 @@ def parse_workflow(text: str) -> tuple[WorkflowModel | None, list[Violation]]:
     schedule = top.text("schedule")
     if schedule is not None and (problem := cron_problem(schedule)) is not None:
         out.append(Violation(CRON_RULE, problem))
+    skip = doc.get("skip_when_live", False)
+    if not isinstance(skip, bool):
+        top.fail("skip_when_live must be true or false")
+    elif skip and schedule is None:
+        top.fail("skip_when_live skips schedule ticks: give a schedule")
     budget = top.number("budget_usd")
     warn = top.number("budget_warn_usd")
     if warn is not None and (budget is None or warn >= budget):
@@ -123,7 +142,14 @@ def parse_workflow(text: str) -> tuple[WorkflowModel | None, list[Violation]]:
     if name is None:
         return None, out
     model = WorkflowModel(
-        name, stages, schedule, budget, int(agents) if agents is not None else None, given, warn
+        name,
+        stages,
+        schedule,
+        budget,
+        int(agents) if agents is not None else None,
+        given,
+        warn,
+        skip is True,
     )
     return model, out
 
@@ -152,6 +178,9 @@ def _parse_stage(
     f = _Fields(raw, out, stage_name)
     f.unknown(STAGE_FIELDS[kind] | {kind})
     before = len(out)
+    not_before = f.text("not_before") if kind != "gate" else None
+    if not_before is not None and (problem := local_time_problem(not_before)) is not None:
+        f.fail(problem)
     stage: Stage | None = None
     if kind == "swarm":
         goal, done_when = f.text("goal", required=True), f.text("done_when", required=True)
@@ -160,7 +189,16 @@ def _parse_stage(
         count = f.number("agents", integer=True) or agents or 1
         if goal and done_when:
             stage = SwarmStage(
-                stage_name, goal, done_when, tools, graphs, output_type, produces, model, int(count)
+                stage_name,
+                goal,
+                done_when,
+                tools,
+                graphs,
+                output_type,
+                produces,
+                model,
+                int(count),
+                not_before,
             )
     elif kind == "gate":
         ask = f.text("ask", required=True)
@@ -192,7 +230,7 @@ def _parse_stage(
         if not isinstance(params, dict):
             f.fail("params must be a mapping")
         else:
-            stage = ConnectorStage(stage_name, calls, input_, output, params, inputs)
+            stage = ConnectorStage(stage_name, calls, input_, output, params, inputs, not_before)
     else:
         runs = f.text("runs", required=True)
         take = f.names("take")
@@ -221,6 +259,7 @@ def _parse_stage(
                 given,
                 None if most is None else int(most),
                 approve is True,
+                not_before,
             )
     return stage_name, (stage if len(out) == before else None)
 

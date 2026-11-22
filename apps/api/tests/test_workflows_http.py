@@ -72,6 +72,7 @@ def test_save_creates_versions_that_can_be_listed_and_fetched(client: TestClient
         "output": "short.mp4",
         "params": {"composition": "Short"},
         "inputs": [],
+        "not_before": None,
     }
 
     wf = v1["workflow_id"]
