@@ -127,7 +127,7 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
         ("fal_video", "0.0.1", "local"),
         ("hyperframes_build", "1.0.2", "connectors/hyperframes_build"),
         ("hyperframes_render", "1.0.2", "connectors/hyperframes_render"),
-        ("meta", "1.1.0", "connectors/meta"),
+        ("meta", "1.2.0", "connectors/meta"),
         ("remotion_build", "1.0.4", "connectors/remotion_build"),
         ("remotion_render", "1.0.9", "connectors/remotion_render"),
         ("slack", "1.1.1", "connectors/slack"),
@@ -137,7 +137,7 @@ def test_add_installs_a_local_package_whose_keys_are_credentials_never_returned(
     ]
     assert client.get(f"/api/worlds/{w}/packages").json() == [
         {"name": "fal_video", "version": "0.0.1"},
-        {"name": "meta", "version": "1.1.0"},
+        {"name": "meta", "version": "1.2.0"},
         {"name": "remotion_build", "version": "1.0.4"},
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
@@ -551,7 +551,7 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
         assert put.status_code == 200 and put.json() == {"name": "echo", "version": "1.0.0"}
     assert client.get(f"/api/worlds/{one}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
-        {"name": "meta", "version": "1.1.0"},
+        {"name": "meta", "version": "1.2.0"},
         {"name": "remotion_build", "version": "1.0.4"},  # the default packages
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
@@ -568,7 +568,7 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
 
     assert client.delete(f"/api/worlds/{one}/packages/echo").status_code == 204
     assert client.get(f"/api/worlds/{one}/packages").json() == [
-        {"name": "meta", "version": "1.1.0"},
+        {"name": "meta", "version": "1.2.0"},
         {"name": "remotion_build", "version": "1.0.4"},
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
@@ -577,7 +577,7 @@ def test_worlds_enable_a_package_at_a_pinned_version(client: TestClient) -> None
     ]
     assert client.get(f"/api/worlds/{two}/packages").json() == [
         {"name": "echo", "version": "1.0.0"},
-        {"name": "meta", "version": "1.1.0"},
+        {"name": "meta", "version": "1.2.0"},
         {"name": "remotion_build", "version": "1.0.4"},
         {"name": "remotion_render", "version": "1.0.9"},
         {"name": "speech", "version": "1.3.1"},
