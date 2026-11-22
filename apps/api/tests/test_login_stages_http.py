@@ -6,6 +6,7 @@ the session it saves round-trips into the Secrets Store and both scratch files a
 `login.used` is recorded without values. Real DBOS, the real MCP transport and sandbox, the signer
 fixture package and the fake site on loopback."""
 
+import base64
 import json
 import shutil
 import sys
@@ -188,7 +189,7 @@ def test_a_secret_a_stage_leaks_is_scrubbed_everywhere_its_output_goes(
     assert run["status"] == "failed", run
     session = FileSecrets(data / "secrets.json").get(ref(w, "shop_admin", "session"))
     cookie = json.loads(session or "{}")["cookies"][0]["value"]
-    secrets = (PASSWORD, cookie)
+    secrets = (PASSWORD, cookie, base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode())
 
     leaked = client.get(f"/api/stages/{run['stages'][1]['id']}/call").json()
     assert leaked["response"]["said"] == "my password is [secret: shop_admin]"
@@ -198,6 +199,8 @@ def test_a_secret_a_stage_leaks_is_scrubbed_everywhere_its_output_goes(
     assert artifact == "the password is [secret: shop_admin] and the cookie [secret: shop_admin]\n"
     tails = [p.read_text() for p in (data / "sandbox").rglob("stderr.log")]
     assert any("stderr says [secret: shop_admin]" in t for t in tails), tails
+    # the launcher scrubs the encoded forms too (security review): a Basic header here
+    assert any("Authorization: Basic [secret: shop_admin]" in t for t in tails), tails
     with closing(connect(data / "swarmify.db")) as conn:
         stored = json.dumps(
             [

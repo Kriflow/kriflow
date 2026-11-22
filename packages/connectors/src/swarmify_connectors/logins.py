@@ -95,6 +95,11 @@ def clean_domains(raw: Iterable[str]) -> list[str]:
     return out
 
 
+SHORTEST = 6
+"""The shortest password or authenticator secret a login keeps: a shorter value could not be
+scrubbed from what runs store without mangling ordinary text (scrub.MIN)."""
+
+
 def one_line(label: str, value: str) -> str:
     """A non-empty single line. Raises ValueError naming the field, never the value."""
     if not value or "\n" in value or "\r" in value:
@@ -102,10 +107,21 @@ def one_line(label: str, value: str) -> str:
     return value
 
 
+def password_ok(password: str) -> str:
+    one_line("Password", password)
+    if len(password) < SHORTEST:
+        raise ValueError(
+            f"Password: at least {SHORTEST} characters, so it can be kept out of what runs store"
+        )
+    return password
+
+
 def totp_secret(raw: str) -> str:
     """An authenticator secret as base32, spaces taken out and upper-cased, once it makes a
     code. Raises ValueError, never naming the value."""
     secret = "".join(raw.split()).upper()
+    if len(secret) < SHORTEST:
+        raise ValueError("Authenticator secret: the text under the QR code, too short as typed")
     try:
         totp(secret)
     except (binascii.Error, ValueError):
@@ -252,7 +268,7 @@ class Logins:
             "domains": clean_domains(domains),
             "username": one_line("Username", username.strip()),
         }
-        one_line("Password", password)
+        password_ok(password)
         secret = totp_secret(totp_secret_) if totp_secret_ and totp_secret_.strip() else None
         now = _now()
         row |= {"created_at": now, "updated_at": now, "rotated_at": now}
@@ -299,7 +315,7 @@ class Logins:
         """A new password (and authenticator secret, or none with `clear_totp`); its Saved Session
         is forgotten, so an old one never stays signed in. Raises KeyError, ValueError."""
         self._get(world_id, name)
-        one_line("Password", password)
+        password_ok(password)
         secret = totp_secret(totp_secret_) if totp_secret_ and totp_secret_.strip() else None
         self.secrets.put(ref(world_id, name, "password"), password)
         if secret:

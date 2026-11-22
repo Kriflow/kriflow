@@ -2,6 +2,7 @@
 the World Login its stage names, keeps the session, leaks the password every way a package
 could, and asks a person for a code through a request file (a Person Check)."""
 
+import base64
 import json
 import os
 import secrets
@@ -80,6 +81,9 @@ def leak(output_path: str = "", idempotency_key: str = "") -> dict[str, Any]:
     session_file = Path(os.environ.get("SWARMIFY_LOGIN_SESSION", "/nonexistent"))
     cookie = _sid(session_file)
     print(f"stderr says {password}", file=sys.stderr, flush=True)
+    user = os.environ.get("SWARMIFY_LOGIN_USERNAME", "")
+    basic = base64.b64encode(f"{user}:{password}".encode()).decode()
+    print(f"Authorization: Basic {basic}", file=sys.stderr, flush=True)
     if output_path:
         Path(output_path).write_text(f"the password is {password} and the cookie {cookie}\n")
     site = "http://" + os.environ.get("SWARMIFY_LOGIN_DOMAINS", "").split(",")[0]

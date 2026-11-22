@@ -151,7 +151,7 @@ class PersonChecks:
             with self._lock:
                 w = self._watched.get(check.home)
             label = (w.login if w else None) or "code"
-            scrub.add(check.stage_id, check.run_id, label, [code])
+            scrub.add(check.stage_id, check.run_id, label, [code], world_id=check.world_id)
             self._reply(check, {"code": code})
             self._close(check, "code given")
             return

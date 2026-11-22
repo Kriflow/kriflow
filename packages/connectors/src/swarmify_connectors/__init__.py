@@ -840,8 +840,8 @@ class Connectors:
             self._watch(connector, confined, stage, handed)
 
         def report() -> None:
-            run_id = stage[0] if stage else None
-            if confined and (lines := scrub.value(confined.blocked(), run_id=run_id)):
+            whose = {"run_id": stage[0]} if stage else {"world_id": connector.world_id}
+            if confined and (lines := scrub.value(confined.blocked(), **whose)):
                 self.on_blocked(connector, stage, lines)
                 if blocked is not None:
                     blocked.extend(lines)
@@ -908,7 +908,7 @@ class Connectors:
         # its values are the stage's secrets now: scrubbed wherever its output goes
         run_id, stage_id = stage
         secrets_ = [handed.password, handed.totp, *scrub.cookies(handed.session)]
-        scrub.add(stage_id, run_id, login, secrets_)
+        scrub.add(stage_id, run_id, login, secrets_, handed.login.username, connector.world_id)
         return Grants(domains=list(handed.login.domains)), handed
 
     def _place_session(
@@ -946,7 +946,9 @@ class Connectors:
         if saved is not None:
             self.logins.keep_session(handoff.world_id, handoff.login, saved)
             run_id, stage_id = handoff.stage
-            scrub.add(stage_id, run_id, handoff.login, scrub.cookies(saved))
+            scrub.add(
+                stage_id, run_id, handoff.login, scrub.cookies(saved), world_id=handoff.world_id
+            )
         for name in (SESSION_IN, SESSION_OUT, LOGIN_FILE):
             safefile.remove(handoff.home, name)
         run_id, stage_id = handoff.stage

@@ -83,13 +83,15 @@ def test_a_login_is_added_listed_changed_rotated_and_deleted_without_its_secrets
     assert added.domains == ["admin.myshop.com", "*.cdn.myshop.com"]
     assert (added.has_totp, added.has_session) == (True, False)
     with pytest.raises(Taken):
-        logins.add("w1", "shop_admin", ["x.com"], "b", "c")
+        logins.add("w1", "shop_admin", ["x.com"], "b", "c-long-pass")
     for bad, field in [
         (("Shop", ["x.com"], "u", "p"), "Name"),
         (("s", ["*.com"], "u", "p"), "Domains: \\*.com is too broad"),
         (("s", [], "u", "p"), "Domains"),
         (("s", ["x.com"], "u", "two\nlines"), "Password"),
-        (("s", ["x.com"], "u", "p", "not base32!"), "Authenticator secret"),
+        (("s", ["x.com"], "u", "short"), "Password: at least 6"),
+        (("s", ["x.com"], "u", "long-enough", "JBSW"), "Authenticator secret"),
+        (("s", ["x.com"], "u", "long-enough", "not base32!"), "Authenticator secret"),
     ]:
         with pytest.raises(ValueError, match=field):
             logins.add("w1", *bad)  # type: ignore[arg-type]
@@ -122,12 +124,12 @@ def test_a_login_is_added_listed_changed_rotated_and_deleted_without_its_secrets
 def test_a_deleted_world_takes_its_logins_and_their_secrets(
     connectors: Connectors, tmp_path: Path
 ) -> None:
-    connectors.logins.add("w1", "a", ["a.com"], "u", "p1")
-    connectors.logins.add("w2", "a", ["a.com"], "u", "p2")
+    connectors.logins.add("w1", "a", ["a.com"], "u", "pass-one")
+    connectors.logins.add("w2", "a", ["a.com"], "u", "pass-two")
     connectors.delete_world("w1")
     assert connectors.logins.list_all("w1") == []
-    assert connectors.logins.hand("w2", "a").password == "p2"
-    assert "p1" not in (tmp_path / "secrets.json").read_text()
+    assert connectors.logins.hand("w2", "a").password == "pass-two"
+    assert "pass-one" not in (tmp_path / "secrets.json").read_text()
 
 
 SIGNER = Path(__file__).parent / "fixtures/packages/signer"

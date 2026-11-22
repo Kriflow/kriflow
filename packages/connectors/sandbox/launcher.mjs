@@ -136,9 +136,24 @@ try {
 } catch {
   // a session that does not parse holds nothing to look for
 }
-const secrets = [login.SWARMIFY_LOGIN_PASSWORD, login.SWARMIFY_LOGIN_TOTP, ...kept]
-  .filter(Boolean)
-  .sort((a, b) => b.length - a.length);
+// Each value in the forms the core's scrub.py lists too: itself, inside a JSON string (ASCII
+// escaped or not), URL-encoded as Python's quote and quote_plus do, and in a Basic header.
+const pyQuote = (v) => encodeURIComponent(v).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+const forms = (v) => {
+  const json = JSON.stringify(v).slice(1, -1);
+  const user = login.SWARMIFY_LOGIN_USERNAME;
+  return [
+    v,
+    json,
+    json.replace(/[\u0080-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")),
+    pyQuote(v),
+    pyQuote(v).replaceAll("%20", "+"),
+    ...(user ? [Buffer.from(`${user}:${v}`).toString("base64")] : []),
+  ];
+};
+const secrets = [...new Set([login.SWARMIFY_LOGIN_PASSWORD, login.SWARMIFY_LOGIN_TOTP, ...kept].filter((v) => v && v.length >= 6).flatMap(forms))].sort(
+  (a, b) => b.length - a.length,
+);
 const hidden = `[secret: ${login.SWARMIFY_LOGIN_NAME ?? "login"}]`;
 function said(raw) {
   const line = secrets.reduce((l, s) => l.replaceAll(s, hidden), raw);
