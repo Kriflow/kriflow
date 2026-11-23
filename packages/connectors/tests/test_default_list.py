@@ -153,7 +153,7 @@ def test_the_shipped_list_pins_each_default_package_at_its_release_tag() -> None
         "slack": "slack-v1.1.3",
         "speech": "speech-v1.3.2",
         "upload_post": "upload_post-v1.0.2",
-        "youtube": "youtube-v1.6.1",
+        "youtube": "youtube-v1.6.2",
     }
 
 
