@@ -66,6 +66,8 @@ class _Watched:
     login: str | None
     site: str | None
     seen: set[str] = field(default_factory=set)
+    unread: set[str] = field(default_factory=set)
+    """Requests that did not parse, warned about once and read again each scan."""
 
 
 class PersonChecks:
@@ -193,13 +195,20 @@ class PersonChecks:
                 ]  # fmt: skip
                 requests = []
                 for name in fresh:
-                    w.seen.add(name)
                     try:
-                        requests.append(
-                            (name, json.loads(safefile.read_at(at, name, REQUEST_BYTES)))
-                        )
-                    except (OSError, ValueError):
+                        data = safefile.read_at(at, name, REQUEST_BYTES)
+                    except OSError:  # a link, not a regular file, too big: never one
+                        w.seen.add(name)
                         log.warning("refused a Person Check request %s in %s", name, home)
+                        continue
+                    try:
+                        requests.append((name, json.loads(data)))
+                    except ValueError:  # not whole yet (its writer is mid-write): read again
+                        if name not in w.unread:
+                            w.unread.add(name)
+                            log.warning("cannot read Person Check request %s in %s", name, home)
+                        continue
+                    w.seen.add(name)
         except (FileNotFoundError, safefile.Unsafe):
             return
         for name, request in requests:

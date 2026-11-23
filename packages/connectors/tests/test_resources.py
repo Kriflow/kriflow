@@ -70,7 +70,6 @@ def test_a_declared_resource_and_the_run_identity_reach_the_process_and_nothing_
         assert (folder / "probe.txt").read_text() == "x"
         # under both names, equal (kriflow#595): pinned package versions read SWARMIFY_ forever
         old = {k.removeprefix("SWARMIFY_"): v for k, v in env.items() if k.startswith("SWARMIFY_")}
-        old.pop("OBSERVE_NONCE")  # the sandbox's own, kept as it is
         new = {k.removeprefix("KRIFLOW_"): v for k, v in env.items() if k.startswith("KRIFLOW_")}
         assert old == new and {"RUN_ID", "RUN_ROOT", "STAGE_ID", "STAGE_DIR"} <= set(new)
     assert seated["KRIFLOW_RESOURCE_SEAT"] == seated["SWARMIFY_RESOURCE_SEAT"]

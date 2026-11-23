@@ -77,6 +77,22 @@ def test_a_code_is_answered_into_a_private_file_and_kept_out_of_events(
         checks.answer(check.id, code="1")  # answered once only
 
 
+def test_a_request_seen_before_its_writer_finished_is_read_again(
+    checks: PersonChecks, tmp_path: Path
+) -> None:
+    """A process's `write_text` makes the file empty, then fills it: a scan in between reads a
+    request that is not whole yet, and the next scan reads it again."""
+    home = tmp_path / "scratch" / "home"
+    checks.watch(home, "w1", STAGE, "browser")
+    (home / "asks").mkdir(parents=True)
+    (home / "asks" / "a1.json").write_text('{"id": "a1", "ki')
+    time.sleep(0.1)  # several scans of the half-written request
+    assert checks.open_checks() == []
+    ask(home, "a1")
+    [check] = opened(checks)
+    assert check.kind == "code"
+
+
 def test_a_request_cannot_name_a_screenshot_outside_its_own_folder(
     checks: PersonChecks, tmp_path: Path
 ) -> None:

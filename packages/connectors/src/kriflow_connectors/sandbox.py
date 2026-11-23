@@ -253,6 +253,7 @@ class Sandbox:
         denied = self.denied()
         hosts = list(dict.fromkeys(grants.domains))
         nonce = secrets.token_hex(16)
+        observe = self._observer(denied, reads, writes) if sys.platform == "linux" else None
         plan: dict[str, object] = {
             "sandbox": {
                 "network": {
@@ -272,7 +273,9 @@ class Sandbox:
                 "PYTHONDONTWRITEBYTECODE": "1",  # its package folder is read-only
                 "NODE_USE_ENV_PROXY": "1",  # Node reaches the network through the proxy too
                 "npm_config_update_notifier": "false",  # npx asks the registry for none
-                "SWARMIFY_OBSERVE_NONCE": nonce,
+                # for observe.py alone, which takes it out before the command starts; with no
+                # observer (macOS) nothing reads it, so the command is not handed it
+                **({"SWARMIFY_OBSERVE_NONCE": nonce} if observe else {}),
             },
             "cwd": str(cwd),
             "pass": sorted(set(names)),
@@ -280,7 +283,7 @@ class Sandbox:
             "stderr": str(folder / STDERR),
             "nonce": nonce,
             "session": session,
-            "observe": self._observer(denied, reads, writes) if sys.platform == "linux" else None,
+            "observe": observe,
             "gpu": grants.gpu,  # the launcher binds the GPU's device files where it starts
         }
         (folder / "plan.json").write_text(json.dumps(plan))
