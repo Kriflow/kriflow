@@ -672,7 +672,10 @@ fields. Values live in `<data dir>/setup.json`, mode 600,
 keyed by package, then `shared` or the world, then field key; Credentials (secret fields) are
 never returned by the API, only whether they are set. For a world, a field resolves to the
 world's value, else the shared one (a `scope = "world"` field has none), else its default, and a
-value saved under a field's `renamed_from` key carries over. Before saving, the `[setup] test`
+value saved under a field's `renamed_from` key carries over. A world moving its pin from a
+version that kept a field shared to one that sets it per world keeps a copy of the shared value
+as its own, so it needs no new sign-in; the shared value stays for other worlds and older
+versions. Before saving, the `[setup] test`
 tool is called with no arguments in a process holding the candidate values, and answers
 `{"ok": true|false, "message": "..."}`; anything but `ok: true` saves nothing and shows the
 message. Every connector process gets exactly its own resolved values as environment variables

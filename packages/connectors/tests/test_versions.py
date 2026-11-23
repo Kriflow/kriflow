@@ -2,6 +2,9 @@
 the version its workflow version recorded, a switch shows the Manifest diff and waits for a new
 required Setup field, and an installed version can be removed."""
 
+import shutil
+from pathlib import Path
+
 import pytest
 from test_enable import FIXTURES
 
@@ -64,6 +67,42 @@ def test_a_switch_shows_the_manifest_diff_and_waits_for_a_new_required_field(
         connectors.pinned_by("echo", "2.0.0") == ["w1"]
         and connectors.pinned_by("echo", "1.0.0") == []
     )
+
+
+def test_a_sign_in_that_becomes_per_world_is_copied_into_the_world_moving_its_pin(
+    connectors: Connectors, tmp_path: Path
+) -> None:
+    """A field shared in the pinned version and set per world in the next starts as a copy of
+    the shared value in the world that moves (issue 610). The shared value stays for other
+    worlds and for the older version a saved workflow version recorded."""
+    manifest = (FIXTURES / "packages/echo/swarmify-connector.toml").read_text()
+    oauth = 'key = "account"\nlabel = "Account"\ntype = "oauth"\nscope = "world"'
+    assert oauth in manifest
+    for folder, version, scope in (("v1", "1.0.0", "shared"), ("v2", "1.1.0", "world")):
+        shutil.copytree(FIXTURES / "packages/echo", tmp_path / "src" / folder)
+        (tmp_path / "src" / folder / "swarmify-connector.toml").write_text(
+            manifest.replace('version = "1.0.0"', f'version = "{version}"', 1).replace(
+                oauth, oauth.replace('"world"', f'"{scope}"')
+            )
+        )
+        Packages(connectors.packages.root, tmp_path / "src").install(folder)
+    tokens = {"access_token": "a", "refresh_token": "r", "expires_at": 9e9}
+    for world in ("w1", "w2"):
+        connectors.enable(world, "echo", "1.0.0")
+    connectors.setups.put_value("echo", None, "account", tokens)
+
+    connectors.enable("w1", "echo", "1.1.0")
+    assert connectors.setups.values("echo", "w1") == ({"account": tokens}, {"account": tokens})
+    moved = connectors.find("w1", "echo")
+    assert moved is not None and connectors.sign_in_needed(moved) == []
+    assert connectors.setups.values("echo", "w2")[1] == {}  # w2 never moved: nothing copied
+    connectors.enable("w2", "echo", "1.0.0")  # a move to a shared version copies nothing
+    assert connectors.setups.values("echo", "w2")[1] == {}
+
+    mine = {**tokens, "access_token": "b"}  # a world's own sign-in is never overwritten
+    connectors.setups.put_value("echo", "w2", "account", mine)
+    connectors.enable("w2", "echo", "1.1.0")
+    assert connectors.setups.values("echo", "w2")[1] == {"account": mine}
 
 
 def test_uninstall_removes_one_version_and_keeps_the_other(packages: Packages) -> None:

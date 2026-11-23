@@ -509,10 +509,13 @@ class Connectors:
         Raises ValueError when that version is not installed or valid, or the name is taken."""
         if name in AGENT_TOOLS:
             raise ValueError(f"'{name}' is an Agent Tool the core gives swarm stages")
+        pinned = self.storage.enabled_packages(world_id).get(name)
         try:
-            self.packages.manifest(name, version)
+            new = self.packages.manifest(name, version)
+            old = self.packages.manifest(name, pinned) if pinned else {}
         except (InstallError, ManifestError) as exc:
             raise ValueError(str(exc)) from exc
+        self._to_world(world_id, name, old, new)
         needs = self.switch(world_id, name, version)["needs"]
         if needs:
             raise ValueError(f"{name} {version} needs a value for {', '.join(needs)} first")
@@ -536,6 +539,24 @@ class Connectors:
         # a first enable never waits: its Setup form is filled in once it is enabled
         needs = [labels[k] for k in diff["required"] if pinned and k in unset]
         return {"from": pinned, "to": version, **diff, "needs": needs}
+
+    def _to_world(self, world_id: str, name: str, old: dict[str, Any], new: dict[str, Any]) -> None:
+        """A field the pinned Manifest `old` kept shared and `new` sets per world starts as a
+        copy of the shared value in a world with none of its own, so the world moving its pin
+        keeps the sign-in or Setting it used. Copied, never moved: other worlds, and older
+        versions that saved workflow versions recorded, still read the shared one."""
+        if not old:  # a first enable
+            return
+        was = {f["key"]: f for f in setup.fields(old)}
+        shared, world = self.setups.values(name, world_id)
+        for f in setup.fields(new):
+            before = was.get(f["key"]) or was.get(f.get("renamed_from", ""))
+            if setup.scope(f) != "world" or not before or setup.scope(before) != "shared":
+                continue
+            value = setup.stored(before, shared)
+            if value is not None and setup.stored(f, world) is None:
+                self.setups.put_value(name, world_id, f["key"], value)
+                log.info("%s's %s is now set per world: %s keeps a copy", name, f["key"], world_id)
 
     def pinned_by(self, name: str, version: str) -> list[str]:
         """The worlds that pin `name` at `version`."""
