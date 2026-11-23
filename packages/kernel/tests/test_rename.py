@@ -5,6 +5,8 @@ import pickle
 import subprocess
 import sys
 
+import pytest
+
 from kriflow_kernel import Event
 
 LOAD = """
@@ -43,3 +45,25 @@ def test_a_pickle_naming_a_swarmify_module_loads_as_the_kriflow_class_after_a_ke
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "world_1"
+
+
+OLD_NAMES = [
+    "swarmify_api",
+    "swarmify_connectors",
+    "swarmify_kernel",
+    "swarmify_learning",
+    "swarmify_memory",
+    "swarmify_notifications",
+    "swarmify_runs",
+    "swarmify_swarm",
+    "swarmify_workflows",
+    "swarmify_worlds",
+]
+
+
+@pytest.mark.parametrize("old", OLD_NAMES)
+def test_each_old_top_level_name_imports_first_in_a_fresh_process(old: str) -> None:
+    new = "kriflow_" + old.removeprefix("swarmify_")
+    code = f"import sys, {old}; assert {old} is sys.modules['{new}']"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert out.returncode == 0, out.stderr

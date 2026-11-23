@@ -9,3 +9,19 @@ dependencies = ["tzdata"]  # zoneinfo's IANA zones on a box image without them
 [build-system]
 requires = ["uv_build>=0.9,<0.14"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The old top-level names, each a shim onto its kriflow_ module (kriflow_kernel/rename.py, #599)
+module-name = [
+  "kriflow_kernel",
+  "swarmify_api",
+  "swarmify_connectors",
+  "swarmify_kernel",
+  "swarmify_learning",
+  "swarmify_memory",
+  "swarmify_notifications",
+  "swarmify_runs",
+  "swarmify_swarm",
+  "swarmify_workflows",
+  "swarmify_worlds",
+]
