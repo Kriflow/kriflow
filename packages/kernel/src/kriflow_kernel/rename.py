@@ -4,11 +4,14 @@ DBOS pickles workflow inputs, step outputs and errors by module path, so a recor
 modules of the code that wrote it. Before the rename the code was `swarmify_*`; now it is
 `kriflow_*`. Runs waiting at a gate when the rename was deployed, and every record written
 before it, name `swarmify_runs.machine.RunState` and the like, so an import of
-`swarmify_<x>[.y]` returns the `kriflow_<x>[.y]` module itself (no copy, so class identity and
-`isinstance` hold). Helper scripts that import the old names keep running too. Permanent: those
-records never change. Installed by importing the kernel, and by importing any old top-level name
-first: the kernel ships a tiny `swarmify_<x>` package per old name that calls `become`. The
-rollback target (kriflow#592) has the reverse alias.
+`swarmify_<x>[.y]` returns a stand-in that reads through to the `kriflow_<x>[.y]` module (no copy,
+so class identity and `isinstance` hold). It is a stand-in, not the module itself, because the
+import system writes on what it imports: the alias's `__spec__`, and, after `import
+swarmify_workflows.validate`, the submodule over the parent's attribute of that name, which there
+is the function `validate` (kriflow#613). Helper scripts that import the old names keep running
+too. Permanent: those records never change. Installed by importing the kernel, and by importing
+any old top-level name first: the kernel ships a tiny `swarmify_<x>` package per old name that
+calls `become`. The rollback target (kriflow#592) has the reverse alias.
 """
 
 import importlib
@@ -38,10 +41,30 @@ class _Alias(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return importlib.util.spec_from_loader(fullname, self)
 
     def create_module(self, spec: importlib.machinery.ModuleSpec) -> ModuleType:
-        return importlib.import_module(REAL + spec.name[len(ALIAS) :])
+        return _OldName(spec.name)
 
     def exec_module(self, module: ModuleType) -> None:
         pass  # the real module ran when it was imported
+
+
+class _OldName(ModuleType):
+    """`swarmify_<x>[.y]`: every read goes to `kriflow_<x>[.y]`, and so does every write except
+    the import system's own. Its dunders (`__spec__`, `__loader__`) stay here, and a submodule it
+    binds after an old-name import is dropped: the real package already has what it should under
+    that name."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.__real__ = importlib.import_module(REAL + name[len(ALIAS) :])
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.__real__, name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name.startswith("__"):
+            super().__setattr__(name, value)
+        elif not isinstance(value, ModuleType):
+            setattr(self.__real__, name, value)
 
 
 def install() -> None:
@@ -50,7 +73,7 @@ def install() -> None:
 
 
 def become(name: str) -> None:
-    """Called by the shim module `name` (`swarmify_<x>`): installs the alias and puts the real
-    `kriflow_<x>` in its place, so the old name imports in a fresh process too."""
+    """Called by the shim module `name` (`swarmify_<x>`): installs the alias and puts the
+    stand-in for `kriflow_<x>` in its place, so the old name imports in a fresh process too."""
     install()
-    sys.modules[name] = importlib.import_module(REAL + name[len(ALIAS) :])
+    sys.modules[name] = _OldName(name)
