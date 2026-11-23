@@ -13,8 +13,8 @@ from api_fakes import until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from kriflow_connectors import ConnectorError, FakeTransport
 from sse import sse_events
-from swarmify_connectors import ConnectorError, FakeTransport
 
 RENDER = {
     "name": "render_video",

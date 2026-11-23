@@ -1,8 +1,8 @@
-"""The upgrade fixture (kriflow#592): runs left in flight by the code before the module rename,
-whose DBOS records pickle `swarmify_*` module paths, finish on this code. Before the rename it
-proves the fixture is sound; after, that no recorded run was stranded. upgrade_record.py
-records it and says when to record it again. The same runs with their records rewritten to
-`kriflow_*` paths, as the renamed code writes them, finish too: a rollback to this commit."""
+"""The upgrade fixture (kriflow#592): runs left in flight by the code before the module rename
+(kriflow#593), whose DBOS records pickle `swarmify_*` module paths, finish on this code, which
+has only `kriflow_*` modules: no recorded run was stranded. upgrade_record.py records it and says
+when to record it again. The same runs with their records rewritten to the `kriflow_*` paths
+this code writes finish too."""
 
 import base64
 import contextlib
@@ -13,10 +13,10 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import Illegal, Runner
+from kriflow_runs.machine import RunState
 from runs_fakes import wait_for
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import Illegal, Runner
-from swarmify_runs.machine import RunState
 from upgrade_record import EVERY_SECOND, FIXTURE, make
 
 RECORDED = ["At a gate", "On a time hold", "Fan-out", "Queued 1", "Queued 2"]
@@ -41,15 +41,10 @@ def by_name(r: Runner, worlds: list[str]) -> dict[str, list[str]]:
 
 
 def as_renamed(dbos: Path) -> None:
-    """Rewrite the pickled inputs as the renamed code writes them: RunState from kriflow_runs."""
+    """Rewrite the pickled inputs as this code writes them: RunState from kriflow_runs."""
     with closing(connect(dbos)) as conn:
         for uuid, inputs in conn.execute("SELECT workflow_uuid, inputs FROM workflow_input"):
-            obj = pickle.loads(base64.b64decode(inputs))
-            RunState.__module__ = "kriflow_runs.machine"  # found through the alias
-            try:
-                renamed = pickle.dumps(obj)
-            finally:
-                RunState.__module__ = "swarmify_runs.machine"
+            renamed = pickle.dumps(pickle.loads(base64.b64decode(inputs)))
             conn.execute(
                 "UPDATE workflow_input SET inputs = ? WHERE workflow_uuid = ?",
                 (base64.b64encode(renamed).decode(), uuid),
@@ -63,7 +58,20 @@ def test_runs_recorded_before_the_rename_finish_and_the_schedule_fires(tmp_path:
     finish(tmp_path / "data")
 
 
-def test_after_a_rollback_runs_the_renamed_code_recorded_finish(tmp_path: Path) -> None:
+def test_a_run_state_pickled_under_the_old_module_path_loads_as_this_code_s_class(
+    tmp_path: Path,
+) -> None:
+    shutil.copy(FIXTURE / "dbos.sqlite", tmp_path / "dbos.sqlite")
+    with closing(connect(tmp_path / "dbos.sqlite")) as conn:
+        rows = conn.execute("SELECT inputs FROM workflow_input").fetchall()
+    old = [base64.b64decode(i) for (i,) in rows if b"swarmify_runs.machine" in base64.b64decode(i)]
+    assert old  # the fixture was recorded before the rename
+    states = [a for p in old for a in pickle.loads(p)["args"] if isinstance(a, RunState)]
+    assert states and all(type(s) is RunState for s in states)
+    assert RunState.__module__ == "kriflow_runs.machine"
+
+
+def test_runs_recorded_by_this_code_finish(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE, tmp_path / "data")
     as_renamed(tmp_path / "data" / "dbos.sqlite")
     modules = pickled_modules(tmp_path / "data" / "dbos.sqlite")

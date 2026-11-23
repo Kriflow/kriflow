@@ -16,11 +16,11 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel import Event
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_notifications import MIGRATIONS, PushStorage
-from swarmify_notifications.push import (
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel import Event
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_notifications import MIGRATIONS, PushStorage
+from kriflow_notifications.push import (
     Notice,
     Target,
     WebPush,

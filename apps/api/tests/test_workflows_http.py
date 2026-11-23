@@ -6,9 +6,9 @@ from api_fakes import FakeNotifier, until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import run_storage
-from swarmify_learning.evals import TASKS, workflow_yaml
-from swarmify_runs import RunControl
+from kriflow_api.main import run_storage
+from kriflow_learning.evals import TASKS, workflow_yaml
+from kriflow_runs import RunControl
 
 WEEKLY = """name: Weekly short
 budget_usd: 5

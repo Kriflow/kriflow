@@ -1,4 +1,4 @@
-/** Swarmify as an installed app (issue 458): the service worker and its update, the browser's
+/** Kriflow as an installed app (issue 458): the service worker and its update, the browser's
  * install offer, the theme colour per view and whether the person has been given something first.
  * One small store; PwaNotices.tsx draws it. */
 import { useEffect, useSyncExternalStore } from "react";
@@ -41,7 +41,7 @@ export function useThemeColour(office: boolean) {
   }, [office]);
 }
 
-const KEY = { days: "swarmify.days", answered: "swarmify.answered", install: "swarmify.install" };
+const KEY = { days: "kriflow.days", answered: "kriflow.answered", install: "kriflow.install" };
 const read = (key: string) => {
   try {
     return localStorage.getItem(key);

@@ -5,10 +5,10 @@ from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel import Event
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_runs import MIGRATIONS, Run, StageDef
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel import Event
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_runs import MIGRATIONS, Run, StageDef
 
 
 def migrated(root: Path) -> Path:

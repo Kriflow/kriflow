@@ -6,7 +6,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from swarmify_swarm.projection import (
+from kriflow_swarm.projection import (
     VERDICT_SCHEMA,
     Item,
     OutputType,

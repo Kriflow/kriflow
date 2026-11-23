@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Runner, SqliteStorage
 from runs_fakes import FakeConnector, FakeNotifier, migrated
-from swarmify_runs import Runner, SqliteStorage
 
 
 @pytest.fixture

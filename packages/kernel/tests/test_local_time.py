@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from swarmify_kernel import local_time_problem, next_local
+from kriflow_kernel import local_time_problem, next_local
 
 TORONTO = "17:00 America/Toronto"
 

@@ -5,7 +5,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, rule
 
-from swarmify_runs.machine import (
+from kriflow_runs.machine import (
     MAX_SEND_BACKS,
     TERMINAL,
     Aborted,

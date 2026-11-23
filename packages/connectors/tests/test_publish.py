@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from swarmify_connectors import (
+from kriflow_connectors import (
     Call,
     ConnectorError,
     Connectors,

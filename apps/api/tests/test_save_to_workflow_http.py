@@ -14,9 +14,9 @@ from test_artifact_edit_http import FIVE, SEVEN, edit
 from test_artifact_edit_http import at_gate as tagged
 from test_run_changes_http import SHORT, at_gate, change, stage
 
-from swarmify_connectors import FakeTransport
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import Answer, Call, Script
+from kriflow_connectors import FakeTransport
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import Answer, Call, Script
 
 
 @pytest.fixture

@@ -5,14 +5,14 @@ tools, each scripted by its role, told apart by its system prompt: the planner s
 the worker queries the graph, claims it, writes a note and an artifact and finishes it; the
 judge passes with two ranked ideas. A stage named `steer` has a worker that waits mid-turn for
 a person's message. Every run's retro session proposes nothing, or, with
-`SWARMIFY_E2E_RETRO=propose` in the app's environment, one new skill. A `sketch` stage's
+`KRIFLOW_E2E_RETRO=propose` in the app's environment, one new skill. A `sketch` stage's
 builder session installs packages and writes src/Main.tsx.
 
 The app's default packages are fixtures only (issue 586): `kit` renders, `sketch` builds and
 `fake_publish` posts, and a test's `voice` (the echo fixture renamed, conftest.py) voices, all
 answered by a fake ConnectorTransport (kit writes the video and its sidecar; voice writes
 timings.json and a silent take per scene; fake_publish previews as its fixture module does, posts
-and counts 1,234 views; with SWARMIFY_E2E_PLATFORM set, it uploads resumably to that fake platform
+and counts 1,234 views; with KRIFLOW_E2E_PLATFORM set, it uploads resumably to that fake platform
 instead, keeping a Publish Record as a real package does); a connector a test adds goes through the
 real MCP transport. Every world has the kit Template `shorts` its workflows render. Upkeep runs
 every second.
@@ -34,17 +34,17 @@ import httpx
 from claude_agent_sdk import ClaudeAgentOptions
 from fastapi import FastAPI
 
-from swarmify_api.main import create_app as real_app
-from swarmify_api.planner import SYSTEM as PLANNER_SYSTEM
-from swarmify_connectors import Connector, ConnectorError, FakeTransport, McpTransport
-from swarmify_connectors.fake import FIXTURE_DEFAULTS, default_list
-from swarmify_connectors.mcp_transport import Caller
-from swarmify_connectors.model import Tool
-from swarmify_learning import SYSTEM as RETRO_SYSTEM
-from swarmify_memory import GRAPH_OUT
-from swarmify_swarm import SdkRuntime, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedTransport
-from swarmify_worlds import World, Worlds
+from kriflow_api.main import create_app as real_app
+from kriflow_api.planner import SYSTEM as PLANNER_SYSTEM
+from kriflow_connectors import Connector, ConnectorError, FakeTransport, McpTransport
+from kriflow_connectors.fake import FIXTURE_DEFAULTS, default_list
+from kriflow_connectors.mcp_transport import Caller
+from kriflow_connectors.model import Tool
+from kriflow_learning import SYSTEM as RETRO_SYSTEM
+from kriflow_memory import GRAPH_OUT
+from kriflow_swarm import SdkRuntime, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Hold, Say, Script, ScriptedTransport
+from kriflow_worlds import World, Worlds
 
 REPO = Path(__file__).parents[2]
 FIXTURES = REPO / "packages/connectors/tests/fixtures/packages"
@@ -213,7 +213,7 @@ def voice(out: Path) -> dict[str, Any]:
     }
 
 
-PLATFORM = os.environ.get("SWARMIFY_E2E_PLATFORM", "")
+PLATFORM = os.environ.get("KRIFLOW_E2E_PLATFORM", "")
 """A fake platform's address: when set, fake_publish uploads to it resumably, which a test serves
 outside the app so it outlives a restart."""
 
@@ -356,12 +356,12 @@ def _fixture_defaults() -> None:
     made for this app, never the real packages, never GitHub."""
     where = Path(tempfile.mkdtemp(prefix="default-list-"))
     listed = default_list(where, {n: FIXTURES / n for n in FIXTURE_DEFAULTS})
-    os.environ["SWARMIFY_DEFAULT_PACKAGES"] = str(listed)
+    os.environ["KRIFLOW_DEFAULT_PACKAGES"] = str(listed)
 
 
 def create_app() -> FastAPI:
     _fixture_defaults()
-    retro = PROPOSE if os.environ.get("SWARMIFY_E2E_RETRO") == "propose" else RETRO
+    retro = PROPOSE if os.environ.get("KRIFLOW_E2E_RETRO") == "propose" else RETRO
     scripts = {  # the first whose marker is in the system prompt plays the session
         PLANNER_SYSTEM: Script(PLANNER_CHAT, cost=0.0042),
         RETRO_SYSTEM: Script(retro, cost=0.0042),

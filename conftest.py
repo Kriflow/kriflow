@@ -9,15 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import packages
+from kriflow_connectors import packages
 
 
 def pytest_configure(config: pytest.Config) -> None:
     """An empty Default List (issue 585) unless a test names its own: no test clones GitHub."""
-    if "SWARMIFY_DEFAULT_PACKAGES" not in os.environ:
+    if "KRIFLOW_DEFAULT_PACKAGES" not in os.environ:
         file = Path(tempfile.mkdtemp()) / "no-defaults.toml"
         file.write_text('git = "nowhere"\npackages = []\n')
-        os.environ["SWARMIFY_DEFAULT_PACKAGES"] = str(file)
+        os.environ["KRIFLOW_DEFAULT_PACKAGES"] = str(file)
 
 
 def pytest_sessionfinish(session: pytest.Session) -> None:
@@ -36,8 +36,8 @@ def fake_node_installs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Non
     """A package's install step gets `npm` and `npx` that only append what they were asked to
     `fake-install.log` where they run, so every app a test starts does not fetch remotion_render's
     Remotion CLI and Chrome (800 MB) into its default packages. An opted-in real build
-    (SWARMIFY_REAL_BUILD) installs for real."""
-    if os.environ.get("SWARMIFY_REAL_BUILD"):
+    (KRIFLOW_REAL_BUILD) installs for real."""
+    if os.environ.get("KRIFLOW_REAL_BUILD"):
         yield
         return
     bin_dir = tmp_path_factory.mktemp("fake-node")

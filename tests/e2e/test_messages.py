@@ -1,7 +1,7 @@
 """Messaging a running stage (issue 534), at phone size first: the message box docks above the tab
 bar with its To chips, a message reaches the live session and its receipt shows under it in the
 Transcript; nothing runs wide and every tap is 44 px. On a desktop the box sits at the foot of
-the stage card. The scripted `steer` worker waits mid-turn for a message. Set SWARMIFY_SHOTS to a
+the stage card. The scripted `steer` worker waits mid-turn for a message. Set KRIFLOW_SHOTS to a
 folder to keep screenshots."""
 
 import os
@@ -23,7 +23,7 @@ stages:
     done_when: 5 ideas ranked
     output_type: list[idea]
 """
-SHOTS = os.environ.get("SWARMIFY_SHOTS")
+SHOTS = os.environ.get("KRIFLOW_SHOTS")
 WAITING = "I'll start once you say which sources to trust."
 
 

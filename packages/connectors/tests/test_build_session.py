@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
-from swarmify_connectors import Connectors, ManifestError, Packages, build_session, read_manifest
-from swarmify_connectors.packages import MANIFEST, check_manifest
+from kriflow_connectors import Connectors, ManifestError, Packages, build_session, read_manifest
+from kriflow_connectors.packages import MANIFEST, check_manifest
 
 SKETCH = Path(__file__).parent / "fixtures/packages/sketch"
 W = "world_1"

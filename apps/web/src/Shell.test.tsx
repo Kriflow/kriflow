@@ -175,7 +175,7 @@ test("on a phone More lists every other page with a one-line summary, and the ba
 
 test("on a phone, before the worlds load, five tabs stand and the chip names the last world", async () => {
   await page.viewport(390, 844);
-  localStorage.setItem("swarmify.world", JSON.stringify({ id: "world_2", name: "Podcast" }));
+  localStorage.setItem("kriflow.world", JSON.stringify({ id: "world_2", name: "Podcast" }));
   fakeFetch({ "GET /api/worlds": () => new Promise<Response>(() => undefined), "GET /api/gates": () => Response.json([]) });
   const { screen } = await mountAt("/gates");
   const tabs = screen.getByRole("navigation", { name: "Tabs" });
@@ -206,12 +206,12 @@ test("on a phone with no world known yet, the world tabs wait as labelled placeh
   const tabs = screen.getByRole("navigation", { name: "Tabs" });
   await expect.element(tabs.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/worlds/world_1/runs");
   await expect.element(screen.getByRole("button", { name: "Video" })).toBeVisible();
-  expect(JSON.parse(localStorage.getItem("swarmify.world") ?? "{}")).toEqual({ id: "world_1", name: "Video" });
+  expect(JSON.parse(localStorage.getItem("kriflow.world") ?? "{}")).toEqual({ id: "world_1", name: "Video" });
 });
 
 test("a remembered world that is gone gives way to the first one", async () => {
   await page.viewport(390, 844);
-  localStorage.setItem("swarmify.world", JSON.stringify({ id: "world_9", name: "Deleted" }));
+  localStorage.setItem("kriflow.world", JSON.stringify({ id: "world_9", name: "Deleted" }));
   fakeFetch({ "GET /api/worlds": () => Response.json(worlds), "GET /api/gates": () => Response.json([]) });
   const { screen } = await mountAt("/gates");
   await expect.element(screen.getByRole("button", { name: "Video" })).toBeVisible();

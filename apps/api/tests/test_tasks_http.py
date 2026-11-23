@@ -13,9 +13,9 @@ import pytest
 from api_fakes import until
 from fastapi.testclient import TestClient
 
+from kriflow_api.main import create_app
+from kriflow_swarm import SqliteStorage
 from sse import sse_events
-from swarmify_api.main import create_app
-from swarmify_swarm import SqliteStorage
 
 GATE_THEN_SWARM = """name: Brief then research
 stages:

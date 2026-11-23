@@ -15,9 +15,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_publish_http import setup, until, weekly
 
-from swarmify_api.main import create_app, run_storage
-from swarmify_connectors import FakeTransport
-from swarmify_runs import Run, StageDef
+from kriflow_api.main import create_app, run_storage
+from kriflow_connectors import FakeTransport
+from kriflow_runs import Run, StageDef
 
 ONE_STAGE = "name: Render\nstages:\n  - connector: render\n    calls: maker\n"
 
@@ -49,7 +49,7 @@ def test_an_open_event_stream_holds_a_stop_unless_uvicorn_cuts_it(
 def test_a_stop_waits_for_the_stage_at_work_and_nothing_runs_twice(
     tmp_path: Path, transport: FakeTransport, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_DRAIN_SECONDS", "30")
+    monkeypatch.setenv("KRIFLOW_DRAIN_SECONDS", "30")
     release, called = threading.Event(), []
 
     def slow(run: Run, stage_id: str, stage: StageDef) -> None:
@@ -113,7 +113,7 @@ PASSWORD = "aviato"
 
 @pytest.fixture
 def guarded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, transport: FakeTransport) -> FastAPI:
-    monkeypatch.setenv("SWARMIFY_PASSWORD", PASSWORD)
+    monkeypatch.setenv("KRIFLOW_PASSWORD", PASSWORD)
     return create_app(tmp_path / "data", retro=False, transport=transport)
 
 
@@ -165,7 +165,7 @@ def test_the_console_script_drives_the_drain_with_a_token(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from swarmify_api import drain
+    from kriflow_api import drain
 
     server = uvicorn.Server(uvicorn.Config(guarded, host="127.0.0.1", port=0, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
@@ -173,12 +173,12 @@ def test_the_console_script_drives_the_drain_with_a_token(
     try:
         until(lambda: server.started)
         url = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
-        monkeypatch.setenv("SWARMIFY_DRAIN_URL", url)
+        monkeypatch.setenv("KRIFLOW_DRAIN_URL", url)
         with pytest.raises(SystemExit, match="401"):
             drain.main(["status"])
         session = httpx.post(f"{url}/api/session", json={"password": PASSWORD})
         made = httpx.post(f"{url}/api/tokens", json={"name": "deploy"}, cookies=session.cookies)
-        monkeypatch.setenv("SWARMIFY_API_TOKEN", made.json()["token"])
+        monkeypatch.setenv("KRIFLOW_API_TOKEN", made.json()["token"])
 
         def said(*args: str) -> dict:
             drain.main(list(args))

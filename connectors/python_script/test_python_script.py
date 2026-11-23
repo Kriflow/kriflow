@@ -12,7 +12,7 @@ import pytest
 import python_script as ps
 from mcp.server.mcpserver.exceptions import ToolError
 
-from swarmify_connectors import (
+from kriflow_connectors import (
     MIGRATIONS,
     Connectors,
     Credentials,
@@ -20,8 +20,8 @@ from swarmify_connectors import (
     SqliteStorage,
     read_manifest,
 )
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
 
 HERE = Path(__file__).parent
 DOUBLE = "import json, sys\nd = json.load(sys.stdin)\nprint(json.dumps({'n': d['n'] * 2}))\n"

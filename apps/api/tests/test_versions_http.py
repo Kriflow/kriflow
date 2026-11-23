@@ -14,8 +14,8 @@ from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_api import main
-from swarmify_connectors import Connector, FakeTransport
+from kriflow_api import main
+from kriflow_connectors import Connector, FakeTransport
 
 V1 = "packages/connectors/tests/fixtures/packages/echo"
 V2 = "packages/connectors/tests/fixtures/packages/echo_2"

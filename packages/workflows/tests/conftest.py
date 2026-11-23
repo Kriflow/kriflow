@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_workflows import SqliteStorage, Workflows
 from samples import CONNECTORS, migrated_db
-from swarmify_workflows import SqliteStorage, Workflows
 
 
 @pytest.fixture

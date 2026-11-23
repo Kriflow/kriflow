@@ -1,6 +1,6 @@
 """Opt-in: real graphify with the Claude CLI backend over the fixture world, then queried through
 the real GraphIndex. Needs a logged-in `claude` and spends subscription tokens, so it runs only
-with SWARMIFY_GRAPHIFY=1, for example `SWARMIFY_GRAPHIFY=1 uv run pytest --no-cov -k live`."""
+with KRIFLOW_GRAPHIFY=1, for example `KRIFLOW_GRAPHIFY=1 uv run pytest --no-cov -k live`."""
 
 import json
 import os
@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_memory import GRAPH_OUT, GraphWriter, McpGraphIndex
+from kriflow_kernel import MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_memory import GRAPH_OUT, GraphWriter, McpGraphIndex
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("SWARMIFY_GRAPHIFY") != "1" or shutil.which("claude") is None,
-    reason="set SWARMIFY_GRAPHIFY=1 with a logged-in claude CLI to run real graphify",
+    os.environ.get("KRIFLOW_GRAPHIFY") != "1" or shutil.which("claude") is None,
+    reason="set KRIFLOW_GRAPHIFY=1 with a logged-in claude CLI to run real graphify",
 )
 WORLD = Path(__file__).parent / "fixtures/world"
 

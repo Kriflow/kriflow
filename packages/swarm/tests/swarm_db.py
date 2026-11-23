@@ -4,9 +4,9 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_swarm import MIGRATIONS
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_swarm import MIGRATIONS
 
 
 def migrated(root: Path) -> Path:

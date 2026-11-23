@@ -1,14 +1,14 @@
 from dataclasses import asdict
 
-from samples import WEEKLY_SHORT
-from swarmify_workflows import (
+from kriflow_workflows import (
     ConnectorStage,
     GateStage,
     SwarmStage,
     WorkflowStage,
     dump_workflow,
 )
-from swarmify_workflows.parse import parse_workflow
+from kriflow_workflows.parse import parse_workflow
+from samples import WEEKLY_SHORT
 
 
 def rules(text: str) -> list[tuple[str, str | None, str]]:

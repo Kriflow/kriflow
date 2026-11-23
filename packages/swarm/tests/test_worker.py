@@ -12,9 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from swarm_db import DiskFiles, DiskGraphs
-from swarmify_kernel import AGENT_TOOLS
-from swarmify_swarm import (
+from kriflow_kernel import AGENT_TOOLS
+from kriflow_swarm import (
     OPERATOR,
     WORKER,
     Agent,
@@ -30,11 +29,12 @@ from swarmify_swarm import (
     Swarm,
     tool_id,
 )
-from swarmify_swarm.fake import LAST, Answer, Call, Die, Hold, Lost, Say, Script, Step
-from swarmify_swarm.network import NetworkWait, Waiting
-from swarmify_swarm.projection import PLAN_SCHEMA
-from swarmify_swarm.sdk import HARNESS
-from swarmify_swarm.worker import BETWEEN, DROPPED, FROM_PERSON, MID_TURN, STAGE_TOOLS, _Hooks
+from kriflow_swarm.fake import LAST, Answer, Call, Die, Hold, Lost, Say, Script, Step
+from kriflow_swarm.network import NetworkWait, Waiting
+from kriflow_swarm.projection import PLAN_SCHEMA
+from kriflow_swarm.sdk import HARNESS
+from kriflow_swarm.worker import BETWEEN, DROPPED, FROM_PERSON, MID_TURN, STAGE_TOOLS, _Hooks
+from swarm_db import DiskFiles, DiskGraphs
 
 W, R, S = "world_1", "run_1", "stage_1"
 STAGE = {"goal": "Find 5 ideas.", "done_when": "5 ideas ranked", "tools": []}
@@ -1028,7 +1028,7 @@ def test_a_spent_budget_ends_the_wait_and_stops_the_stage(
 
 
 def test_a_given_item_is_named_first_in_the_prompt() -> None:
-    from swarmify_swarm.worker import _prior
+    from kriflow_swarm.worker import _prior
 
     assert _prior([]) == ""
     assert _prior(["s1/artifacts/a.md"]) == "Artifacts of earlier stages: s1/artifacts/a.md."
@@ -1079,7 +1079,7 @@ def test_the_log_keeps_a_transcript_of_words_and_tool_results(
 
 
 def test_a_tool_result_is_kept_as_a_capped_excerpt(board: SqliteStorage, tmp_path: Path) -> None:
-    from swarmify_swarm.worker import EXCERPT, _Hooks
+    from kriflow_swarm.worker import EXCERPT, _Hooks
 
     board.agent(W, R, S, WORKER, "worker")
     hooks = _Hooks(board, S, WORKER, ["Read*"], _world(tmp_path))
@@ -1181,12 +1181,12 @@ def test_stop_and_do_this_instead_interrupts_the_turn(board: SqliteStorage, tmp_
 def test_a_queued_message_comes_first_when_the_session_resumes(
     board: SqliteStorage, tmp_path: Path
 ) -> None:
-    """A message for an agent with no live session (between sessions, or after Swarmify
+    """A message for an agent with no live session (between sessions, or after Kriflow
     restarted) waits in its inbox, and the session it resumes reads it first."""
     _seed(board)
     board.agent(W, R, S, WORKER, "worker")
     board.update_agent(S, WORKER, status="working", session_id="session-before-restart")
-    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Swarmify restarted
+    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Kriflow restarted
     script = Script([GRAPH, CLAIM, FINISH, Say("Done.")], PASS)
     swarm = _swarm(board, tmp_path, script)
 
@@ -1233,7 +1233,7 @@ def test_a_queued_message_survives_a_session_that_cannot_be_resumed(
     _seed(board)
     board.agent(W, R, S, WORKER, "worker")
     board.update_agent(S, WORKER, status="working", session_id="session-before-restart")
-    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Swarmify restarted
+    board.start_attempt(W, R, S, 0, None)  # the Attempt it was in when Kriflow restarted
     script = Script([Lost()], [GRAPH, CLAIM, FINISH, Say("Done.")], PASS)
     swarm = _swarm(board, tmp_path, script)
 

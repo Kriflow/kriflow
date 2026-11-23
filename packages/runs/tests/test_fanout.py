@@ -9,8 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from runs_fakes import FakeNotifier, wait_for
-from swarmify_runs import (
+from kriflow_runs import (
     Illegal,
     Item,
     OverBudget,
@@ -21,7 +20,8 @@ from swarmify_runs import (
     SqliteStorage,
     StageDef,
 )  # fmt: skip
-from swarmify_runs.control import RunControl
+from kriflow_runs.control import RunControl
+from runs_fakes import FakeNotifier, wait_for
 
 LIST = StageDef("paragraphs", "connector", {"calls": "split"})
 TRANSLATE = StageDef("translate", "connector", {"calls": "translate", "input": "item.md"})
@@ -584,7 +584,7 @@ def test_a_sent_back_child_that_ends_before_its_stage_runs_again_still_settles(
 
 
 def test_an_items_gate_ask_names_each_item_with_only_the_first_line_of_its_error() -> None:
-    from swarmify_runs.model import ItemView, items_gate
+    from kriflow_runs.model import ItemView, items_gate
 
     trace = "ConnectorError: blender_render: shot demo_angles: Blender exited with 1 " + "x" * 300
     error = trace + '\nTraceback (most recent call last):\n  File "/data/worlds/w/build/s.py"'

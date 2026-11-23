@@ -2,7 +2,7 @@
 // emits this as /sw.js. The API, its event streams, media and downloads always go to the network:
 // they are never matched, cached or served from here.
 const SHELL = __PRECACHE__;
-const CACHE = `swarmify-shell-${__VERSION__}`;
+const CACHE = `kriflow-shell-${__VERSION__}`;
 
 self.addEventListener("install", (event) => {
   // A new version waits until the page asks for it (SKIP_WAITING), so it never swaps mid-form.

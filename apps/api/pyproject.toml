@@ -1,7 +1,7 @@
 [project]
-name = "swarmify-api"
+name = "kriflow-api"
 version = "0.1.0"
-description = "Swarmify HTTP API"
+description = "Kriflow HTTP API"
 requires-python = ">=3.12"
 license = "AGPL-3.0-only"
 dependencies = [
@@ -11,22 +11,27 @@ dependencies = [
   "mcp>=2.3",
   "python-multipart>=0.0.20",
   "pyyaml>=6.0",
-  "swarmify-connectors",
-  "swarmify-kernel",
-  "swarmify-learning",
-  "swarmify-memory",
-  "swarmify-notifications",
-  "swarmify-worlds",
-  "swarmify-runs",
-  "swarmify-swarm",
-  "swarmify-workflows",
+  "kriflow-connectors",
+  "kriflow-kernel",
+  "kriflow-learning",
+  "kriflow-memory",
+  "kriflow-notifications",
+  "kriflow-worlds",
+  "kriflow-runs",
+  "kriflow-swarm",
+  "kriflow-workflows",
   "uvicorn>=0.54",
 ]
 
 [project.scripts]
-swarmify-mcp = "swarmify_api.mcp:main"
-swarmify-eval = "swarmify_api.eval_harness:main"
-swarmify-drain = "swarmify_api.drain:main"
+kriflow-mcp = "kriflow_api.mcp:main"
+kriflow-eval = "kriflow_api.eval_harness:main"
+kriflow-drain = "kriflow_api.drain:main"
+# The old names, until the alias removal (README, Names kept from Swarmify); the deploy command
+# drains the running container with `swarmify-drain`, the name every build has.
+swarmify-mcp = "kriflow_api.mcp:main"
+swarmify-eval = "kriflow_api.eval_harness:main"
+swarmify-drain = "kriflow_api.drain:main"
 
 [build-system]
 requires = ["uv_build>=0.9,<0.14"]

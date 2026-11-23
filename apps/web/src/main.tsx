@@ -1,3 +1,4 @@
+import "./storageNames"; // first: copies saved choices to their new keys before any is read
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 

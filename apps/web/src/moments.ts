@@ -9,7 +9,7 @@ export const MOMENTS = {
   workflowSaved: (version: number) => `Saved as version ${version}.`,
 } as const;
 
-const ANSWERED = "swarmify.answered-a-gate";
+const ANSWERED = "kriflow.answered-a-gate";
 
 /** Whether this browser has answered a gate before; marks it answered. */
 export function firstGate(): boolean {

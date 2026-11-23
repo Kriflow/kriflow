@@ -4,8 +4,8 @@ a second confirmation when the workflow changed the touched stages since the run
 
 from typing import Any
 
+from kriflow_workflows import SwarmStage, Workflows
 from samples import WEEKLY_SHORT
-from swarmify_workflows import SwarmStage, Workflows
 
 WORLD = "world_1"
 SCRIPT = {

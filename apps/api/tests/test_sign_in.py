@@ -15,11 +15,11 @@ from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from test_run_changes_http import at_gate, change
 
-from swarmify_api import main
-from swarmify_api.auth import COOKIE, Operator
-from swarmify_api.eval_harness import sign_in
-from swarmify_api.main import migrated_db
-from swarmify_connectors import FakeTransport
+from kriflow_api import main
+from kriflow_api.auth import COOKIE, Operator
+from kriflow_api.eval_harness import sign_in
+from kriflow_api.main import migrated_db
+from kriflow_connectors import FakeTransport
 
 PASSWORD = "aviato"
 
@@ -32,7 +32,7 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, transport: FakeTranspor
     dist.mkdir()
     (dist / "index.html").write_text("<div id=root></div>")
     monkeypatch.setattr(main, "WEB_DIST", dist)
-    monkeypatch.setenv("SWARMIFY_PASSWORD", PASSWORD)
+    monkeypatch.setenv("KRIFLOW_PASSWORD", PASSWORD)
     return main.create_app(tmp_path / "data", retro=False, transport=transport, poll_seconds=0.01)
 
 

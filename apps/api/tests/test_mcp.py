@@ -1,4 +1,4 @@
-"""The swarmify MCP tools, driven through an MCP client connected in-process."""
+"""The Kriflow MCP tools, driven through an MCP client connected in-process."""
 
 import os
 import sys
@@ -12,8 +12,8 @@ import pytest
 from api_fakes import studio
 from mcp import Client, StdioServerParameters
 
-from swarmify_api.auth import CALLER, Token
-from swarmify_api.main import (
+from kriflow_api.auth import CALLER, Token
+from kriflow_api.main import (
     create_app,
     run_control,
     task_board,
@@ -21,10 +21,10 @@ from swarmify_api.main import (
     world_deleter,
     world_service,
 )
-from swarmify_api.mcp import server
-from swarmify_runs import Run, StageDef
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import Answer, Call, Script
+from kriflow_api.mcp import server
+from kriflow_runs import Run, StageDef
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import Answer, Call, Script
 
 
 @pytest.mark.anyio
@@ -63,9 +63,10 @@ async def test_world_tools_create_list_get_delete(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_console_script_serves_the_tools_over_stdio(tmp_path: Path) -> None:
-    script = Path(sys.executable).parent / "swarmify-mcp"
-    env = {**os.environ, "SWARMIFY_DATA_DIR": str(tmp_path)}
+@pytest.mark.parametrize("name", ["kriflow-mcp", "swarmify-mcp"])  # the old name until removal
+async def test_console_script_serves_the_tools_over_stdio(tmp_path: Path, name: str) -> None:
+    script = Path(sys.executable).parent / name
+    env = {**os.environ, "KRIFLOW_DATA_DIR": str(tmp_path)}
     async with Client(StdioServerParameters(command=str(script), env=env)) as client:
         created = await client.call_tool("create_world", {"name": "Video"})
         assert created.structured_content and created.structured_content["name"] == "Video"
@@ -316,7 +317,7 @@ async def test_the_stdio_server_deletes_a_world_like_the_api_does(tmp_path: Path
     from api_fakes import until
     from fastapi.testclient import TestClient
 
-    from swarmify_api.mcp import stdio_server
+    from kriflow_api.mcp import stdio_server
 
     control = run_control(tmp_path)
     with TestClient(create_app(tmp_path, connector=lambda *_: None, retro=False)) as http:
@@ -570,9 +571,9 @@ async def test_a_chat_threads_replies_ask_the_run_assistant_and_apply_or_dismiss
     from fastapi.testclient import TestClient
     from test_run_changes_http import at_gate, change
 
-    from swarmify_api import remote
-    from swarmify_api.assistant import MOVED_ON, Conversations
-    from swarmify_connectors import Connectors
+    from kriflow_api import remote
+    from kriflow_api.assistant import MOVED_ON, Conversations
+    from kriflow_connectors import Connectors
 
     approvals = next(
         r.app.tools for r in app.router.routes if getattr(r, "path", "") == remote.PATH

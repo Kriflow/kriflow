@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from dbos import DBOS
 
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import Illegal, Run, Runner, SqliteStorage, StageDef
+from kriflow_runs.control import RunControl
 from runs_fakes import FakeConnector, FakeNotifier, wait_for
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import Illegal, Run, Runner, SqliteStorage, StageDef
-from swarmify_runs.control import RunControl
 
 RESEARCH = StageDef("research", "connector", {"calls": "web_search"})
 PICK = StageDef("pick", "gate", {"ask": "Pick one idea.", "kind": "pick"})

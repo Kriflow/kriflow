@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors, _Handoff
-from swarmify_connectors.logins import FileSecrets, SecretStore, Taken, domain_problem, totp
-from swarmify_connectors.packages import MANIFEST
-from swarmify_kernel.sqlite import connect
+from kriflow_connectors import Connectors, _Handoff
+from kriflow_connectors.logins import FileSecrets, SecretStore, Taken, domain_problem, totp
+from kriflow_connectors.packages import MANIFEST
+from kriflow_kernel.sqlite import connect
 
 SECRET = "JBSWY3DPEHPK3PXP"
 
@@ -74,7 +74,7 @@ def test_domains_follow_the_sandboxs_rules(domain: str, ok: bool) -> None:
 
 
 def test_loopback_is_allowed_under_the_test_flag_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SWARMIFY_LOGIN_ALLOW_LOOPBACK", "1")
+    monkeypatch.setenv("KRIFLOW_LOGIN_ALLOW_LOOPBACK", "1")
     assert domain_problem("127.0.0.1:8123") is None
 
 
@@ -185,6 +185,10 @@ def test_a_swarm_stage_hands_its_login_only_to_tools_that_accept_one(
         "pa55-word",
         SECRET,
     )
+    # both names, the same values and the same file (kriflow#595)
+    new = {k: v for k, v in values.items() if k.startswith("KRIFLOW_")}
+    assert len(new) == 6 and all(values["SWARMIFY_" + k[8:]] == v for k, v in new.items())
+    assert signer["env"]["KRIFLOW_LOGIN_FILE"] == str(login_file)
     home = login_file.parent
     plan = (home.parent / "plan.json").read_text()
     assert "pa55-word" not in plan and SECRET not in plan and "s3ss-old-777" not in plan

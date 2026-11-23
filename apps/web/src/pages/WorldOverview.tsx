@@ -33,7 +33,7 @@ export function setupSteps(worldId: string, workflows: Workflow[], runs: Run[]) 
   ] as const;
 }
 
-const HIDDEN = (worldId: string) => `swarmify.setup-hidden.${worldId}`;
+const HIDDEN = (worldId: string) => `kriflow.setup-hidden.${worldId}`;
 const wasHidden = (worldId: string) => {
   try {
     return localStorage.getItem(HIDDEN(worldId)) === "1";

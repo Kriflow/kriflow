@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel.sqlite import connect, migrate
+from kriflow_kernel.sqlite import connect, migrate
 
 
 def _write(dir: Path, name: str, sql: str) -> None:

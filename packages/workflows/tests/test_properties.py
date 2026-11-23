@@ -9,9 +9,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import Bundle, RuleBasedStateMachine, initialize, invariant, rule
 
-from samples import CONNECTORS, migrated_db
-from swarmify_workflows import Invalid, SqliteStorage, Workflows
-from swarmify_workflows.model import (
+from kriflow_workflows import Invalid, SqliteStorage, Workflows
+from kriflow_workflows.model import (
     ConnectorStage,
     GateStage,
     Stage,
@@ -19,8 +18,9 @@ from swarmify_workflows.model import (
     WorkflowModel,
     WorkflowStage,
 )
-from swarmify_workflows.parse import parse_workflow
-from swarmify_workflows.validate import validate
+from kriflow_workflows.parse import parse_workflow
+from kriflow_workflows.validate import validate
+from samples import CONNECTORS, migrated_db
 
 ARTIFACTS = ["ideas.md", "script.md", "short.mp4", "brief.md"]
 KNOWN = ["wf_a", "wf_b", "wf_c"]

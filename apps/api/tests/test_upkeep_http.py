@@ -23,15 +23,15 @@ from fastapi.testclient import TestClient
 from test_publish_http import MAKER, at_gate, setup, until, weekly
 
 from fake_graph import fake_extract
-from swarmify_api import upkeep
-from swarmify_api.main import create_app
-from swarmify_connectors import FakeTransport
-from swarmify_connectors.setup import SetupStore
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_memory import FakeGraphIndex
-from swarmify_swarm import SdkRuntime
-from swarmify_swarm.fake import Script
+from kriflow_api import upkeep
+from kriflow_api.main import create_app
+from kriflow_connectors import FakeTransport
+from kriflow_connectors.setup import SetupStore
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_memory import FakeGraphIndex
+from kriflow_swarm import SdkRuntime
+from kriflow_swarm.fake import Script
 
 
 @pytest.fixture

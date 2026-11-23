@@ -16,8 +16,8 @@ from api_fakes import FAKE_PUBLISH_ENV, sign_in_fake_publish
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import ConnectorError, FakeTransport, oauth
-from swarmify_connectors.fake_oauth import FakeProvider
+from kriflow_connectors import ConnectorError, FakeTransport, oauth
+from kriflow_connectors.fake_oauth import FakeProvider
 
 MAKER = {
     "name": "maker",

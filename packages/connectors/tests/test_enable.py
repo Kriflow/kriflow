@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors, Credentials, McpTransport, Packages, SqliteStorage
-from swarmify_connectors.packages import MANIFEST
+from kriflow_connectors import Connectors, Credentials, McpTransport, Packages, SqliteStorage
+from kriflow_connectors.packages import MANIFEST
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

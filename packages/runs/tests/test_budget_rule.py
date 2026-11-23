@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import MonthSpent, Pinned, Run, Runner, SqliteStorage, StageDef
+from kriflow_runs.budget import DEFAULT_USD
 from runs_fakes import FakeConnector, FakeNotifier, wait_for
-from swarmify_runs import MonthSpent, Pinned, Run, Runner, SqliteStorage, StageDef
-from swarmify_runs.budget import DEFAULT_USD
 
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})
 RENDER = StageDef("render", "connector", {"calls": "remotion_render"})

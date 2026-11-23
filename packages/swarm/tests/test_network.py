@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import CLIConnectionError, ProcessError
 
-from swarmify_swarm import SdkRuntime
-from swarmify_swarm.fake import Answer, Die, Say, Script
-from swarmify_swarm.network import NetworkDown, NetworkWait, Patient, transient
-from swarmify_swarm.ports import SessionInit, SessionSpec
+from kriflow_swarm import SdkRuntime
+from kriflow_swarm.fake import Answer, Die, Say, Script
+from kriflow_swarm.network import NetworkDown, NetworkWait, Patient, transient
+from kriflow_swarm.ports import SessionInit, SessionSpec
 
 
 class APIConnectionError(Exception):
@@ -131,7 +131,7 @@ def test_a_patient_runtime_passes_any_other_failure_on() -> None:
 def test_a_usage_limit_is_waited_out_until_the_reset_it_names() -> None:
     from datetime import UTC, datetime
 
-    from swarmify_swarm.network import reset_in
+    from kriflow_swarm.network import reset_in
 
     said = "You've hit your session limit · resets 10:50am (UTC)"
     now = datetime(2026, 11, 17, 8, 0, tzinfo=UTC)

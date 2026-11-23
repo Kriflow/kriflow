@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Illegal, Run, RunChange, Runner, SqliteStorage, StageDef
 from runs_fakes import FakeNotifier, wait_for
-from swarmify_runs import Illegal, Run, RunChange, Runner, SqliteStorage, StageDef
 
 WRITE = StageDef("write", "swarm", {"goal": "Write a script.", "output": "script.md"})
 RENDER = StageDef("render", "connector", {"calls": "remotion_render", "input": "script.md"})

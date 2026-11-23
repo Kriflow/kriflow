@@ -6,7 +6,7 @@ import { type ArtifactFile, type Call, outcomeOf, type Verdict } from "../api/ev
 import type { Run } from "../api/runs";
 import { cap, the } from "../skin";
 
-/** Loops a stage may take: the first verdict plus three gap loops. Mirrors swarmify_swarm.MAX_LOOPS. */
+/** Loops a stage may take: the first verdict plus three gap loops. Mirrors kriflow_swarm.MAX_LOOPS. */
 const VERDICTS = 4;
 
 /** `runs/<run>/<stage>/notes/trends.md#p3` as "trends.md, paragraph 3". */

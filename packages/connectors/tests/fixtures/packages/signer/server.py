@@ -1,4 +1,4 @@
-"""The signer package's MCP server: signs in to the fake site (swarmify_connectors.fake_site) with
+"""The signer package's MCP server: signs in to the fake site (kriflow_connectors.fake_site) with
 the World Login its stage names, keeps the session, leaks the password every way a package
 could, and asks a person for a code through a request file (a Person Check)."""
 

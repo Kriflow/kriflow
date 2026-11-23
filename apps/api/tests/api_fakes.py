@@ -8,8 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from swarmify_connectors.setup import SetupStore
-from swarmify_kernel import Event
+from kriflow_connectors.setup import SetupStore
+from kriflow_kernel import Event
 
 FAKE_PUBLISH = (
     Path(__file__).parents[3] / "packages/connectors/tests/fixtures/packages/fake_publish"

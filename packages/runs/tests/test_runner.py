@@ -4,10 +4,10 @@ from contextlib import closing
 
 from dbos import DBOS
 
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import Runner, SqliteStorage, StageDef, queue_name
 from runs_fakes import FakeConnector, wait_for
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import Runner, SqliteStorage, StageDef, queue_name
 
 RENDER = StageDef("render", "connector", {"calls": "remotion_render"})
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})

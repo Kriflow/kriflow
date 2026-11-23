@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from swarmify_swarm import OPERATOR, Refused, SqliteStorage
+from kriflow_swarm import OPERATOR, Refused, SqliteStorage
 
 TASKS = 5
 

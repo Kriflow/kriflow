@@ -11,10 +11,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_swarm_http import CLAIM, FINISH, GRAPH, PASS, PLAN, _until
 
-from swarmify_swarm import WORKER
-from swarmify_swarm.fake import Call, Say, Script
-from swarmify_swarm.ports import tool_id
-from swarmify_swarm.worker import FROM_PERSON
+from kriflow_swarm import WORKER
+from kriflow_swarm.fake import Call, Say, Script
+from kriflow_swarm.ports import tool_id
+from kriflow_swarm.worker import FROM_PERSON
 
 DRAFT = """name: Draft
 stages:

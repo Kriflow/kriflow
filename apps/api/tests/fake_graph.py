@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from swarmify_memory import GRAPH_OUT, ShrinkRefused
+from kriflow_memory import GRAPH_OUT, ShrinkRefused
 
 GRAPH = {
     "nodes": [{"id": "hooks", "label": "Short hooks"}, {"id": "cliff", "label": "Retention cliff"}],

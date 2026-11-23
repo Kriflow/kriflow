@@ -10,14 +10,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fake_graph import fake_extract
-from swarmify_api import main
-from swarmify_api.main import create_app
-from swarmify_connectors import Connectors, FakeTransport, Packages
-from swarmify_connectors.fake import FIXTURE_DEFAULTS, FIXTURES, default_list
-from swarmify_memory import FakeGraphIndex
-from swarmify_swarm import SdkRuntime
-from swarmify_swarm.fake import Script
-from swarmify_swarm.network import NetworkWait
+from kriflow_api import main
+from kriflow_api.main import create_app
+from kriflow_connectors import Connectors, FakeTransport, Packages
+from kriflow_connectors.fake import FIXTURE_DEFAULTS, FIXTURES, default_list
+from kriflow_memory import FakeGraphIndex
+from kriflow_swarm import SdkRuntime
+from kriflow_swarm.fake import Script
+from kriflow_swarm.network import NetworkWait
 
 
 @pytest.fixture(scope="session")
@@ -35,7 +35,7 @@ def fixture_defaults(
     """The app's defaults come from `fixture_list`, and their install steps (python_script's)
     are skipped: the API starts the app ~200 times. A module that needs an install step to run
     sets `real_default_installs = True`."""
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(fixture_list))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(fixture_list))
     if getattr(request.module, "real_default_installs", False):
         return
     real = Connectors.install_defaults
@@ -73,7 +73,7 @@ def script() -> Script:
 def no_drain_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """An app stopped with a stage still at work stops at once, as before the Drain; a drain
     test sets its own limit."""
-    monkeypatch.setenv("SWARMIFY_DRAIN_SECONDS", "0")
+    monkeypatch.setenv("KRIFLOW_DRAIN_SECONDS", "0")
 
 
 @pytest.fixture(autouse=True)

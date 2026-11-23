@@ -13,8 +13,8 @@ from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITra
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Script
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Script
 
 SIGNER = "packages/connectors/tests/fixtures/packages/signer"
 PASSWORD, TOTP = "Pa55-word-swarm-1", "JBSWY3DPEHPK3PXP"

@@ -7,8 +7,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from swarmify_connectors import index
-from swarmify_connectors.index import IndexUnavailable, read_index
+from kriflow_connectors import index
+from kriflow_connectors.index import IndexUnavailable, read_index
 
 ENTRY = """
 [[packages]]

@@ -1,5 +1,5 @@
 """The planner chat over HTTP: a real Agent SDK session with the scripted CLI behind it, whose
-tools are the swarmify MCP server's own, called in-process."""
+tools are the Kriflow MCP server's own, called in-process."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -8,9 +8,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import FakeTransport
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import Answer, Call, Die, Say, Script
+from kriflow_connectors import FakeTransport
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import Answer, Call, Die, Say, Script
 
 DRAFT = """name: Weekly short
 schedule: "0 8 * * 1"
@@ -148,7 +148,7 @@ def test_the_planner_hears_what_a_connector_says_of_its_types_in_this_world(
 def test_the_planner_describes_each_connector_from_its_manifest(
     running: TestClient, script: Script
 ) -> None:
-    from swarmify_kernel import AGENT_TOOLS
+    from kriflow_kernel import AGENT_TOOLS
 
     world = _world(running)
     cook = {"name": "cook", "kind": "tool", "server": "uvx cook-mcp", "stage_types": ["swarm"]}
@@ -185,8 +185,8 @@ def test_the_planner_sees_each_packages_templates_in_this_world(
 def test_a_package_s_planner_notes_and_params_reach_the_planner() -> None:
     from pathlib import Path
 
-    from swarmify_api.planner import describe
-    from swarmify_connectors import Connector, read_manifest
+    from kriflow_api.planner import describe
+    from kriflow_connectors import Connector, read_manifest
 
     echo = Path(__file__).parents[3] / "packages/connectors/tests/fixtures/packages/echo"
     m = read_manifest(echo)
@@ -246,7 +246,7 @@ def test_a_planner_question_comes_back_as_choices_to_tap(
 
 
 def test_a_question_without_two_choices_falls_back_to_the_plain_reply() -> None:
-    from swarmify_api.planner import parse_question
+    from kriflow_api.planner import parse_question
 
     assert parse_question({"reply": "Hi."}) is None
     assert parse_question({"question": None}) is None

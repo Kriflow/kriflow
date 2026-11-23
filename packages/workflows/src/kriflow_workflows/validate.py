@@ -1,0 +1,337 @@
+"""The rules a workflow must satisfy beyond its schema (V1 spec, Workflows context; ADR 0007, 0013).
+
+Pure: the caller supplies the connectors the world allows and, for every stored workflow, the
+workflow ids its current version runs. Every broken rule is returned, none raises.
+"""
+
+import re
+from collections.abc import Collection, Mapping, Sequence
+from pathlib import PurePosixPath
+from typing import Any
+
+from kriflow_kernel import AGENT_TOOLS, posts_privately
+from kriflow_workflows.model import (
+    ConnectorRef,
+    ConnectorStage,
+    GateStage,
+    SwarmStage,
+    Violation,
+    WorkflowModel,
+    WorkflowStage,
+    children,
+    login_of,
+)
+
+MAX_DEPTH = 2
+NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+"""A World Login's name, as the Connectors context gives one."""
+# Explicit, not mimetypes: that marks text like .srt, .ts and .sh as binary and reads the host's
+# /etc/mime.types, so the same workflow could pass on one machine and fail on another.
+BINARY_EXTENSIONS = frozenset(
+    "mp4 mov webm mkv avi m4v mp3 wav m4a aac ogg flac png jpg jpeg gif webp heic bmp tiff ico"
+    " pdf zip tar gz tgz 7z rar".split()
+)
+
+
+def _binary(name: str) -> bool:
+    """Swarm agents write text only; an unlisted extension gets the benefit of the doubt."""
+    return PurePosixPath(name).suffix[1:].lower() in BINARY_EXTENSIONS
+
+
+def validate(
+    model: WorkflowModel,
+    *,
+    workflow_id: str | None,
+    connectors: Mapping[str, ConnectorRef],
+    references: Mapping[str, Sequence[str]],
+    logins: Collection[str] | None = None,
+) -> list[Violation]:
+    """`logins`, the World Logins the world keeps, which a stage may name; None leaves out the
+    check that a named one exists."""
+    out: list[Violation] = []
+    produced: set[str] = set(model.given)
+    swarm_made: dict[str, SwarmStage] = {}
+    """The swarm stage that last produced each file, for typed contracts (issue 133)."""
+
+    def conflict(type_name: str) -> list[str]:
+        """The connectors declaring `type_name` when they differ. Only a promised type's schemas
+        are read: a world-dependent one costs a call to its connector (issue 140)."""
+        found = [(r.name, r.types[type_name]) for r in connectors.values() if type_name in r.types]
+        return [n for n, _ in found] if any(s != found[0][1] for _, s in found) else []
+
+    def check_connector(name: str, stage_type: str, stage: str) -> ConnectorRef | None:
+        ref = connectors.get(name)
+        if name in AGENT_TOOLS:  # only a connector stage gets here with one
+            message = f"'{name}' is an Agent Tool: list it in a swarm stage's tools"
+            out.append(Violation("connector_stage_type", message, stage))
+        elif ref is None:
+            known = "connector or Agent Tool" if stage_type == "swarm" else "connector"
+            out.append(Violation("unknown_connector", f"no {known} named '{name}'", stage))
+        elif stage_type not in ref.stage_types:
+            out.append(
+                Violation(
+                    "connector_stage_type",
+                    f"connector '{name}' is not allowed in {stage_type} stages",
+                    stage,
+                )
+            )
+        return ref
+
+    def check_login(stage: SwarmStage | ConnectorStage, names: list[str]) -> None:
+        """A named login must exist in the world, and one of the stage's connectors take it."""
+        login = login_of(stage)
+        if login is None:
+            return
+        if not NAME.fullmatch(login):
+            message = f"login '{login}' is not a login name, like shop_admin"
+            out.append(Violation("login", message, stage.name))
+        elif logins is not None and login not in logins:
+            message = f"this world has no login named '{login}': add it on Settings"
+            out.append(Violation("login", message, stage.name))
+        if not any((ref := connectors.get(n)) and ref.accepts_login for n in names):
+            who = (
+                "none of its tools accepts"
+                if isinstance(stage, SwarmStage)
+                else "it does not accept"
+            )
+            message = f"stage '{stage.name}' names login '{login}', but {who} a login"
+            out.append(Violation("login", message, stage.name))
+
+    for index, stage in enumerate(model.stages):
+        if isinstance(stage, SwarmStage | ConnectorStage):
+            check_login(stage, stage.tools if isinstance(stage, SwarmStage) else [stage.calls])
+        if isinstance(stage, SwarmStage):
+            for tool in stage.tools:
+                if tool not in AGENT_TOOLS:  # the core gives these, no connector needed
+                    check_connector(tool, "swarm", stage.name)
+            for name in filter(_binary, stage.produces):
+                out.append(
+                    Violation(
+                        "swarm_binary",
+                        f"only a connector stage can make {name}: swarm agents write text, so"
+                        " produce a script here and make the file from it in a connector stage"
+                        " (one requesting a Build Session writes and runs code)",
+                        stage.name,
+                    )
+                )
+            produced.update(stage.produces)
+            swarm_made |= dict.fromkeys(stage.produces, stage)
+            promised = "".join((stage.output_type or "").split())
+            named = promised.removeprefix("list[").removesuffix("]")
+            if differ := conflict(named):
+                out.append(
+                    Violation(
+                        "type_conflict",
+                        f"connectors {' and '.join(differ)} declare type {named}"
+                        " with different schemas",
+                        stage.name,
+                    )
+                )
+        elif isinstance(stage, ConnectorStage):
+            ref = check_connector(stage.calls, "connector", stage.name)
+            gated = _gated(model, index, connectors)
+            # A private post (a draft only the operator sees) needs no gate.
+            private = ref is not None and posts_privately(ref.private_when, stage.params)
+            if ref is not None and ref.kind == "publish" and not gated and not private:
+                out.append(
+                    Violation(
+                        "publish_without_gate",
+                        f"publish connector '{stage.calls}' must come right after a gate"
+                        + (
+                            f" unless it posts privately ({_said(ref.private_when)})"
+                            if ref.private_when
+                            else ""
+                        ),
+                        stage.name,
+                    )
+                )
+            names = stage.inputs or list(filter(None, [stage.input]))
+            for name, wanted in zip(names, ref.input_types if ref else (), strict=False):
+                maker = swarm_made.get(name)
+                if wanted and maker is not None:
+                    promised = "".join((maker.output_type or "").split())
+                    if promised != wanted:
+                        has = f"declares output_type {promised}" if promised else "declares none"
+                        out.append(
+                            Violation(
+                                "output_type",
+                                f"stage '{stage.name}' reads {name} from swarm stage"
+                                f" '{maker.name}' as type {wanted}, but '{maker.name}' {has};"
+                                f" give it output_type: {wanted}",
+                                stage.name,
+                            )
+                        )
+            for name in names:
+                if name not in produced:
+                    out.append(
+                        Violation(
+                            "input_not_produced",
+                            f"input '{name}' is not produced by an earlier stage",
+                            stage.name,
+                        )
+                    )
+            source = stage.params.get("from") if ref is not None and ref.builds else None
+            if source is not None:
+                earlier = [
+                    i
+                    for i, s in enumerate(model.stages[:index])
+                    if isinstance(s, ConnectorStage) and s.name == source and s.calls == stage.calls
+                ]
+                if not earlier:
+                    out.append(
+                        Violation(
+                            "from_unknown",
+                            f"from: '{source}' must name an earlier stage calling {stage.calls},"
+                            " whose build this stage renders",
+                            stage.name,
+                        )
+                    )
+                elif not any(isinstance(s, GateStage) for s in model.stages[earlier[0] : index]):
+                    out.append(
+                        Violation(
+                            "from_without_gate",
+                            f"a gate must stand between '{source}' and this stage, which renders"
+                            " its build: approve it there, or send it back with notes",
+                            stage.name,
+                        )
+                    )
+            if ref is not None:
+                config = {
+                    "calls": stage.calls,
+                    "input": stage.input,
+                    "inputs": stage.inputs,
+                    "output": stage.output,
+                    "params": stage.params,
+                }
+                out += [Violation("connector_params", p, stage.name) for p in ref.problems(config)]
+            if stage.output:
+                produced.add(stage.output)
+                swarm_made.pop(stage.output, None)
+        elif isinstance(stage, WorkflowStage):
+            for runs in children(stage):
+                if runs not in references and runs != workflow_id:
+                    out.append(
+                        Violation("unknown_workflow", f"no workflow with id '{runs}'", stage.name)
+                    )
+            earlier = {s.name for s in model.stages[:index]}
+            source = stage.for_each
+            if source is not None and source not in earlier and source not in produced:
+                out.append(
+                    Violation(
+                        "for_each_unknown",
+                        f"for_each: '{source}' must name an earlier stage, or a .json file an"
+                        " earlier stage produces or takes",
+                        stage.name,
+                    )
+                )
+            elif source is not None and source not in earlier and not source.endswith(".json"):
+                out.append(
+                    Violation(
+                        "for_each_unknown",
+                        f"for_each: '{source}' is a file, so it must be a JSON list (.json)",
+                        stage.name,
+                    )
+                )
+            produced.update(stage.take)
+            if source is not None or stage.from_list:  # the join's index, for a later stage
+                produced.add("items.json")
+            for name in stage.take:
+                swarm_made.pop(name, None)
+        # gates produce a decision, which no stage declares as input
+
+    me = workflow_id or ""
+    graph: dict[str, Sequence[str]] = dict(references)
+    graph[me] = [r for s in model.stages if isinstance(s, WorkflowStage) for r in children(s)]
+    if _reaches(graph, me, me):
+        out.append(Violation("cycle", "this workflow would run itself through its workflow stages"))
+    else:
+        depth = _up(graph, me) + _down(graph, me)
+        if depth > MAX_DEPTH:
+            out.append(Violation("depth", f"workflows nest {depth} deep, the limit is {MAX_DEPTH}"))
+    return out
+
+
+def warnings(
+    model: WorkflowModel, connectors: Mapping[str, ConnectorRef] | None = None
+) -> list[Violation]:
+    """What saves but likely does not do what was meant. A pick gate after a swarm stage whose
+    output_type is one item (not list[...]) offers one card: the stage keeps only its best. A
+    publish stage that leaves out a param its connector's `private_when` names lets the
+    connector's default decide who sees the post, which may keep it private unnoticed."""
+    out: list[Violation] = []
+    for stage in model.stages:
+        if not isinstance(stage, ConnectorStage):
+            continue
+        ref = (connectors or {}).get(stage.calls)
+        unsaid = [k for k in ref.private_when if k not in stage.params] if ref else []
+        if ref and ref.kind == "publish" and unsaid:
+            out.append(
+                Violation(
+                    "visibility_unsaid",
+                    f"publish stage '{stage.name}' does not say {', '.join(unsaid)}, so"
+                    f" {ref.name}'s default decides who sees the post; say"
+                    f" {' and '.join(unsaid)}",
+                    stage.name,
+                )
+            )
+    for index, stage in enumerate(model.stages):
+        if not (isinstance(stage, GateStage) and stage.kind == "pick"):
+            continue
+        before = [s for s in model.stages[:index] if not isinstance(s, GateStage)]
+        maker = before[-1] if before else None
+        if not isinstance(maker, SwarmStage):
+            continue
+        promised = "".join((maker.output_type or "").split())
+        if promised and not promised.startswith("list["):
+            out.append(
+                Violation(
+                    "pick_one",
+                    f"pick gate '{stage.name}' follows swarm stage '{maker.name}', whose"
+                    f" output_type {promised} keeps only its best item, so there is nothing to"
+                    f" pick; give it output_type: list[{promised}]",
+                    stage.name,
+                )
+            )
+    return out
+
+
+def _gated(model: WorkflowModel, index: int, connectors: Mapping[str, ConnectorRef]) -> bool:
+    """Whether the stage at `index` comes right after a gate, or after publish stages that do
+    (ADR 0007, issue 541): one answer lets every publish stage that follows it run."""
+    while index > 0:
+        index -= 1
+        before = model.stages[index]
+        if isinstance(before, GateStage):
+            return True
+        ref = connectors.get(before.calls) if isinstance(before, ConnectorStage) else None
+        if ref is None or ref.kind != "publish":
+            return False
+    return False
+
+
+def _reaches(graph: Mapping[str, Sequence[str]], start: str, target: str) -> bool:
+    seen: set[str] = set()
+    todo = list(graph.get(start, ()))
+    while todo:
+        node = todo.pop()
+        if node == target:
+            return True
+        if node not in seen:
+            seen.add(node)
+            todo.extend(graph.get(node, ()))
+    return False
+
+
+def _down(graph: Mapping[str, Sequence[str]], node: str, seen: frozenset[str] = frozenset()) -> int:
+    """Longest chain of workflow stages below `node`. `seen` guards against a stored cycle."""
+    kids = [k for k in graph.get(node, ()) if k not in seen]
+    return max((1 + _down(graph, k, seen | {node}) for k in kids), default=0)
+
+
+def _up(graph: Mapping[str, Sequence[str]], node: str, seen: frozenset[str] = frozenset()) -> int:
+    parents = [p for p, kids in graph.items() if node in kids and p not in seen and p != node]
+    return max((1 + _up(graph, p, seen | {node}) for p in parents), default=0)
+
+
+def _said(params: Mapping[str, Any]) -> str:
+    return ", ".join(f"{k}: {v}" for k, v in params.items())

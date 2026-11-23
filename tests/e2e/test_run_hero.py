@@ -1,6 +1,6 @@
 """The run page's status hero and stage rail at phone size (issue 531): one status line with its
 one action, four numbers each with its anchor, and every stage an icon tile that fits the screen,
-scrolls sideways and selects its stage on a tap. Set SWARMIFY_SHOTS to a folder to keep
+scrolls sideways and selects its stage on a tap. Set KRIFLOW_SHOTS to a folder to keep
 screenshots of each state."""
 
 import os
@@ -53,7 +53,7 @@ stages:
     runs: {child}
     for_each: choose
 """
-SHOTS = os.environ.get("SWARMIFY_SHOTS")
+SHOTS = os.environ.get("KRIFLOW_SHOTS")
 
 
 @pytest.fixture(scope="module")

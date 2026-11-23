@@ -17,12 +17,12 @@ from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from kriflow_api.main import create_app, migrated_db, world_service
+from kriflow_connectors import ConnectorError, FakeTransport, Tool
+from kriflow_kernel.sqlite import connect
+from kriflow_workflows import ConnectorRef, Workflows
+from kriflow_workflows import SqliteStorage as WorkflowStorage
 from sse import sse_events
-from swarmify_api.main import create_app, migrated_db, world_service
-from swarmify_connectors import ConnectorError, FakeTransport, Tool
-from swarmify_kernel.sqlite import connect
-from swarmify_workflows import ConnectorRef, Workflows
-from swarmify_workflows import SqliteStorage as WorkflowStorage
 
 FIXTURES = "packages/connectors/tests/fixtures/packages"
 DEFAULTS = ["fake_publish", "kit", "python_script", "sketch"]
@@ -407,11 +407,11 @@ def test_an_invalid_manifest_is_refused_naming_the_field(
     newer = tmp_path / "newer"
     shutil.copytree(fixture.parent / "packages/echo", newer)
     toml = newer / "swarmify-connector.toml"
-    toml.write_text(f"contract = 3\n{toml.read_text()}")
+    toml.write_text(f"contract = 4\n{toml.read_text()}")
     refused = install(client, str(newer))
     assert (refused.status_code, refused.json()["detail"]) == (
         422,
-        "echo 1.0.0 needs package contract 3, and this Kriflow runs contracts 1 to 2."
+        "echo 1.0.0 needs package contract 4, and this Kriflow runs contracts 1 to 3."
         " Update Kriflow first, or install an older echo.",
     )
     assert [p["name"] for p in client.get("/api/packages").json()] == DEFAULTS
@@ -487,7 +487,7 @@ ref = "v1.0.0"
 permissions = ["network: api.example.org"]
 """
     )
-    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", str(index))
+    monkeypatch.setenv("KRIFLOW_CONNECTOR_INDEX", str(index))
     listed = client.get("/api/packages/index")
     assert listed.status_code == 200, listed.text
     assert listed.json()["url"] == str(index)
@@ -504,20 +504,20 @@ permissions = ["network: api.example.org"]
 
     newer = tmp_path / "newer.toml"
     newer.write_text(
-        index.read_text().replace('ref = "v1.0.0"', 'ref = "echo-v2.0.0"\ncontract = 3')
+        index.read_text().replace('ref = "v1.0.0"', 'ref = "echo-v2.0.0"\ncontract = 4')
     )
-    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", str(newer))
+    monkeypatch.setenv("KRIFLOW_CONNECTOR_INDEX", str(newer))
     listed = client.get("/api/packages/index").json()
-    assert (listed["oldest_contract"], listed["newest_contract"]) == (1, 2)
+    assert (listed["oldest_contract"], listed["newest_contract"]) == (1, 3)
     assert {k: listed["packages"][0][k] for k in ("contract", "runnable", "problem")} == {
-        "contract": 3,
+        "contract": 4,
         "runnable": False,
-        "problem": "echo 2.0.0 needs package contract 3, and this Kriflow runs contracts 1 to 2."
+        "problem": "echo 2.0.0 needs package contract 4, and this Kriflow runs contracts 1 to 3."
         " Update Kriflow first, or install an older echo.",
     }
     assert entry["contract"] == 1 and entry["runnable"] and entry["problem"] is None
 
-    monkeypatch.setenv("SWARMIFY_CONNECTOR_INDEX", "http://example.org/index.toml")
+    monkeypatch.setenv("KRIFLOW_CONNECTOR_INDEX", "http://example.org/index.toml")
     down = client.get("/api/packages/index")
     assert down.status_code == 502
     assert down.json()["detail"] == (

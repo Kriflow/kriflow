@@ -38,7 +38,7 @@ test("the password can be shown and hidden, autofills as the current password, a
   expect(screen.container.querySelector("form.shake")).toBeNull();
   await field.fill("wrong");
   await screen.getByRole("button", { name: "Sign in" }).click();
-  await expect.element(screen.getByRole("alert")).toHaveTextContent("That is not the password. Use SWARMIFY_PASSWORD from the install's .env.");
+  await expect.element(screen.getByRole("alert")).toHaveTextContent("That is not the password. Use KRIFLOW_PASSWORD (or SWARMIFY_PASSWORD) from the install's .env.");
   const form = screen.container.querySelector("form")!;
   expect(form.classList.contains("shake")).toBe(true);
   // Once: the animation does not repeat.

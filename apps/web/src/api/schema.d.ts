@@ -31,7 +31,7 @@ export interface paths {
         /**
          * Models
          * @description The models a world, a role or a stage may choose, and the one used when none does
-         *     (`SWARMIFY_MODEL`, else Claude Opus 5.5). Any other model id is priced at the most
+         *     (`KRIFLOW_MODEL`, else Claude Opus 5.5). Any other model id is priced at the most
          *     expensive of these.
          */
         get: operations["models_api_models_get"];
@@ -984,7 +984,7 @@ export interface paths {
         };
         /**
          * Package Index
-         * @description The curated index of known packages, read from `SWARMIFY_CONNECTOR_INDEX` (an https
+         * @description The curated index of known packages, read from `KRIFLOW_CONNECTOR_INDEX` (an https
          *     URL or a local file; by default Kriflow/packages' `index.toml`). 502
          *     saying why when it cannot be fetched or read.
          */
@@ -4175,7 +4175,7 @@ export interface components {
         /**
          * OwnedFolder
          * @description A folder of the world's assets a package it enables owns (Manifest `[[owned_folders]]`).
-         *     Swarmify lists, plays, uploads, renames and deletes its files; the package gives them
+         *     Kriflow lists, plays, uploads, renames and deletes its files; the package gives them
          *     meaning.
          */
         OwnedFolder: {
@@ -4205,7 +4205,7 @@ export interface components {
         /**
          * Package
          * @description One installed version of a Connector Package. `state` is `installed`, or `invalid` with
-         *     `problem` when its Manifest no longer passes (a newer Swarmify, an edited file).
+         *     `problem` when its Manifest no longer passes (a newer Kriflow, an edited file).
          */
         Package: {
             /** Name */

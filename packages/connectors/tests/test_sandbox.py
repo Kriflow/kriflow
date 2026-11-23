@@ -18,9 +18,9 @@ from typing import Any
 
 import pytest
 
-from swarmify_connectors import Connectors, Credentials, McpTransport, SqliteStorage, observe
-from swarmify_connectors.packages import MANIFEST
-from swarmify_connectors.sandbox import (
+from kriflow_connectors import Connectors, Credentials, McpTransport, SqliteStorage, observe
+from kriflow_connectors.packages import MANIFEST
+from kriflow_connectors.sandbox import (
     LAUNCHER,
     RUNNER,
     STDERR,
@@ -138,7 +138,7 @@ def test_a_connector_on_macos_cannot_read_another_process_environment(
     api = [sys.executable, "-c", "import time; time.sleep(60)"]
     values = ["api-secret", "other-secret"]
     with (
-        subprocess.Popen(api, env={**os.environ, "SWARMIFY_PASSWORD": "api-secret"}) as stand_in,
+        subprocess.Popen(api, env={**os.environ, "KRIFLOW_PASSWORD": "api-secret"}) as stand_in,
         McpTransport().session(sandboxed, env) as call,
     ):
         try:
@@ -158,7 +158,7 @@ def test_a_process_gets_its_own_values_and_the_sandbox_none_of_the_apis(
 ) -> None:
     """The launcher passes on only the variables named for it: its Setup values, not the API's
     own (the sign-in password, the Claude token), whatever started it."""
-    monkeypatch.setenv("SWARMIFY_PASSWORD", "hunter2")
+    monkeypatch.setenv("KRIFLOW_PASSWORD", "hunter2")
     real = Connectors(SqliteStorage(db), McpTransport(), Credentials(tmp_path / ".env"), 0.05)
     install(real, tmp_path, "probe")
     real.enable("w1", "probe", "1.0.0")
@@ -169,7 +169,7 @@ def test_a_process_gets_its_own_values_and_the_sandbox_none_of_the_apis(
     confined, sandboxed = real.confine(connector, real._env(connector))
     assert confined is not None
     seen = McpTransport().call(sandboxed, "environ", {}, env)["env"]
-    assert seen["PROBE_KEY"] == "good" and "SWARMIFY_PASSWORD" not in seen
+    assert seen["PROBE_KEY"] == "good" and "KRIFLOW_PASSWORD" not in seen
     assert seen["HOME"] == seen["TMPDIR"] == str(confined.folder / "home")
 
 
@@ -185,7 +185,7 @@ except OSError:
 APP = f"""
 import multiprocessing, subprocess, sys
 from pathlib import Path
-from swarmify_connectors.sandbox import Grants, Sandbox
+from kriflow_connectors.sandbox import Grants, Sandbox
 
 def run(data):
     confined = Sandbox(Path(data)).wrap([sys.executable, "-c", {INSIDE!r}], None, Grants())
@@ -213,7 +213,7 @@ if __name__ == "__main__":
 def test_a_connector_runs_but_cannot_read_the_checkout_however_the_app_was_started(
     tmp_path: Path, mode: str
 ) -> None:
-    """Swarmify's own install lends the sandbox only what it runs with (its Python, the read
+    """Kriflow's own install lends the sandbox only what it runs with (its Python, the read
     tripwire, on Linux bubblewrap's seccomp helper), found the same way whatever is on `sys.path`:
     the checkout under pytest (the root conftest) and in `uvicorn --reload`'s worker, none of it
     under plain uvicorn (`''`) or `python -c` (as `mise run gen-client` starts the app)."""
@@ -383,7 +383,7 @@ def test_the_sandbox_runners_socket_is_out_of_every_processs_reach(
     one allowed Unix sockets could, would leave the sandbox."""
     run = tmp_path / "run" / "swarmify"
     run.mkdir(parents=True)
-    monkeypatch.setenv(RUNNER, str(run / "sandbox.sock"))
+    monkeypatch.setenv("KRIFLOW_" + RUNNER, str(run / "sandbox.sock"))
     assert run.resolve() in Sandbox(tmp_path / "data").denied()
 
 

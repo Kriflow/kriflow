@@ -45,7 +45,7 @@ test("the install hint waits until the app has given something, then goes for go
 
 test("three days of use earn the hint too, never on the Office", async () => {
   await page.viewport(390, 844);
-  localStorage.setItem("swarmify.days", JSON.stringify(["2026-01-01", "2026-01-02", "2026-01-03"]));
+  localStorage.setItem("kriflow.days", JSON.stringify(["2026-01-01", "2026-01-02", "2026-01-03"]));
   setPwa({ offer: offer() as never, office: true });
   const screen = await render(<PwaNotices />);
   expect(screen.getByRole("complementary", { name: "Install Kriflow" }).query()).toBeNull();

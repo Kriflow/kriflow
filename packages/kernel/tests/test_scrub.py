@@ -4,7 +4,7 @@ import base64
 import json
 from urllib.parse import quote, quote_plus
 
-from swarmify_kernel import scrub
+from kriflow_kernel import scrub
 
 
 def test_values_are_replaced_by_their_login_until_the_stage_drops_them() -> None:

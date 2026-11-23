@@ -42,7 +42,7 @@ test("signs in with the password, then goes back to sign-in when the session end
 
   // The session expires: the next refused call brings the sign-in page back.
   session = false;
-  window.dispatchEvent(new Event("swarmify:signed-out"));
+  window.dispatchEvent(new Event("kriflow:signed-out"));
   await expect.element(screen.getByLabelText("Password", { exact: true })).toBeVisible();
 });
 

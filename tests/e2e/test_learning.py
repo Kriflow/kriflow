@@ -26,7 +26,7 @@ def test_approve_an_edited_skill_proposal_and_see_skills_records_and_scores(
 ) -> None:
     (tmp_path / "skills/taste").mkdir(parents=True)
     (tmp_path / "skills/taste/SKILL.md").write_text(SHARED)
-    with serve(tmp_path, SWARMIFY_E2E_RETRO="propose") as base_url:
+    with serve(tmp_path, KRIFLOW_E2E_RETRO="propose") as base_url:
         api = httpx.Client(base_url=f"{base_url}/api")
         world = api.post("/worlds", json={"name": "Video"}).json()["id"]
         workflow = api.post(f"/worlds/{world}/workflows", json={"yaml": RESEARCH}).json()

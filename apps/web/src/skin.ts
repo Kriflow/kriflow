@@ -4,7 +4,7 @@ import type { components } from "./api/schema";
 /** Role names on the page (ADR 0004, amended): code says planner and worker-1, the plain skin
  * says Planner and Worker 1. The Pied Piper names are an opt-in local skin, turned on in
  * Settings and kept in this browser only. */
-const KEY = "swarmify.skin";
+const KEY = "kriflow.skin";
 
 const PLAIN: Record<string, string> = {
   planner: "Planner",

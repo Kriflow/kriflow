@@ -13,11 +13,11 @@ from api_fakes import until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_api import fanout
-from swarmify_api.main import migrated_db
-from swarmify_connectors import FakeTransport
-from swarmify_memory import Memory
-from swarmify_runs import Decision, Run, RunStageView, StageDef
+from kriflow_api import fanout
+from kriflow_api.main import migrated_db
+from kriflow_connectors import FakeTransport
+from kriflow_memory import Memory
+from kriflow_runs import Decision, Run, RunStageView, StageDef
 
 PARA = {"name": "para", "kind": "stage", "server": "uvx para-mcp", "stage_types": ["connector"]}
 ELEMENTS = [

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_swarm import OPERATOR, Refused, SqliteStorage
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_swarm import OPERATOR, Refused, SqliteStorage
 
 T0 = datetime(2026, 10, 26, 10, 0, tzinfo=UTC)
 

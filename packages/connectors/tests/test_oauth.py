@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from swarmify_connectors import (
+from kriflow_connectors import (
     ConnectorError,
     Connectors,
     Credentials,
@@ -21,9 +21,9 @@ from swarmify_connectors import (
     McpTransport,
     SqliteStorage,
 )
-from swarmify_connectors.fake_oauth import FakeProvider
-from swarmify_connectors.oauth import SignInNeeded, is_auth_failure
-from swarmify_connectors.packages import MANIFEST
+from kriflow_connectors.fake_oauth import FakeProvider
+from kriflow_connectors.oauth import SignInNeeded, is_auth_failure
+from kriflow_connectors.packages import MANIFEST
 
 PROBE = Path(__file__).parent / "fixtures/packages/probe"
 REDIRECT = "https://swarmify.tail1234.ts.net/api/setup/oauth/callback"

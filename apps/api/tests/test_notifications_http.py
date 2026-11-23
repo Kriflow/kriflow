@@ -10,8 +10,8 @@ import pytest
 from api_fakes import studio, until
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import create_app
-from swarmify_notifications.fake import FakeSlack
+from kriflow_api.main import create_app
+from kriflow_notifications.fake import FakeSlack
 
 BASE = "http://swarmify.lan:8000"
 QUICK = "name: Quick\nstages:\n  - gate: ok\n    ask: Go?\n    kind: confirm\n"
@@ -28,7 +28,7 @@ def slack() -> Iterator[FakeSlack]:
 def running(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """The app with its default Notifier, the Slack adapter, and a connector that fails on
     a stage named explode."""
-    monkeypatch.setenv("SWARMIFY_BASE_URL", f"{BASE}/")
+    monkeypatch.setenv("KRIFLOW_BASE_URL", f"{BASE}/")
 
     def connector(_run: object, _id: str, stage: object) -> None:
         if getattr(stage, "name", "") == "explode":

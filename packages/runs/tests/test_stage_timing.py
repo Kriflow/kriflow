@@ -6,9 +6,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from kriflow_kernel import next_local
+from kriflow_runs import Runner, SqliteStorage, StageDef
 from runs_fakes import FakeConnector, wait_for
-from swarmify_kernel import next_local
-from swarmify_runs import Runner, SqliteStorage, StageDef
 
 PICK = StageDef("approve", "gate", {"ask": "Post it?"})
 

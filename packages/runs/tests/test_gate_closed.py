@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_runs import Illegal, Runner, StageDef
 from runs_fakes import FakeNotifier, wait_for
-from swarmify_runs import Illegal, Runner, StageDef
 
 WORK = StageDef("draft", "connector", {"calls": "writer"})
 REVIEW = StageDef("review", "gate", {"ask": "Approve or send back.", "kind": "approve"})

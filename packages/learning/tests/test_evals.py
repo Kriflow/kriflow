@@ -9,7 +9,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from swarmify_learning.evals import (
+from kriflow_learning.evals import (
     ARMS,
     KINDS,
     TASKS,

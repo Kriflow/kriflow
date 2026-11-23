@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import swarmify_connectors.packages as module
-from swarmify_connectors import (
+import kriflow_connectors.packages as module
+from kriflow_connectors import (
     ConnectorError,
     Connectors,
     InstallError,
@@ -16,12 +16,12 @@ from swarmify_connectors import (
     Packages,
     read_manifest,
 )
-from swarmify_connectors.index import read_index
-from swarmify_connectors.packages import MANIFEST
+from kriflow_connectors.index import read_index
+from kriflow_connectors.packages import MANIFEST
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NEWER = (
-    "echo 1.0.0 needs package contract 3, and this Kriflow runs contracts 1 to 2."
+    "echo 1.0.0 needs package contract 4, and this Kriflow runs contracts 1 to 3."
     " Update Kriflow first, or install an older echo."
 )
 
@@ -44,7 +44,7 @@ def test_a_manifest_without_a_contract_reads_as_1_and_one_inside_the_range_passe
 def test_a_newer_contract_is_refused_for_its_contract_before_its_unknown_field(
     tmp_path: Path,
 ) -> None:
-    folder = echo(tmp_path, 'contract = 3\nfield_of_contract_3 = "yes"')
+    folder = echo(tmp_path, 'contract = 4\nfield_of_contract_4 = "yes"')
     with pytest.raises(ManifestError) as refused:
         read_manifest(folder)
     assert str(refused.value) == NEWER
@@ -79,10 +79,10 @@ def test_a_contract_that_is_not_a_whole_number_from_1_is_a_schema_error(
 
 def test_review_and_install_refuse_a_newer_contract_before_any_step_runs(tmp_path: Path) -> None:
     packages = Packages(tmp_path / "data/packages", FIXTURES)
-    folder = echo(tmp_path, "contract = 3")
-    with pytest.raises(ManifestError, match="needs package contract 3"):
+    folder = echo(tmp_path, "contract = 4")
+    with pytest.raises(ManifestError, match="needs package contract 4"):
         packages.review(str(folder))
-    with pytest.raises(ManifestError, match="needs package contract 3"):
+    with pytest.raises(ManifestError, match="needs package contract 4"):
         packages.install(str(folder))
     assert not (folder / "installed.txt").exists() and not packages.root.exists()
 
@@ -94,10 +94,10 @@ def test_an_installed_version_outside_the_range_lists_invalid_and_does_not_enabl
     packages.install("packages/echo")
     connectors.enable("w1", "echo", "1.0.0")
     toml = packages.root / "echo/1.0.0" / MANIFEST
-    toml.write_text(f"contract = 3\n{toml.read_text()}")
+    toml.write_text(f"contract = 4\n{toml.read_text()}")
     [listed] = packages.list()
     assert (listed.state, listed.problem) == ("invalid", NEWER)
-    with pytest.raises(ValueError, match="^echo 1.0.0 needs package contract 3"):
+    with pytest.raises(ValueError, match="^echo 1.0.0 needs package contract 4"):
         connectors.enable("w2", "echo", "1.0.0")
     with pytest.raises(ConnectorError) as stage:
         connectors.run_stage("w1", "r1", "s1", {"calls": "echo", "params": {}})
@@ -111,7 +111,7 @@ def test_a_local_package_carries_the_newest_contract_and_is_reused(tmp_path: Pat
     drafted = {**read_manifest(echo(tmp_path, "")), "name": "drafted"}
     del drafted["install"]
     first = packages.install_local(drafted)
-    assert packages.manifest("drafted", first.version)["contract"] == 2
+    assert packages.manifest("drafted", first.version)["contract"] == 3
     assert packages.install_local(drafted) == first
 
 

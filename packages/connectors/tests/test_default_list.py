@@ -1,7 +1,7 @@
 """The Default List (issue 585): default packages are pinned by tag and installed from git, trusted
 and sharing the caches, nothing fetched when that version is installed; `python_script` stays a
 folder of the core. A local git repository of tagged fixture packages stands in for
-Kriflow/packages, through the `SWARMIFY_DEFAULT_PACKAGES` override."""
+Kriflow/packages, through the `KRIFLOW_DEFAULT_PACKAGES` override."""
 
 import json
 import shutil
@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-import swarmify_connectors.packages as packages_module
-from swarmify_connectors import DEFAULT_LIST, Connectors, InstallError
-from swarmify_connectors.fake import default_list, tag_package
-from swarmify_connectors.packages import RECORD
+import kriflow_connectors.packages as packages_module
+from kriflow_connectors import DEFAULT_LIST, Connectors, InstallError
+from kriflow_connectors.fake import default_list, tag_package
+from kriflow_connectors.packages import RECORD
 
 FIXTURES = Path(__file__).parent / "fixtures/packages"
 REPO = Path(__file__).parents[3]
@@ -27,7 +27,7 @@ def listed(tmp_path: Path, connectors: Connectors, monkeypatch: pytest.MonkeyPat
     shutil.copytree(REPO / "connectors/python_script", core / "connectors/python_script")
     connectors.packages.repo = core
     file = default_list(tmp_path / "packages", {n: FIXTURES / n for n in ("echo", "probe")})
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(file))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(file))
     return file
 
 
@@ -133,9 +133,9 @@ def test_a_local_default_list_is_held_to_the_package_sources(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_PACKAGE_SOURCES", str(tmp_path / "elsewhere"))
+    monkeypatch.setenv("KRIFLOW_PACKAGE_SOURCES", str(tmp_path / "elsewhere"))
     assert connectors.install_defaults() == {}
-    assert "not in SWARMIFY_PACKAGE_SOURCES" in caplog.text
+    assert "not in KRIFLOW_PACKAGE_SOURCES" in caplog.text
 
 
 def test_the_shipped_list_pins_each_default_package_at_its_release_tag() -> None:
@@ -163,7 +163,7 @@ def test_a_missing_default_list_installs_only_the_core_s_own(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_DEFAULT_PACKAGES", str(listed.parent / "nope.toml"))
+    monkeypatch.setenv("KRIFLOW_DEFAULT_PACKAGES", str(listed.parent / "nope.toml"))
     assert connectors.install_defaults() == {}
     assert "the Default List" in caplog.text
     with pytest.raises(InstallError):

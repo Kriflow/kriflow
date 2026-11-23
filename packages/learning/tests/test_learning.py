@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from swarmify_kernel import Event
-from swarmify_learning import Learning, Proposal
+from kriflow_kernel import Event
+from kriflow_learning import Learning, Proposal
 
 SKILL = "---\nname: hooks\ndescription: Open on the hook.\n---\n\nWrite the hook first.\n"
 SHARED = "---\nname: cite\ndescription: Cite sources.\n---\n\nName the note you took it from.\n"

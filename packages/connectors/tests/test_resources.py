@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Connectors, Credentials, McpTransport, SqliteStorage, resources
-from swarmify_connectors.packages import MANIFEST
-from swarmify_connectors.sandbox import Grants, Sandbox
+from kriflow_connectors import Connectors, Credentials, McpTransport, SqliteStorage, resources
+from kriflow_connectors.packages import MANIFEST
+from kriflow_connectors.sandbox import Grants, Sandbox
 
 PROBE = Path(__file__).parent / "fixtures/packages/probe"
 NOTE = {"run": "run_1", "root": "run_1", "stage": "s1", "package": "probe"}
@@ -68,6 +68,11 @@ def test_a_declared_resource_and_the_run_identity_reach_the_process_and_nothing_
         folder = Path(env["SWARMIFY_STAGE_DIR"])
         assert folder == real.data_dir / "worlds/w1/runs/run_child" / stage
         assert (folder / "probe.txt").read_text() == "x"
+        # under both names, equal (kriflow#595): pinned package versions read SWARMIFY_ forever
+        old = {k.removeprefix("SWARMIFY_"): v for k, v in env.items() if k.startswith("SWARMIFY_")}
+        new = {k.removeprefix("KRIFLOW_"): v for k, v in env.items() if k.startswith("KRIFLOW_")}
+        assert old == new and {"RUN_ID", "RUN_ROOT", "STAGE_ID", "STAGE_DIR"} <= set(new)
+    assert seated["KRIFLOW_RESOURCE_SEAT"] == seated["SWARMIFY_RESOURCE_SEAT"]
 
 
 TAKE = """
@@ -77,6 +82,7 @@ folder = os.environ["SWARMIFY_RESOURCE_{name}"]
 with open(os.path.join(folder, "0.lock"), "a") as slot:
     fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
 print(os.environ["SWARMIFY_RESOURCE_{name}_SLOTS"], os.environ.get("SWARMIFY_GPU_LOCK", "none"))
+print(os.environ["KRIFLOW_RESOURCE_{name}_SLOTS"], os.environ.get("KRIFLOW_GPU_LOCK", "none"))
 """
 
 
@@ -95,7 +101,7 @@ def test_a_process_writes_its_resource_folder_inside_the_sandbox(
     folder = sandbox.resources / name.lower()
     assert (folder / "mine.txt").read_text() == "x"
     gpu_lock = str(folder / "0.lock") if lock else "none"
-    assert done.stdout.split() == ["1", gpu_lock]
+    assert done.stdout.split() == ["1", gpu_lock] * 2  # under both names (kriflow#595)
 
 
 def _overlap(tmp_path: Path) -> list[tuple[str, float, float]]:
@@ -125,7 +131,7 @@ def test_two_holders_of_a_one_slot_resource_take_turns(tmp_path: Path) -> None:
 def test_two_slots_let_two_holders_in_at_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SWARMIFY_RESOURCES", "gpu=1, seat=2")
+    monkeypatch.setenv("KRIFLOW_RESOURCES", "gpu=1, seat=2")
     first, second = _overlap(tmp_path)
     assert second[1] < first[2]
 
@@ -133,7 +139,7 @@ def test_two_slots_let_two_holders_in_at_once(
 HOLDER = """
 import sys, time
 from pathlib import Path
-from swarmify_connectors import resources
+from kriflow_connectors import resources
 place, slots = resources.folder(Path(sys.argv[1]), "seat")
 with resources.hold(place, slots, {"run": "run_dead", "stage": "s1"}):
     print("held", flush=True)

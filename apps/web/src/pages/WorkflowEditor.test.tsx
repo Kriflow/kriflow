@@ -864,7 +864,7 @@ test("a new workflow offers the starter workflows; picking one replaces an untou
 });
 
 test("an existing workflow offers no starters, and the Pied Piper skin names the planner Richard", async () => {
-  localStorage.setItem("swarmify.skin", "pied-piper");
+  localStorage.setItem("kriflow.skin", "pied-piper");
   fake({
     "GET /api/worlds/world_1": () => Response.json(video),
     "GET /api/workflows/wf_1/versions": () => Response.json([v1]),

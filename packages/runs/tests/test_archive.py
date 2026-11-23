@@ -3,8 +3,8 @@ it, archived runs leave the default list, and restore brings the family back."""
 
 import pytest
 
+from kriflow_runs import Illegal, Pinned, Run, Runner, StageDef
 from runs_fakes import wait_for
-from swarmify_runs import Illegal, Pinned, Run, Runner, StageDef
 
 WORLD = "world_a"
 REVIEW = StageDef("review", "gate", {"ask": "Approve?", "kind": "approve"})

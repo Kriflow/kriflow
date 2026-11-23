@@ -65,7 +65,7 @@ export async function disablePush(device: Device | null) {
   if (device) await api.DELETE("/api/push/subscriptions/{device_id}", { params: { path: { device_id: device.id } } });
 }
 
-const LATER = "swarmify.push.later";
+const LATER = "kriflow.push.later";
 const MONTH = 30 * 24 * 3600 * 1000;
 
 /** "Not now" on the prompt: it stays away for 30 days. */

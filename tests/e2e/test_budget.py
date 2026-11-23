@@ -14,7 +14,7 @@ import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
-from swarmify_notifications.fake import FakeSlack
+from kriflow_notifications.fake import FakeSlack
 
 RESEARCH = """name: Research
 stages:

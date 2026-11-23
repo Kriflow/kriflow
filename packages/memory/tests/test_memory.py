@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_memory import INLINE_MAX, Memory
+from kriflow_kernel import MIGRATIONS
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_memory import INLINE_MAX, Memory
 
 
 @pytest.fixture

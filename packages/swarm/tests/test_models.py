@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_swarm import OPERATOR, CastEntry, SdkRuntime, SqliteStorage, Swarm, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_swarm.sdk import DEFAULT_MODEL, PRICES, step_cost
 from swarm_db import DiskFiles
-from swarmify_swarm import OPERATOR, CastEntry, SdkRuntime, SqliteStorage, Swarm, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
-from swarmify_swarm.sdk import DEFAULT_MODEL, PRICES, step_cost
 
 W, R, S = "world_1", "run_1", "stage_1"
 MTOK = {"input_tokens": 1_000_000}
@@ -29,9 +29,9 @@ def test_each_model_has_its_own_price_and_an_unknown_one_costs_the_most() -> Non
 def test_the_runtime_defaults_to_the_setting_which_the_environment_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("SWARMIFY_MODEL", raising=False)
+    monkeypatch.delenv("KRIFLOW_MODEL", raising=False)
     assert SdkRuntime().model == DEFAULT_MODEL
-    monkeypatch.setenv("SWARMIFY_MODEL", "claude-haiku-4-5")
+    monkeypatch.setenv("KRIFLOW_MODEL", "claude-haiku-4-5")
     assert SdkRuntime().model == "claude-haiku-4-5"
     assert SdkRuntime(model="claude-sonnet-5-5").model == "claude-sonnet-5-5"
 

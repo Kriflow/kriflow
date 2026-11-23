@@ -24,7 +24,7 @@ afterEach(() => {
 const more = (card: ReturnType<ReturnType<typeof page.elementLocator>["getByTestId"]>) => card.getByText(/^Add a note$/).click();
 
 test("the queue opens the next decision after each answer and says what was decided", async () => {
-  localStorage.removeItem("swarmify.answered-a-gate");
+  localStorage.removeItem("kriflow.answered-a-gate");
   const bodies: Record<string, unknown> = {};
   const decision = (id: string) => async (req: Request) => {
     bodies[id] = await req.json();
@@ -212,7 +212,7 @@ test("a refused sign-in, unread retention and a post still private a day on need
         { kind: "visibility", text: "Music video is still private on youtube a day on.", world_id: "world_2", run_id: "run_2" },
       ]),
   });
-  localStorage.removeItem("swarmify.dismissed-notices");
+  localStorage.removeItem("kriflow.dismissed-notices");
   const { screen } = await mountAt("/gates?world=world_1");
   // One quiet row a kind, under the gate; red only for a failure.
   const signIn = screen.getByTestId("notices-sign_in");
@@ -232,7 +232,7 @@ test("a refused sign-in, unread retention and a post still private a day on need
   // Dismissed, it stays gone until its words change.
   await posts.getByRole("button", { name: "Dismiss" }).click();
   await expect.element(screen.getByTestId("notices-visibility")).not.toBeInTheDocument();
-  expect(localStorage.getItem("swarmify.dismissed-notices")).toContain("Five hooks");
+  expect(localStorage.getItem("kriflow.dismissed-notices")).toContain("Five hooks");
   expect(screen.getByText(/Music video/).elements()).toHaveLength(0);
 });
 
@@ -986,7 +986,7 @@ test("on a 390 px phone a package's Review Feed shows as one notice in its world
         { kind: "feed", text: "1 Tray things need you: 1 prop.", world_id: "world_2", run_id: null, url: open },
       ]),
   });
-  localStorage.removeItem("swarmify.dismissed-notices");
+  localStorage.removeItem("kriflow.dismissed-notices");
   const { screen } = await mountAt("/gates?world=world_1");
   const feed = screen.getByTestId("notices-feed");
   await feed.getByText("1 app has things for you").click();
@@ -1013,7 +1013,7 @@ test("a push about a Review Feed opens Needs you with the feed's notice open and
         { kind: "feed", text: "2 Tray things need you: 2 props.", world_id: "world_1", run_id: null, url: open },
       ]),
   });
-  localStorage.removeItem("swarmify.dismissed-notices");
+  localStorage.removeItem("kriflow.dismissed-notices");
   const { screen } = await mountAt("/gates?notice=feed");
   const link = screen.getByTestId("notices-feed").getByRole("link", { name: "Open" });
   await expect.element(link).toBeVisible();

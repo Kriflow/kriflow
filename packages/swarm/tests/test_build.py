@@ -8,8 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from swarm_db import DiskFiles
-from swarmify_swarm import (
+from kriflow_swarm import (
     SdkRuntime,
     SessionEnd,
     SessionHooks,
@@ -20,9 +19,10 @@ from swarmify_swarm import (
     Swarm,
     build,
 )
-from swarmify_swarm.fake import Call, Die, Lost, Say, Script, Step
-from swarmify_swarm.network import NetworkWait
-from swarmify_swarm.sdk import options as options_for
+from kriflow_swarm.fake import Call, Die, Lost, Say, Script, Step
+from kriflow_swarm.network import NetworkWait
+from kriflow_swarm.sdk import options as options_for
+from swarm_db import DiskFiles
 
 DOMAINS = ["registry.npmjs.org", "pypi.org"]
 W, R, S = "world_1", "run_1", "stage_1"

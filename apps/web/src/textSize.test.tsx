@@ -22,7 +22,7 @@ test("Text size scales the root and is kept for this device", async () => {
   await expect.element(screen.getByRole("radio", { name: "Default" })).toBeChecked();
 
   await screen.getByRole("radio", { name: "Larger" }).click();
-  expect(localStorage.getItem("swarmify.textSize")).toBe("larger");
+  expect(localStorage.getItem("kriflow.textSize")).toBe("larger");
   expect(document.documentElement.dataset.textSize).toBe("larger");
   expect(root()).toBeCloseTo(base * 1.25);
 
@@ -30,17 +30,17 @@ test("Text size scales the root and is kept for this device", async () => {
   expect(root()).toBeCloseTo(base * 1.125);
 
   await screen.getByRole("radio", { name: "Default" }).click();
-  expect(localStorage.getItem("swarmify.textSize")).toBeNull();
+  expect(localStorage.getItem("kriflow.textSize")).toBeNull();
   expect(document.documentElement.dataset.textSize).toBeUndefined();
   expect(root()).toBeCloseTo(base);
 });
 
 test("a saved size comes back on load, and blocked storage falls back to Default", () => {
-  localStorage.setItem("swarmify.textSize", "large");
+  localStorage.setItem("kriflow.textSize", "large");
   applyTextSize();
   expect(document.documentElement.dataset.textSize).toBe("large");
 
-  localStorage.setItem("swarmify.textSize", "huge");
+  localStorage.setItem("kriflow.textSize", "huge");
   expect(textSize()).toBe("default");
 
   vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {

@@ -8,17 +8,17 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "swarmify",
-    "swarmify-api",
-    "swarmify-connectors",
-    "swarmify-kernel",
-    "swarmify-learning",
-    "swarmify-memory",
-    "swarmify-notifications",
-    "swarmify-runs",
-    "swarmify-swarm",
-    "swarmify-workflows",
-    "swarmify-worlds",
+    "kriflow",
+    "kriflow-api",
+    "kriflow-connectors",
+    "kriflow-kernel",
+    "kriflow-learning",
+    "kriflow-memory",
+    "kriflow-notifications",
+    "kriflow-runs",
+    "kriflow-swarm",
+    "kriflow-workflows",
+    "kriflow-worlds",
 ]
 
 [[package]]
@@ -745,6 +745,223 @@ sdist = { url = "https://files.pythonhosted.org/packages/19/74/a633ee74eb36c44aa
 wheels = [
     { url = "https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl", hash = "sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe", size = 18437, upload-time = "2025-09-08T01:34:57.871Z" },
 ]
+
+[[package]]
+name = "kriflow"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "hypothesis" },
+    { name = "pillow" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-playwright" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "hypothesis", specifier = ">=6.150" },
+    { name = "pillow", specifier = "==12.0.0" },
+    { name = "pyright", specifier = ">=1.1.414" },
+    { name = "pytest", specifier = ">=9.1" },
+    { name = "pytest-cov", specifier = ">=7.1" },
+    { name = "pytest-playwright", specifier = ">=0.10" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "ruff", specifier = ">=0.17" },
+    { name = "types-pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "kriflow-api"
+version = "0.1.0"
+source = { editable = "apps/api" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx2" },
+    { name = "jsonschema" },
+    { name = "kriflow-connectors" },
+    { name = "kriflow-kernel" },
+    { name = "kriflow-learning" },
+    { name = "kriflow-memory" },
+    { name = "kriflow-notifications" },
+    { name = "kriflow-runs" },
+    { name = "kriflow-swarm" },
+    { name = "kriflow-workflows" },
+    { name = "kriflow-worlds" },
+    { name = "mcp" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.162" },
+    { name = "httpx2", specifier = ">=2.16" },
+    { name = "jsonschema", specifier = ">=4.26" },
+    { name = "kriflow-connectors", editable = "packages/connectors" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+    { name = "kriflow-learning", editable = "packages/learning" },
+    { name = "kriflow-memory", editable = "packages/memory" },
+    { name = "kriflow-notifications", editable = "packages/notifications" },
+    { name = "kriflow-runs", editable = "packages/runs" },
+    { name = "kriflow-swarm", editable = "packages/swarm" },
+    { name = "kriflow-workflows", editable = "packages/workflows" },
+    { name = "kriflow-worlds", editable = "packages/worlds" },
+    { name = "mcp", specifier = ">=2.3" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "uvicorn", specifier = ">=0.54" },
+]
+
+[[package]]
+name = "kriflow-connectors"
+version = "0.1.0"
+source = { editable = "packages/connectors" }
+dependencies = [
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "kriflow-kernel" },
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "jsonschema", specifier = ">=4.26" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+    { name = "mcp", specifier = ">=2.3" },
+]
+
+[[package]]
+name = "kriflow-kernel"
+version = "0.1.0"
+source = { editable = "packages/kernel" }
+dependencies = [
+    { name = "tzdata" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "tzdata" }]
+
+[[package]]
+name = "kriflow-learning"
+version = "0.1.0"
+source = { editable = "packages/learning" }
+dependencies = [
+    { name = "kriflow-kernel" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "kriflow-kernel", editable = "packages/kernel" }]
+
+[[package]]
+name = "kriflow-memory"
+version = "0.1.0"
+source = { editable = "packages/memory" }
+dependencies = [
+    { name = "graphifyy", extra = ["mcp"] },
+    { name = "kriflow-kernel" },
+    { name = "mcp" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "graphifyy", extras = ["mcp"], specifier = "==0.9.95" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+    { name = "mcp", specifier = ">=2.3" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "kriflow-notifications"
+version = "0.1.0"
+source = { editable = "packages/notifications" }
+dependencies = [
+    { name = "http-ece" },
+    { name = "kriflow-kernel" },
+    { name = "py-vapid" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "http-ece", specifier = ">=1.2.1" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+    { name = "py-vapid", specifier = ">=1.9.6" },
+]
+
+[[package]]
+name = "kriflow-runs"
+version = "0.1.0"
+source = { editable = "packages/runs" }
+dependencies = [
+    { name = "dbos" },
+    { name = "kriflow-kernel" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dbos", specifier = ">=3.3" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+    { name = "sqlalchemy", specifier = ">=2" },
+]
+
+[[package]]
+name = "kriflow-swarm"
+version = "0.1.0"
+source = { editable = "packages/swarm" }
+dependencies = [
+    { name = "claude-agent-sdk" },
+    { name = "jsonschema" },
+    { name = "kriflow-kernel" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "claude-agent-sdk", specifier = "==0.2.174" },
+    { name = "jsonschema", specifier = ">=4.26" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+]
+
+[[package]]
+name = "kriflow-workflows"
+version = "0.1.0"
+source = { editable = "packages/workflows" }
+dependencies = [
+    { name = "croniter" },
+    { name = "kriflow-kernel" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "croniter", specifier = ">=6.0" },
+    { name = "kriflow-kernel", editable = "packages/kernel" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "kriflow-worlds"
+version = "0.1.0"
+source = { editable = "packages/worlds" }
+dependencies = [
+    { name = "kriflow-kernel" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "kriflow-kernel", editable = "packages/kernel" }]
 
 [[package]]
 name = "mcp"
@@ -1773,223 +1990,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/48/bb/3d8757f21e9a53d90
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/2e/947cfe02def9371c07cd5bf5b6b61c829e9aecb9904db02a66cfafbc1eec/starlette-1.10.0-py3-none-any.whl", hash = "sha256:478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4", size = 80571, upload-time = "2026-10-24T15:04:10.371Z" },
 ]
-
-[[package]]
-name = "swarmify"
-version = "0.1.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "hypothesis" },
-    { name = "pillow" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-playwright" },
-    { name = "pytest-xdist" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "hypothesis", specifier = ">=6.150" },
-    { name = "pillow", specifier = "==12.0.0" },
-    { name = "pyright", specifier = ">=1.1.414" },
-    { name = "pytest", specifier = ">=9.1" },
-    { name = "pytest-cov", specifier = ">=7.1" },
-    { name = "pytest-playwright", specifier = ">=0.10" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
-    { name = "ruff", specifier = ">=0.17" },
-    { name = "types-pyyaml", specifier = ">=6.0" },
-]
-
-[[package]]
-name = "swarmify-api"
-version = "0.1.0"
-source = { editable = "apps/api" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "httpx2" },
-    { name = "jsonschema" },
-    { name = "mcp" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "swarmify-connectors" },
-    { name = "swarmify-kernel" },
-    { name = "swarmify-learning" },
-    { name = "swarmify-memory" },
-    { name = "swarmify-notifications" },
-    { name = "swarmify-runs" },
-    { name = "swarmify-swarm" },
-    { name = "swarmify-workflows" },
-    { name = "swarmify-worlds" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.162" },
-    { name = "httpx2", specifier = ">=2.16" },
-    { name = "jsonschema", specifier = ">=4.26" },
-    { name = "mcp", specifier = ">=2.3" },
-    { name = "python-multipart", specifier = ">=0.0.20" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "swarmify-connectors", editable = "packages/connectors" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-    { name = "swarmify-learning", editable = "packages/learning" },
-    { name = "swarmify-memory", editable = "packages/memory" },
-    { name = "swarmify-notifications", editable = "packages/notifications" },
-    { name = "swarmify-runs", editable = "packages/runs" },
-    { name = "swarmify-swarm", editable = "packages/swarm" },
-    { name = "swarmify-workflows", editable = "packages/workflows" },
-    { name = "swarmify-worlds", editable = "packages/worlds" },
-    { name = "uvicorn", specifier = ">=0.54" },
-]
-
-[[package]]
-name = "swarmify-connectors"
-version = "0.1.0"
-source = { editable = "packages/connectors" }
-dependencies = [
-    { name = "httpx" },
-    { name = "jsonschema" },
-    { name = "mcp" },
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "jsonschema", specifier = ">=4.26" },
-    { name = "mcp", specifier = ">=2.3" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-]
-
-[[package]]
-name = "swarmify-kernel"
-version = "0.1.0"
-source = { editable = "packages/kernel" }
-dependencies = [
-    { name = "tzdata" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "tzdata" }]
-
-[[package]]
-name = "swarmify-learning"
-version = "0.1.0"
-source = { editable = "packages/learning" }
-dependencies = [
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "swarmify-kernel", editable = "packages/kernel" }]
-
-[[package]]
-name = "swarmify-memory"
-version = "0.1.0"
-source = { editable = "packages/memory" }
-dependencies = [
-    { name = "graphifyy", extra = ["mcp"] },
-    { name = "mcp" },
-    { name = "pyyaml" },
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "graphifyy", extras = ["mcp"], specifier = "==0.9.95" },
-    { name = "mcp", specifier = ">=2.3" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-]
-
-[[package]]
-name = "swarmify-notifications"
-version = "0.1.0"
-source = { editable = "packages/notifications" }
-dependencies = [
-    { name = "http-ece" },
-    { name = "py-vapid" },
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "http-ece", specifier = ">=1.2.1" },
-    { name = "py-vapid", specifier = ">=1.9.6" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-]
-
-[[package]]
-name = "swarmify-runs"
-version = "0.1.0"
-source = { editable = "packages/runs" }
-dependencies = [
-    { name = "dbos" },
-    { name = "sqlalchemy" },
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dbos", specifier = ">=3.3" },
-    { name = "sqlalchemy", specifier = ">=2" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-]
-
-[[package]]
-name = "swarmify-swarm"
-version = "0.1.0"
-source = { editable = "packages/swarm" }
-dependencies = [
-    { name = "claude-agent-sdk" },
-    { name = "jsonschema" },
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "claude-agent-sdk", specifier = "==0.2.174" },
-    { name = "jsonschema", specifier = ">=4.26" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-]
-
-[[package]]
-name = "swarmify-workflows"
-version = "0.1.0"
-source = { editable = "packages/workflows" }
-dependencies = [
-    { name = "croniter" },
-    { name = "pyyaml" },
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "croniter", specifier = ">=6.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "swarmify-kernel", editable = "packages/kernel" },
-]
-
-[[package]]
-name = "swarmify-worlds"
-version = "0.1.0"
-source = { editable = "packages/worlds" }
-dependencies = [
-    { name = "swarmify-kernel" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "swarmify-kernel", editable = "packages/kernel" }]
 
 [[package]]
 name = "text-unidecode"

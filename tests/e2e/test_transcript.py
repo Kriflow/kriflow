@@ -1,7 +1,7 @@
 """An agent stage's Transcript (issue 533), at phone size first: Summary by default, then the
 agents' own words with their faces, tool calls as rows that open to their input and result, a
 write as a diff, and a filter to one agent. Nothing runs wide and every tap is 44 px. Set
-SWARMIFY_SHOTS to a folder to keep screenshots."""
+KRIFLOW_SHOTS to a folder to keep screenshots."""
 
 import os
 import re
@@ -22,7 +22,7 @@ stages:
     done_when: 5 ideas ranked
     output_type: list[idea]
 """
-SHOTS = os.environ.get("SWARMIFY_SHOTS")
+SHOTS = os.environ.get("KRIFLOW_SHOTS")
 
 
 @pytest.fixture(scope="module")

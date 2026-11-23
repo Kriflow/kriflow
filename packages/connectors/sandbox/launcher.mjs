@@ -2,15 +2,15 @@
 //
 //   node launcher.mjs <plan.json> -- <command> [args...]
 //
-// The plan is what Swarmify wrote for this process (swarmify_connectors/sandbox.py): `sandbox`,
+// The plan is what Kriflow wrote for this process (kriflow_connectors/sandbox.py): `sandbox`,
 // the sandbox-runtime config; `cwd`, the folder it runs in; `env`, variables set for the command
 // (its own HOME and TMPDIR); `pass`, the names of the variables of ours it may have (its own
 // Setup values), besides a few every process needs; `blocked`, the file each attempt the sandbox
-// blocks is appended to as one JSON line, for Swarmify to log; `observe`, on Linux, the read
+// blocks is appended to as one JSON line, for Kriflow to log; `observe`, on Linux, the read
 // tripwire the command runs under (observe.py), whose reports arrive on stderr after `nonce`;
 // `session`, true for an MCP server over stdio; and `stderr`, the file the command's last stderr
 // lines are kept in (its scratch folder's), which the Agent SDK's CLI drops for an MCP server, for
-// Swarmify to show when one fails to start.
+// Kriflow to show when one fails to start.
 //
 // The command's stdin and stdout are relayed and its exit code is ours. With `session` the
 // launcher also ends once its stdin and the command's stdout have both closed: the MCP session is
@@ -44,7 +44,7 @@ process.env.CLAUDE_CODE_TMPDIR = plan.env.TMPDIR;
 // there, granted again, keeps them in sight (and under the 108 bytes a socket path may have).
 let sockets;
 if (process.platform === "linux") {
-  sockets = mkdtempSync("/tmp/swarmify-sandbox-");
+  sockets = mkdtempSync("/tmp/kriflow-sandbox-");
   process.env.TMPDIR = sockets;
   plan.sandbox.filesystem.allowRead.push(sockets);
 }
@@ -106,7 +106,8 @@ function save() {
   if (plan.stderr && tail.length) writeFileSync(plan.stderr, tail.join("\n") + "\n");
 }
 // A World Login (spec: World Logins) reaches its process through a mode-600 file in its scratch
-// folder that the core names in SWARMIFY_LOGIN_FILE, never a command line or an MCP config (the
+// folder that the core names in KRIFLOW_LOGIN_FILE (and SWARMIFY_LOGIN_FILE, the same file; its
+// values come under both names too), never a command line or an MCP config (the
 // agent runtime passes those as arguments, which `ps` shows): read once, deleted at once, and
 // handed to the command as its environment. Its values never leave in a stderr line either.
 function loginValues(file) {
@@ -116,7 +117,7 @@ function loginValues(file) {
     try {
       if (!fstatSync(fd).isFile()) return {};
       const read = JSON.parse(readFileSync(fd, "utf8"));
-      return Object.fromEntries(Object.entries(read).filter(([k, v]) => k.startsWith("SWARMIFY_LOGIN_") && typeof v === "string"));
+      return Object.fromEntries(Object.entries(read).filter(([k, v]) => /^(KRIFLOW|SWARMIFY)_LOGIN_/.test(k) && typeof v === "string"));
     } finally {
       closeSync(fd);
     }
@@ -126,7 +127,7 @@ function loginValues(file) {
     rmSync(file, { force: true });
   }
 }
-const login = loginValues(process.env.SWARMIFY_LOGIN_FILE);
+const login = loginValues(process.env.KRIFLOW_LOGIN_FILE ?? process.env.SWARMIFY_LOGIN_FILE);
 const cookies = (x) =>
   !x || typeof x !== "object" ? [] : Object.entries(x).flatMap(([k, v]) => (k === "value" && typeof v === "string" && v.length >= 8 ? [v] : cookies(v)));
 let kept = [];

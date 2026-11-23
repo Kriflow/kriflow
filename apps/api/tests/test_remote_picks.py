@@ -1,8 +1,8 @@
 """A multi-pick gate is never answered half in chat: a Remote Approval gets the link, no buttons."""
 
-from swarmify_api.remote import answers, said
-from swarmify_memory import ArtifactFile
-from swarmify_runs import Gate
+from kriflow_api.remote import answers, said
+from kriflow_memory import ArtifactFile
+from kriflow_runs import Gate
 
 CARDS = [
     ArtifactFile(f"card-{i}.md", f"runs/r/s/artifacts/card-{i}.md", "card", "judge", f"Card {i}",

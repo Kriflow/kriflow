@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import Pinned, Run, Runner, SqliteStorage, StageDef
 from runs_fakes import FakeConnector, wait_for
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import Pinned, Run, Runner, SqliteStorage, StageDef
 
 PICK = StageDef("pick", "gate", {"ask": "Pick one.", "kind": "pick"})
 RESEARCH = StageDef("research", "connector", {"calls": "web_search"})

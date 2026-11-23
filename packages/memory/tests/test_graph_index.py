@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_memory import EMPTY, GRAPH_OUT, FakeGraphIndex, GodNode, McpGraphIndex, graph_size
-from swarmify_memory.graph import parse_god_nodes
+from kriflow_memory import EMPTY, GRAPH_OUT, FakeGraphIndex, GodNode, McpGraphIndex, graph_size
+from kriflow_memory.graph import parse_god_nodes
 
 GRAPH = Path(__file__).parent / "fixtures/graph/graph.json"
 
@@ -72,7 +72,7 @@ def test_the_graph_map_groups_communities_and_finds_surprises_linked_to_their_ru
     note, read from the graph file."""
     import json
 
-    from swarmify_memory import Community, GraphNode, Surprise, graph_map
+    from kriflow_memory import Community, GraphNode, Surprise, graph_map
 
     note = "runs/run_1/research/notes/{}.md".format
     nodes = [

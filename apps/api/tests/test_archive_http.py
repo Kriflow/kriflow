@@ -11,11 +11,11 @@ from api_fakes import FakeNotifier, until
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import run_control, run_storage, task_board, workflow_service, world_service
-from swarmify_api.mcp import server
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import RunControl
+from kriflow_api.main import run_control, run_storage, task_board, workflow_service, world_service
+from kriflow_api.mcp import server
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import RunControl
 
 GATED = "name: Gated\nstages:\n  - gate: ok\n    ask: Fine?\n"
 WEEKLY = "name: Weekly\nschedule: '0 8 * * 1'\nstages:\n  - gate: ok\n    ask: Fine?\n"

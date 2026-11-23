@@ -3,9 +3,9 @@
 from contextlib import closing
 from pathlib import Path
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_workflows import MIGRATIONS, ConnectorRef
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_workflows import MIGRATIONS, ConnectorRef
 
 
 def migrated_db(tmp_path: Path) -> Path:

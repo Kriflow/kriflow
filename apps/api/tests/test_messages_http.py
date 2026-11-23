@@ -10,9 +10,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_swarm_http import CLAIM, FINISH, GRAPH, IDEAS, PASS, PLAN, _ended, _start, _until
 
-from swarmify_swarm import WORKER
-from swarmify_swarm.fake import Hold, Say, Script
-from swarmify_swarm.worker import FROM_PERSON
+from kriflow_swarm import WORKER
+from kriflow_swarm.fake import Hold, Say, Script
+from kriflow_swarm.worker import FROM_PERSON
 
 
 @pytest.fixture

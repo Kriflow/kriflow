@@ -1,5 +1,5 @@
 [project]
-name = "swarmify-notifications"
+name = "kriflow-notifications"
 version = "0.1.0"
 description = "Notifications context: a Channel per world and the Slack messages sent on run events"
 requires-python = ">=3.12"
@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 dependencies = [
     "http-ece>=1.2.1",
     "py-vapid>=1.9.6",
-    "swarmify-kernel",
+    "kriflow-kernel",
 ]
 
 [build-system]

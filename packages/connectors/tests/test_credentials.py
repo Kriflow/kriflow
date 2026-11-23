@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import Credentials
+from kriflow_connectors import Credentials
 
 
 def test_set_writes_a_file_only_its_owner_can_read_and_merges(tmp_path: Path) -> None:

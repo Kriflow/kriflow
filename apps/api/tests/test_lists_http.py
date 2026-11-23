@@ -9,9 +9,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from mcp import Client
 
-from swarmify_api.auth import CALLER, Token
-from swarmify_api.lists import AgentLists
-from swarmify_api.main import (
+from kriflow_api.auth import CALLER, Token
+from kriflow_api.lists import AgentLists
+from kriflow_api.main import (
     migrated_db,
     run_control,
     task_board,
@@ -19,11 +19,11 @@ from swarmify_api.main import (
     world_lists,
     world_service,
 )
-from swarmify_api.mcp import server
-from swarmify_runs import Run, RunState
-from swarmify_runs import SqliteStorage as RunStorage
-from swarmify_swarm import ToolError, tool_id
-from swarmify_swarm.fake import LAST, Answer, Call, Say, Script
+from kriflow_api.mcp import server
+from kriflow_runs import Run, RunState
+from kriflow_runs import SqliteStorage as RunStorage
+from kriflow_swarm import ToolError, tool_id
+from kriflow_swarm.fake import LAST, Answer, Call, Say, Script
 
 IDEAS = {"statuses": ["pitched", "new", "making", "rejected"], "done": [], "rejected": ["rejected"]}
 

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_connectors import InstallError, ManifestError, Packages, read_manifest
-from swarmify_connectors.packages import ICON_BYTES, MANIFEST, RECORD, check_manifest
+from kriflow_connectors import InstallError, ManifestError, Packages, read_manifest
+from kriflow_connectors.packages import ICON_BYTES, MANIFEST, NEW_MANIFEST, RECORD, check_manifest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INVALID = sorted((FIXTURES / "manifests").glob("*.toml"))
@@ -72,8 +72,26 @@ def test_an_icon_is_an_svg_or_png_file_inside_the_package_and_small(tmp_path: Pa
 
 
 def test_a_folder_without_a_manifest_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(ManifestError, match="has no swarmify-connector.toml"):
+    with pytest.raises(
+        ManifestError, match="has no kriflow-connector.toml or swarmify-connector.toml"
+    ):
         read_manifest(tmp_path)
+
+
+def test_a_manifest_named_kriflow_connector_toml_installs_and_runs_and_both_names_are_refused(
+    packages: Packages, tmp_path: Path
+) -> None:
+    folder = tmp_path / "src/echo"
+    shutil.copytree(FIXTURES / "packages/echo", folder)
+    (folder / MANIFEST).rename(folder / NEW_MANIFEST)
+    package = packages.install(str(folder))
+    installed = packages.root / "echo/1.0.0"
+    assert (installed / NEW_MANIFEST).is_file() and not (installed / MANIFEST).exists()
+    assert package.state == "installed" and packages.manifest("echo", "1.0.0")["name"] == "echo"
+    shutil.copy(folder / NEW_MANIFEST, folder / MANIFEST)
+    with pytest.raises(ManifestError) as both:
+        read_manifest(folder)
+    assert "kriflow-connector.toml" in str(both.value) and MANIFEST in str(both.value)
 
 
 @pytest.fixture
@@ -190,17 +208,17 @@ def test_package_sources_limit_local_paths_to_the_listed_folders(
 ) -> None:
     source = copy_echo(tmp_path, '["python3", "-c", "pass"]')
     allowed = tmp_path / "sources"
-    monkeypatch.setenv("SWARMIFY_PACKAGE_SOURCES", f"{tmp_path / 'other'}:{allowed}")
-    with pytest.raises(InstallError, match="not in SWARMIFY_PACKAGE_SOURCES"):
+    monkeypatch.setenv("KRIFLOW_PACKAGE_SOURCES", f"{tmp_path / 'other'}:{allowed}")
+    with pytest.raises(InstallError, match="not in KRIFLOW_PACKAGE_SOURCES"):
         packages.review(str(source))
-    with pytest.raises(InstallError, match="not in SWARMIFY_PACKAGE_SOURCES"):
+    with pytest.raises(InstallError, match="not in KRIFLOW_PACKAGE_SOURCES"):
         packages.install(str(source), ref="main")
-    # this repository's own folders and a package Swarmify writes still install
+    # this repository's own folders and a package Kriflow writes still install
     assert packages.install("packages/echo").version == "1.0.0"
     assert packages.install_local({**read_manifest(source), "name": "drafted"}).version == "0.0.1"
     allowed.mkdir()
     shutil.move(source, allowed / "echo")
-    monkeypatch.setenv("SWARMIFY_PACKAGE_SOURCES", f"{allowed}/")
+    monkeypatch.setenv("KRIFLOW_PACKAGE_SOURCES", f"{allowed}/")
     with pytest.raises(InstallError, match="already installed"):  # past the source check
         packages.review(str(allowed / "echo"))
 

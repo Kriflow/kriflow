@@ -1,9 +1,11 @@
 """Import-boundary check: a bounded context imports the shared kernel and itself, nothing else.
 
 Usage: python tools/check_imports.py packages
-Each `packages/<name>/src/swarmify_<name>` package is scanned; any `swarmify_*` import that is
-not `swarmify_kernel` or the package's own name fails the check. The api app is the composition
-root and lives outside `packages`, so it is not scanned.
+Each `packages/<name>/src/kriflow_<name>` package is scanned; any `kriflow_*` import that is
+not `kriflow_kernel` or the package's own name fails the check, and so does any import of an old
+`swarmify_*` name (kriflow#593): those resolve only through the kernel's rename alias, kept for
+stored records, never for new code. The api app is the composition root and lives outside
+`packages`, so it is not scanned.
 """
 
 import ast
@@ -11,7 +13,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-KERNEL = "swarmify_kernel"
+KERNEL = "kriflow_kernel"
+OLD = "swarmify_"
 
 
 @dataclass(frozen=True)
@@ -37,13 +40,15 @@ def _imported_modules(tree: ast.AST) -> list[tuple[int, str]]:
 
 def violations(packages_dir: Path) -> list[Violation]:
     found: list[Violation] = []
-    for pkg_dir in sorted(packages_dir.glob("*/src/swarmify_*")):
+    for pkg_dir in sorted(packages_dir.glob("*/src/kriflow_*")):
         package = pkg_dir.name
         for file in sorted(pkg_dir.rglob("*.py")):
             tree = ast.parse(file.read_text(), filename=str(file))
             for line, module in _imported_modules(tree):
                 top = module.split(".")[0]
-                if top.startswith("swarmify_") and top not in (KERNEL, package):
+                if top.startswith(OLD) or (
+                    top.startswith("kriflow_") and top not in (KERNEL, package)
+                ):
                     found.append(Violation(package, file, line, module))
     return found
 

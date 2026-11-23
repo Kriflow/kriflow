@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from test_gates import at, fetch
 
-from swarmify_runs import Run, Runner, StageDef
+from kriflow_runs import Run, Runner, StageDef
 
 MAKE = StageDef("make", "connector", {"calls": "maker"})
 CHOOSE = StageDef("choose", "gate", {"ask": "Choose three.", "kind": "pick", "picks": 3})

@@ -8,8 +8,8 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, rule
 
+from kriflow_swarm import OPERATOR, Refused, SqliteStorage
 from swarm_db import migrated
-from swarmify_swarm import OPERATOR, Refused, SqliteStorage
 
 AGENTS = st.sampled_from(["gilfoyle", "dinesh", "jared"])
 

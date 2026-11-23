@@ -14,9 +14,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from test_push_http import AUTH, P256DH, PushService
 
-from swarmify_api import main, review_feeds
-from swarmify_api.main import create_app
-from swarmify_api.review_feeds import ReviewFeeds
+from kriflow_api import main, review_feeds
+from kriflow_api.main import create_app
+from kriflow_api.review_feeds import ReviewFeeds
 
 TRAY = "packages/connectors/tests/fixtures/packages/tray"
 OPEN = "https://tray.example:8765/#/review"

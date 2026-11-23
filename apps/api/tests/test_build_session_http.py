@@ -17,9 +17,9 @@ from api_fakes import install
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from swarmify_connectors import Connector, ConnectorError, FakeTransport
-from swarmify_swarm import tool_id
-from swarmify_swarm.fake import Answer, Call, Say, Script
+from kriflow_connectors import Connector, ConnectorError, FakeTransport
+from kriflow_swarm import tool_id
+from kriflow_swarm.fake import Answer, Call, Say, Script
 
 SKETCH = "packages/connectors/tests/fixtures/packages/sketch"
 FLOW = """name: A page

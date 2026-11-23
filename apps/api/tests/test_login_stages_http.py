@@ -20,10 +20,10 @@ import pytest
 from api_fakes import install
 from fastapi.testclient import TestClient
 
-from swarmify_api.main import create_app
-from swarmify_connectors.fake_site import FakeSite
-from swarmify_connectors.logins import FileSecrets, ref
-from swarmify_kernel.sqlite import connect
+from kriflow_api.main import create_app
+from kriflow_connectors.fake_site import FakeSite
+from kriflow_connectors.logins import FileSecrets, ref
+from kriflow_kernel.sqlite import connect
 
 SIGNER = Path(__file__).parents[3] / "packages/connectors/tests/fixtures/packages/signer"
 USER, PASSWORD = "ana", "Pa55-word-77031"
@@ -37,7 +37,7 @@ def site() -> Iterator[FakeSite]:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    monkeypatch.setenv("SWARMIFY_LOGIN_ALLOW_LOOPBACK", "1")  # the fake site is on loopback
+    monkeypatch.setenv("KRIFLOW_LOGIN_ALLOW_LOOPBACK", "1")  # the fake site is on loopback
     with TestClient(create_app(tmp_path / "data", poll_seconds=0.05, retro=False)) as c:
         yield c
 

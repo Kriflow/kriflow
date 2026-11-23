@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from swarmify_kernel import MIGRATIONS as KERNEL_MIGRATIONS
-from swarmify_kernel.sqlite import connect, migrate
-from swarmify_worlds import MIGRATIONS, SqliteStorage, Worlds
+from kriflow_kernel import MIGRATIONS as KERNEL_MIGRATIONS
+from kriflow_kernel.sqlite import connect, migrate
+from kriflow_worlds import MIGRATIONS, SqliteStorage, Worlds
 
 
 def _migrated(tmp_path: Path) -> Path:

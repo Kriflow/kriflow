@@ -117,7 +117,7 @@ export function Tokens({ Row }: { Row: (p: { title: string; about: string; child
         </form>
       </Row>
       {required && (
-        <Row title="Sign-in" about="One operator password for the install: SWARMIFY_PASSWORD in its .env.">
+        <Row title="Sign-in" about="One operator password for the install: KRIFLOW_PASSWORD (or SWARMIFY_PASSWORD) in its .env.">
           <div className="panel set-panel">
             <p>This browser stays signed in for 30 days unless you sign out.</p>
             <div className="set-save start">

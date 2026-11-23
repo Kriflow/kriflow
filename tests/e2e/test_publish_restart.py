@@ -18,7 +18,7 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from swarmify_connectors.setup import SetupStore
+from kriflow_connectors.setup import SetupStore
 
 FLOW = """name: Post once
 stages:
@@ -167,16 +167,14 @@ def settled(base_url: str, run: str) -> tuple[str, dict[str, Any]]:
 def test_a_stop_cutting_a_publish_resumes_it_and_posts_once(
     serve: Callable[..., AbstractContextManager[str]], platform: Platform, tmp_path: Path
 ) -> None:
-    with serve(
-        tmp_path, SWARMIFY_E2E_PLATFORM=platform.url, SWARMIFY_DRAIN_SECONDS="0"
-    ) as base_url:
+    with serve(tmp_path, KRIFLOW_E2E_PLATFORM=platform.url, KRIFLOW_DRAIN_SECONDS="0") as base_url:
         run = start_run(base_url, tmp_path)
         assert platform.began.wait(60), "the upload never began"
     # The app is stopped (SIGTERM) and gone, half the file at Platform, no video yet.
     assert platform.videos == [] and 0 < len(platform.got) < platform.size
     platform.release.set()
 
-    with serve(tmp_path, SWARMIFY_E2E_PLATFORM=platform.url) as base_url:
+    with serve(tmp_path, KRIFLOW_E2E_PLATFORM=platform.url) as base_url:
         status, call = settled(base_url, run)
         if status == "waiting_gate":  # unsure: asks, never posts blind
             gates = httpx.get(f"{base_url}/api/gates").json()
@@ -195,9 +193,7 @@ def test_a_stop_cutting_a_publish_resumes_it_and_posts_once(
 def test_a_stop_drains_a_publish_at_work_so_it_finishes_and_is_never_called_again(
     serve: Callable[..., AbstractContextManager[str]], platform: Platform, tmp_path: Path
 ) -> None:
-    with serve(
-        tmp_path, SWARMIFY_E2E_PLATFORM=platform.url, SWARMIFY_DRAIN_SECONDS="30"
-    ) as base_url:
+    with serve(tmp_path, KRIFLOW_E2E_PLATFORM=platform.url, KRIFLOW_DRAIN_SECONDS="30") as base_url:
         run = start_run(base_url, tmp_path)
         assert platform.began.wait(60), "the upload never began"
 
@@ -210,7 +206,7 @@ def test_a_stop_drains_a_publish_at_work_so_it_finishes_and_is_never_called_agai
     # Stopped: the drain held the stop until the stage finished.
     assert platform.videos == ["vid1"]
 
-    with serve(tmp_path, SWARMIFY_E2E_PLATFORM=platform.url) as base_url:
+    with serve(tmp_path, KRIFLOW_E2E_PLATFORM=platform.url) as base_url:
         status, call = settled(base_url, run)
         assert status == "done", call
         assert (call["attempts"], call["response"]["url"]) == (1, "https://fake.example.org/v/vid1")

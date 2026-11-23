@@ -180,10 +180,10 @@ test("role names are neutral until the Pied Piper skin is turned on, in this bro
 
   await names.click();
   await expect.element(screen.getByText(/Richard and Erlich always come along/)).toBeVisible();
-  expect(localStorage.getItem("swarmify.skin")).toBe("pied-piper");
+  expect(localStorage.getItem("kriflow.skin")).toBe("pied-piper");
   await names.click();
   await expect.element(screen.getByText(/The planner and the judge always come along/)).toBeVisible();
-  expect(localStorage.getItem("swarmify.skin")).toBeNull();
+  expect(localStorage.getItem("kriflow.skin")).toBeNull();
 });
 
 test("the world's panels wait for the world, so a slow load cannot wipe what was typed", async () => {

@@ -7,7 +7,7 @@
 # as Ubuntu's own profiles do for browsers, and leaves the restriction on for everything else.
 # Run as root. A Docker host runs it too: a path profile cannot attach to a binary inside a
 # container, so it also loads `swarmify-sandbox`, the container profile compose.yaml's `sandbox`
-# service takes when .env sets SWARMIFY_SANDBOX_APPARMOR=swarmify-sandbox (unconfined as before,
+# service takes when .env sets KRIFLOW_SANDBOX_APPARMOR=swarmify-sandbox (unconfined as before,
 # plus `userns`).
 set -e
 if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then

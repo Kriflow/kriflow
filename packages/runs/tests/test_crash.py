@@ -14,10 +14,10 @@ from pathlib import Path
 from dbos import DBOS
 from pytest import MonkeyPatch
 
+from kriflow_kernel.events import read_after
+from kriflow_kernel.sqlite import connect
+from kriflow_runs import Runner, SqliteStorage, StageDef, queue_name
 from runs_fakes import FakeConnector, wait_for
-from swarmify_kernel.events import read_after
-from swarmify_kernel.sqlite import connect
-from swarmify_runs import Runner, SqliteStorage, StageDef, queue_name
 
 CHILD = Path(__file__).parent / "crash_child.py"
 
@@ -141,7 +141,7 @@ def test_runs_at_gates_from_before_stage_slots_go_on_and_hold_no_slot_after_a_re
 def test_a_queued_run_left_behind_is_enqueued_on_launch(
     tmp_path: Path, storage: SqliteStorage, connector: FakeConnector
 ) -> None:
-    from swarmify_runs import Run
+    from kriflow_runs import Run
 
     stub = Run("run_left", "world_1", "wf_1", 1, "Left", "queued", "t", "t", [])
     storage.add_run(stub, [StageDef("render", "connector")])

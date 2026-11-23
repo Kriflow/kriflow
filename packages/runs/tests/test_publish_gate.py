@@ -8,8 +8,7 @@ from typing import Any
 
 import pytest
 
-from runs_fakes import FakeConnector, FakeNotifier, wait_for
-from swarmify_runs import (
+from kriflow_runs import (
     Illegal,
     PublishField,
     PublishPreview,
@@ -18,6 +17,7 @@ from swarmify_runs import (
     SqliteStorage,
     StageDef,
 )
+from runs_fakes import FakeConnector, FakeNotifier, wait_for
 
 CONFIRM = StageDef("confirm", "gate", {"ask": "Post it?", "kind": "confirm"})
 PUBLISH = StageDef("publish", "connector", {"calls": "youtube", "params": {"title": "Hooks"}})

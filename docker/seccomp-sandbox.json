@@ -1231,7 +1231,7 @@
         "unshare"
       ],
       "action": "SCMP_ACT_ALLOW",
-      "comment": "Swarmify: bubblewrap's user, mount, PID and network namespaces for the connector sandbox (ADR 0021). Docker's default profile allows these only with CAP_SYS_ADMIN, which the sandbox service is not given."
+      "comment": "Kriflow: bubblewrap's user, mount, PID and network namespaces for the connector sandbox (ADR 0021). Docker's default profile allows these only with CAP_SYS_ADMIN, which the sandbox service is not given."
     }
   ]
 }

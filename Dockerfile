@@ -21,7 +21,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches patches/
 COPY apps/web/package.json apps/web/
 COPY packages/connectors/sandbox/package.json packages/connectors/sandbox/
-RUN pnpm install --frozen-lockfile --prod --filter swarmify-sandbox
+RUN pnpm install --frozen-lockfile --prod --filter kriflow-sandbox
 
 FROM caddy:2.10.2-alpine AS web
 COPY docker/Caddyfile /etc/caddy/Caddyfile
@@ -81,4 +81,4 @@ RUN ln -s "$(python -c 'import claude_agent_sdk, pathlib; print(pathlib.Path(cla
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
-CMD ["uvicorn", "--factory", "swarmify_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
+CMD ["uvicorn", "--factory", "kriflow_api.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "5"]
