@@ -598,3 +598,74 @@ def test_an_items_gate_ask_names_each_item_with_only_the_first_line_of_its_error
         assert line.startswith("- Dog sneeze (dog): ConnectorError: blender_render")
         assert line.endswith("…") and len(line) < 160
         assert "Traceback" not in ask and "/data/worlds" not in ask
+
+
+PREP = StageDef("prep", "connector", {"calls": "prep"})
+
+
+def resave(runner: Runner, child: list[StageDef]) -> None:
+    """The child workflow saved again as v2 (a fixed package version recorded, say)."""
+    runner.pin = lambda _id, n=None: Pinned("world_b", "wf_t", n or 2, "Translate", child)
+
+
+def test_a_retried_item_runs_its_workflows_current_version_from_where_it_failed(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    """Issue 624: a fix saved since the child started reaches the retry."""
+    library(runner, [PREP, TRANSLATE, REVIEW], paragraphs=cards(tmp_path, 2))
+    translate.failing["Paragraph 2"] = 1
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan()])
+    wait_for(lambda: [i.status for i in fetch(runner, parent.id).stages[STAGE].items]
+             == ["running", "failed"], 20)  # fmt: skip
+    failed = next(i.child for i in fetch(runner, parent.id).stages[STAGE].items if i.key == "p2")
+    assert failed is not None and fetch(runner, failed.id).workflow_version == 1
+    resave(runner, [PREP, TRANSLATE, REVIEW])
+
+    child = runner.retry_item(parent.id, "p2")
+    assert (child.workflow_version, child.fork_stage_index) == (2, 1)
+    assert child.forked_from is not None and child.forked_from.workflow_version == 1
+    assert child.stages[0].status == "done"  # prep was copied, not run again
+    while fetch(runner, parent.id).status != "done":
+        approve(runner, parent.id)
+        wait_for(lambda: True, 0.05)
+    assert len(translate.seen["Paragraph 2"]) == 2
+
+
+def test_a_sent_back_item_runs_its_workflows_current_version(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [PREP, TRANSLATE], paragraphs=cards(tmp_path, 2))
+    translate.failing["Paragraph 1"] = 1
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    at(runner, parent.id, "waiting_gate")
+    resave(runner, [PREP, TRANSLATE])
+
+    runner.review_items(parent.id, approve=["p2"], send_back={"p1": "Try again"})
+    again = regated(runner, parent.id)
+    child = next(i.child for i in again.stages[STAGE].items if i.key == "p1")
+    assert child is not None
+    redone = fetch(runner, child.id)
+    assert (redone.workflow_version, redone.fork_stage_index, redone.status) == (2, 1, "done")
+    assert translate.notes["Paragraph 1"] == ["", "Try again"]
+
+
+def test_a_current_version_with_other_stages_before_the_fork_point_starts_the_item_afresh(
+    runner: Runner, translate: Translate, tmp_path: Path
+) -> None:
+    library(runner, [PREP, TRANSLATE], paragraphs=cards(tmp_path, 1))
+    translate.failing["Paragraph 1"] = 1
+    parent = runner.start("world_a", "wf_p", 1, "Book", [LIST, fan(approve=True)])
+    at(runner, parent.id, "waiting_gate")
+    renamed = StageDef("gather", "connector", {"calls": "prep"})
+    resave(runner, [renamed, TRANSLATE])
+
+    runner.review_items(parent.id, send_back={"p1": "Try again"})
+    again = regated(runner, parent.id)
+    child = next(i.child for i in again.stages[STAGE].items if i.key == "p1")
+    assert child is not None
+    redone = fetch(runner, child.id)
+    assert (redone.workflow_version, redone.fork_stage_index) == (2, 0)
+    assert [s.name for s in redone.stages] == ["gather", "translate"]
+    assert redone.status == "done"
+    first, second = translate.seen["Paragraph 1"]
+    assert first == second  # the same given Item

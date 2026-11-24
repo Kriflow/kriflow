@@ -75,10 +75,10 @@ class SqliteStorage:
             conn.execute("COMMIT")
             return saved
 
-    def fork(self, run: Run, source: Run, index: int) -> Run:
+    def fork(self, run: Run, source: Run, index: int, stages: list[StageDef] | None = None) -> Run:
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            self._copy(conn, run, source, index)
+            self._copy(conn, run, source, index, stages)
             saved = self._read(conn, run.id)
             assert saved is not None
             append(conn, _updated(saved))
@@ -739,9 +739,10 @@ class SqliteStorage:
             row["fork_stage_index"],
             # ponytail: one query per run read, so list_runs is N+1 (like _link); join if it shows
             [
-                RunLink(f["id"], f["world_id"], f["name"])
+                RunLink(f["id"], f["world_id"], f["name"], f["workflow_version"] or None)
                 for f in conn.execute(
-                    "SELECT id, world_id, name FROM runs WHERE forked_from_run_id = ?"
+                    "SELECT id, world_id, name, workflow_version FROM runs"
+                    " WHERE forked_from_run_id = ?"
                     " ORDER BY created_at, id",
                     (run_id,),
                 )
@@ -863,8 +864,12 @@ def _on_top(conn: sqlite3.Connection, gate: Gate, top: str) -> Gate:
 def _link(conn: sqlite3.Connection, run_id: str | None) -> RunLink | None:
     if run_id is None:
         return None
-    row = conn.execute("SELECT id, world_id, name FROM runs WHERE id = ?", (run_id,)).fetchone()
-    return RunLink(row["id"], row["world_id"], row["name"]) if row else None
+    row = conn.execute(
+        "SELECT id, world_id, name, workflow_version FROM runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return RunLink(row["id"], row["world_id"], row["name"], row["workflow_version"] or None)
 
 
 def _updated(run: Run) -> Event:

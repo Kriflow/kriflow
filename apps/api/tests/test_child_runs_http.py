@@ -86,7 +86,12 @@ def test_depth_two_takes_the_grandchilds_artifact_up_across_worlds(
     assert get(running, leaf["id"])["status"] == "done"
     (gate,) = running.get("/api/gates").json()
     assert gate["run_id"] == mid["id"]
-    assert gate["parent"] == {"id": top["id"], "world_id": video, "name": "Top"}
+    assert gate["parent"] == {
+        "id": top["id"],
+        "world_id": video,
+        "name": "Top",
+        "workflow_version": 1,
+    }
     listed = running.get(f"/api/worlds/{research}/runs").json()
     assert {r["name"]: (r["parent"] or {}).get("name") for r in listed} == {
         "Trends": "Mid",

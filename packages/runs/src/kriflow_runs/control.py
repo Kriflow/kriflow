@@ -396,13 +396,13 @@ class RunControl:
         assert view.child is not None
         source = self._any(view.child.id)
         at = next((s.index for s in source.stages if s.status not in ("done", "skipped")), 0)
+        fork, at, stages = self._item_fork(source, at, run.id)
         stage = source.stages[at]
         change = AppliedChange(
             new_id("change"), source.id, "rerun", stage.id, at, stage.name, {"note": note},
             {}, by or "operator", _now(), source.revision + 1,
         )  # fmt: skip
-        fork = replace(self._new_fork(source), parent_run_id=run.id, budget_usd=None)
-        child = self.storage.fork_change(fork, source, at, defs(source), change)
+        child = self.storage.fork_change(fork, source, at, stages, change)
         if child is None:
             raise Illegal(moved(self._any(source.id), source.revision))
         copy_run_files(self.data_dir, source, child, at)
@@ -430,12 +430,34 @@ class RunControl:
         if source is None:
             raise KeyError(f"run not found: {view.child.id}")
         at = next((s.index for s in source.stages if s.status not in ("done", "skipped")), 0)
-        fork = replace(self._new_fork(source), parent_run_id=run_id, budget_usd=None)
-        child = self.storage.fork(fork, source, at)
+        fork, at, stages = self._item_fork(source, at, run_id)
+        child = self.storage.fork(fork, source, at, stages)
         copy_run_files(self.data_dir, source, child, at)
         self.storage.set_item(run_id, index, visit, key, "running", child.id)
         self._enqueue(child)
         return child
+
+    def _item_fork(self, source: Run, at: int, parent_id: str) -> tuple[Run, int, list[StageDef]]:
+        """The Fork that runs a fan-out Item's failed or sent-back child again from stage `at`,
+        the index it forks from and its whole stage list (issue 624). It runs the child
+        workflow's current version, so a fix saved since (a package version it records) reaches
+        the Item. When that version's stages before `at` are not the source's by name and type,
+        the copied work may not fit it, so the Fork starts from the first stage, as a fresh child
+        with the same given Item. The source's version stays when the current one cannot start
+        (archived, unknown, or failing today's check)."""
+        fork = replace(self._new_fork(source), parent_run_id=parent_id, budget_usd=None)
+        if source.workflow_id is None or self.pin is None:
+            return fork, at, defs(source)
+        try:
+            pinned = self.pin(source.workflow_id)
+        except (KeyError, ValueError):
+            return fork, at, defs(source)
+        if pinned.version == source.workflow_version:
+            return fork, at, defs(source)
+        layout = [(d.name, d.type) for d in pinned.stages[:at]]
+        if layout != [(s.name, s.type) for s in source.stages[:at]]:
+            at = 0
+        return replace(fork, workflow_version=pinned.version), at, pinned.stages
 
     def _new_fork(self, source: Run) -> Run:
         """The Fork of `source` to insert, queued. A fork copies the run, its Budget included,

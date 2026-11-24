@@ -790,7 +790,10 @@ function Lineage({ run, worldId }: { run: Run; worldId: string }) {
     lines.push(
       <p className="sub lineage" data-testid="forked-from" key="fork">
         <RunRef label="Forked from" run={run.forked_from} />
-        {run.fork_stage_index != null && ` at stage ${run.fork_stage_index + 1}. The earlier stages were copied, not run again.`}
+        {run.fork_stage_index ? ` at stage ${run.fork_stage_index + 1}. The earlier stages were copied, not run again.` : run.fork_stage_index === 0 ? " from its first stage, with the same input." : null}
+        {run.forked_from.workflow_version != null && run.workflow_version != null && run.forked_from.workflow_version !== run.workflow_version && (
+          <span data-testid="fork-version"> Runs v{run.workflow_version} of its workflow, was v{run.forked_from.workflow_version}: the workflow was saved again since.</span>
+        )}
         {run.forked_by && ` Made by a ${changeLabel(run.forked_by)}, applied by ${who(run.forked_by.by)} at ${hhmm(run.forked_by.at)}.`}
       </p>,
     );
