@@ -60,10 +60,17 @@ ROUTES = [
 
 CHECKS = """async W => {
   // Measure the page at rest: a docked bar rises from behind the tab bar as it mounts, so mid
-  // rise it overlaps the bar it ends up sitting on. Endless loops (a live dot) never finish.
-  await Promise.all(document.getAnimations()
-    .filter(a => a.playState === 'running' && a.effect.getComputedTiming().endTime !== Infinity)
-    .map(a => a.finished.catch(() => {})));
+  // rise it overlaps the bar it ends up sitting on. Endless loops (a live dot) never finish. Wait
+  // again until none is left: one that mounts while another ends (the follow-up box rising as the
+  // message box leaves) is not in the first list, and a frame lets a just-mounted one start.
+  const busy = () => document.getAnimations().filter(a =>
+    a.playState === 'running' && a.effect.getComputedTiming().endTime !== Infinity);
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => requestAnimationFrame(() => r()));
+    const left = busy();
+    if (!left.length) break;
+    await Promise.all(left.map(a => a.finished.catch(() => {})));
+  }
   // The phone's width, not innerWidth: a phone zooms the page out to fit what runs wide.
   const out = [];
   const add = (check, e, detail) => out.push({check, element: name(e), detail});
