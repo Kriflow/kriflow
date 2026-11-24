@@ -10,16 +10,21 @@ tokens) or `graph.failed` (error, seconds, and whether graphify's shrink guard r
 world's events.
 
 graphify's shrink guard refuses a write when a file it re-extracted came out with fewer nodes than
-it had. It re-extracts only changed (or never finished) files, so when nothing else went wrong
-the shrink is confined to files whose new text says less, and the writer accepts it at once with
-`--allow-partial` (`graph.rebuilt` then says `shrink_accepted`). A shrink beside failed chunks is
-not accepted: that flag would mark the failed files done. Any failed rebuild is retried RETRY
-seconds later, change or not: graphify caches each finished chunk, so a retry after a timeout
-resumes where it stopped. A world whose last STALLED rebuilds all failed is `stalled()`, which the
-Needs-you page shows. Accepting a shrink by hand appends `graph.shrink_accepted`, which the writer
-polls for, so it works from another process too: the world is rebuilt at once with
-`--allow-partial`, that once. A deleted world (its `world.deleted` event) is dropped from the
-queue, and a rebuild it outlived records nothing and removes the folder graphify recreated.
+it had. It re-extracts only changed (or never finished) files, so when nothing else went wrong the
+shrink is confined to files whose new text says less, and the writer accepts it at once with
+`--allow-partial` (`graph.rebuilt` then says `shrink_accepted`). graphify has a second guard that
+refuses a write its dedup made smaller, and `--allow-partial` does not pass it: two files whose
+semantic nodes got the same id (artifacts of the same name in different runs) collapse into one on
+every build, so a retry can never heal it and the world would stall. Accepting a shrink passes
+`--allow-dedup-shrink` too, and a dedup shrink alone is accepted like a confined one. A shrink
+beside failed chunks is not accepted: that flag would mark the failed files done. Any failed
+rebuild is retried RETRY seconds later, change or not: graphify caches each finished chunk, so a
+retry after a timeout resumes where it stopped. A world whose last STALLED rebuilds all failed is
+`stalled()`, which the Needs-you page shows. Accepting a shrink by hand appends
+`graph.shrink_accepted`, which the writer polls for, so it works from another process too: the
+world is rebuilt at once with `--allow-partial`, that once. A deleted world (its `world.deleted`
+event) is dropped from the queue, and a rebuild it outlived records nothing and removes the folder
+graphify recreated.
 """
 
 import fnmatch
@@ -117,7 +122,7 @@ def extract_command(folder: Path, allow_shrink: bool = False) -> list[str]:
         *(a for d in GENERATED for a in ("--exclude", f"runs/*/*/{d}/")),
         "--exclude",
         f"*{OUTCOMES}",
-        *(["--allow-partial"] if allow_shrink else []),
+        *(["--allow-partial", "--allow-dedup-shrink"] if allow_shrink else []),
     ]
 
 
@@ -134,7 +139,7 @@ def run_graphify(folder: Path, allow_shrink: bool = False) -> Usage:
         # Only a semantic shrink is worth accepting. Failed chunks print the same --allow-partial
         # hint, but a retry heals them, and accepting would drop their nodes for good.
         said = done.stderr + done.stdout
-        if "unverified semantic shrink" in said:
+        if "unverified semantic shrink" in said or "--allow-dedup-shrink" in said:
             raise ShrinkRefused(message, confined=not _UNSAFE.search(said))
         raise RuntimeError(message)
     found = _TOKENS.search(done.stdout)
