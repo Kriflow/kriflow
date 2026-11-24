@@ -194,7 +194,9 @@ def test_the_extract_command_names_the_claude_cli_backend_and_skips_its_output()
     assert cmd[cmd.index("--backend") + 1] == "claude-cli"
     assert cmd[cmd.index("--exclude") + 1] == f"{GRAPH_OUT}/"
     assert "--allow-partial" not in cmd
-    assert "--allow-partial" in extract_command(Path("/data/worlds/w1"), allow_shrink=True)
+    assert "--allow-dedup-shrink" not in cmd
+    accepting = extract_command(Path("/data/worlds/w1"), allow_shrink=True)
+    assert "--allow-partial" in accepting and "--allow-dedup-shrink" in accepting
 
 
 def test_each_rebuild_records_its_extraction_time_and_tokens(db: Path, tmp_path: Path) -> None:
@@ -308,6 +310,19 @@ def test_run_graphify_reads_the_tokens_and_tells_a_shrink_refusal_apart(
         with pytest.raises(RuntimeError) as partial:
             writer_module.run_graphify(Path("/w"))
         assert not isinstance(partial.value, ShrinkRefused)
+    # Same-named artifacts of two runs whose nodes got one id collapse on every build, so graphify's
+    # dedup guard refuses the write each time: a retry never heals it, accepting it does.
+    collision = (
+        "[graphify] WARNING: node 'script_verdict_1' is minted by two different files\n"
+        "[graphify extract] error: dedup merged 2 node(s); writing would shrink the graph from"
+        " 1340 nodes to 1336 nodes. Refusing to overwrite graph.json. Pass --allow-dedup-shrink to"
+        " write the smaller graph."
+    )
+    for stderr in [collision, refusal.splitlines()[0] + "\n" + collision]:
+        done = subprocess.CompletedProcess([], 1, "", stderr)
+        with pytest.raises(ShrinkRefused) as shrunk:
+            writer_module.run_graphify(Path("/w"))
+        assert shrunk.value.confined
     done = subprocess.CompletedProcess([], 1, "", "claude: not logged in")
     with pytest.raises(RuntimeError) as other:
         writer_module.run_graphify(Path("/w"))
