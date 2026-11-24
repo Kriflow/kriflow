@@ -143,11 +143,16 @@ def test_a_fork_keeps_the_copied_stages_and_runs_on_without_repeating_them(
     forked = running.post(f"/api/runs/{source['id']}/fork", json={"stage": 1})
     assert forked.status_code == 201, forked.json()
     fork = forked.json()
-    assert fork["forked_from"] == {"id": source["id"], "world_id": world, "name": "Short"}
+    assert fork["forked_from"] == {
+        "id": source["id"],
+        "world_id": world,
+        "name": "Short",
+        "workflow_version": 1,
+    }
     assert fork["fork_stage_index"] == 1 and fork["promoted_from"] is None
     assert [s["status"] for s in fork["stages"]] == ["done", "pending", "pending"]
     assert get(running, source["id"])["forks"] == [
-        {"id": fork["id"], "world_id": world, "name": "Short"}
+        {"id": fork["id"], "world_id": world, "name": "Short", "workflow_version": 1}
     ]
     copied = running.get(f"/api/runs/{fork['id']}/stages/{fork['stages'][0]['id']}/artifacts")
     assert sorted(a["name"] for a in copied.json()) == [

@@ -14,9 +14,10 @@ class Storage(Protocol):
         first `skipped` stages are inserted skipped (a promote), the rest pending."""
         ...
 
-    def fork(self, run: Run, source: Run, index: int) -> Run:
+    def fork(self, run: Run, source: Run, index: int, stages: list[StageDef] | None = None) -> Run:
         """Insert `run` as a fork of `source`: the stages before `index` copied with their
-        status, times and decisions, the rest pending; the lineage recorded on the run."""
+        status, times and decisions, the rest pending (from `stages`, the whole list, when
+        given, else the source's); the lineage recorded on the run."""
         ...
 
     def fork_change(

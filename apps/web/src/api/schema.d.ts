@@ -4799,6 +4799,8 @@ export interface components {
             world_id: string;
             /** Name */
             name: string;
+            /** Workflow Version */
+            workflow_version?: number | null;
         };
         /**
          * RunScore

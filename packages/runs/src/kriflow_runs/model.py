@@ -24,6 +24,9 @@ class RunLink:
     id: str
     world_id: str
     name: str
+    workflow_version: int | None = field(default=None, compare=False)
+    """The workflow version the run ran, where the link is read with the run (a fork's source).
+    Not part of its identity: two links to one run are equal."""
 
 
 @dataclass(frozen=True)

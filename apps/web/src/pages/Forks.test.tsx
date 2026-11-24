@@ -117,6 +117,15 @@ test("a fork names its source and the source lists its forks; a promote names it
     .toHaveAttribute("href", "/worlds/world_1/library");
 });
 
+test("a retry forked onto a newer workflow version says which version it runs and which it was", async () => {
+  const retried = run("queued", done.stages, { ...forked, workflow_version: 9, forked_from: { ...source, workflow_version: 5 }, fork_stage_index: 0 });
+  fakeFetch({ "GET /api/runs/run_2": () => Response.json(retried) });
+  const { screen } = await mountAt("/worlds/world_1/runs/run_2");
+  await expect
+    .element(screen.getByTestId("forked-from"))
+    .toMatchTextContent(/Forked from Render then pick from its first stage, with the same input\. Runs v9 of its workflow, was v5: the workflow was saved again since\./);
+});
+
 test("the runs page labels a fork with its source", async () => {
   const fork = run("queued", done.stages, { ...forked, forked_from: source, fork_stage_index: 1 });
   fakeFetch({
