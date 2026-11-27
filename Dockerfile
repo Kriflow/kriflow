@@ -41,13 +41,15 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON=3.12.15 UV_PYTHON_PREFEREN
 # renders); libsm6 (and libice6), the only libraries Blender's linux build needs that the rest
 # do not bring (issue 401); git, to clone a package installed from a git URL (issue 225); the font
 # cache made now, which a sandboxed browser cannot write; zstd, which tools/backup_data.py
-# compresses on every core with
+# compresses on every core with; libatomic1, which the node Playwright's Python driver ships
+# needs before it can install or drive a browser (Seat on Mars, 2026-11-27)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2 libxrandr2 libxkbcommon-dev \
     libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2 \
     fonts-noto-core fonts-noto-color-emoji fontconfig \
     libegl1 libgles2 libgl1 \
     libsm6 \
+    libatomic1 \
     bubblewrap socat ripgrep \
     zstd \
     git ca-certificates \
